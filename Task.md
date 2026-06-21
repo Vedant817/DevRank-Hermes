@@ -5,8 +5,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
 ## 0. Product Definition
 
 - [x] Confirm final system name: **DevRank OS**.
-- [x] Confirm tagline: "A personal engineering intelligence system that learns from my AI-agent work, GitHub history, PRs, projects, DSA progress, and market trends to guide my switch from Test Engineer to SDE."
-- [x] Define the main career positioning: **Test Engineer -> SDE with AI-native engineering workflow**.
+- [x] Confirm tagline: "A personal engineering intelligence system that learns from my AI-agent work, GitHub history, PRs, projects, DSA progress, and market trends to guide my growth as a Software Engineer."
+- [x] Define the main career positioning: **Software Engineer with AI-native engineering workflow**.
 - [x] Confirm the system is not only "Hermes running on Mac", but a hybrid personal engineering intelligence system.
 - [x] Confirm core system responsibilities:
   - [x] Local Mac agent reads local AI-agent chats and repos.
@@ -325,7 +325,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] `skill-linkedin-x-content-generator`
   - [ ] `skill-market-skill-benchmark`
   - [ ] `skill-repo-portfolio-auditor`
-  - [ ] `skill-test-engineer-to-sde-mentor`
+  - [ ] `skill-sde-growth-mentor`
 - [ ] Create the DevRank OS mentor prompt.
 - [ ] Ensure the mentor prompt extracts:
   - [ ] New skills demonstrated.
@@ -678,8 +678,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 ## 17. Daily and Weekly Learning Planner
 
-- [ ] Convert Test Engineer background into an SDE advantage.
-- [ ] Track the mapping:
+- [ ] Track strengths into SDE advantage:
   - [ ] Testing skill -> quality-focused SDE.
   - [ ] Bug reporting -> debugging + edge-case thinking.
   - [ ] QA automation -> CI/CD + test infrastructure.
@@ -948,4 +947,4 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] DevRank OS can benchmark current market skill demand.
 - [ ] DevRank OS can use optional external context without replacing Supabase as the source of truth.
 - [ ] DevRank OS can generate resume, LinkedIn, X, and portfolio content from real evidence.
-- [ ] DevRank OS supports the final story: a real, resume-worthy system that works locally, works on Vercel when the Mac is off, learns from AI-agent usage, tracks GitHub/PR/Linear project growth, and gives a measurable path from Test Engineer to SDE.
+- [ ] DevRank OS supports the final story: a real, resume-worthy system that works locally, works on Vercel when the Mac is off, learns from AI-agent usage, tracks GitHub/PR/Linear project growth, and gives a measurable path for Software Engineering growth.

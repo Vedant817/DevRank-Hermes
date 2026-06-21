@@ -1,9 +1,9 @@
 # DevRank OS
 
-DevRank OS is a personal engineering intelligence system for tracking a move
-from Test Engineer to SDE. It ingests local AI-agent sessions, GitHub/Linear
-signals, and market search results, then produces evidence-backed scores,
-learning plans, Slack targets, and mentor summaries.
+DevRank OS is a personal engineering intelligence system for tracking and
+accelerating growth as a Software Engineer. It ingests local AI-agent sessions,
+GitHub/Linear signals, and market search results, then produces evidence-backed
+scores, learning plans, Slack targets, and mentor summaries.
 
 ## Workspace
 
