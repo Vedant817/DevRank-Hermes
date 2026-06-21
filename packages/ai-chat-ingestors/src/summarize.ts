@@ -28,6 +28,7 @@ export function summarizeSession(session: ParsedSession): EvidenceItem {
     session.filesTouched.length > 0
       ? `Files: ${session.filesTouched.slice(0, 5).join(", ")}.`
       : "",
+    session.projectContext ? `Project context: ${session.projectContext}.` : "",
   ].filter(Boolean);
 
   return {
@@ -42,6 +43,8 @@ export function summarizeSession(session: ParsedSession): EvidenceItem {
       filesTouched: session.filesTouched,
       commandsRun: session.commandsRun,
       redactions: session.redactions,
+      projectContext: session.projectContext,
+      skillTags: session.skillTags,
     },
   };
 }

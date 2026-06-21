@@ -200,15 +200,15 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 ## 6. Local AI Chat Collector
 
-- [ ] Build the local collector as adapter-based, not hardcoded.
+- [x] Build the local collector as adapter-based, not hardcoded.
 - [x] Add command:
   - [x] `devrank ingest:local-ai`
 - [ ] Implement adapters for:
-  - [ ] Claude Code.
+  - [x] Claude Code.
   - [x] Codex CLI / Codex Desktop.
   - [ ] Codex Cloud/Web history import when a supported export or API source exists.
-  - [ ] OpenCode.
-  - [ ] Antigravity.
+  - [x] OpenCode.
+  - [x] Antigravity.
 - [x] Support known Codex sessions under `~/.codex/sessions/`.
 - [ ] Treat Codex Cloud/Web history as optional imported evidence:
   - [ ] Accept only supported exports, workspace analytics/compliance exports, or manually provided task summaries.
@@ -216,13 +216,13 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Store cloud-history raw content only if explicit raw storage is enabled.
   - [ ] Store redacted cloud-history summaries in Supabase before embedding.
   - [ ] Preserve task URL, task ID, repository, branch, PR link, and timestamp when available.
-- [ ] Support known OpenCode session data under `~/.local/share/opencode/`.
-- [ ] Support Claude project/config/memory/settings/skills data under project directories and `~/.claude`.
-- [ ] Verify exact Claude conversation files on the local machine instead of assuming the community-reported `~/.claude/projects/` layout forever.
-- [ ] Implement Antigravity discovery instead of assuming one permanent path.
-- [ ] Check possible Antigravity folders:
-  - [ ] `~/.gemini/antigravity`
-  - [ ] `~/Library/Application Support/Antigravity`
+- [x] Support known OpenCode session data under `~/.local/share/opencode/`.
+- [x] Support Claude project/config/memory/settings/skills data under project directories and `~/.claude`.
+- [x] Verify exact Claude conversation files on the local machine instead of assuming the community-reported `~/.claude/projects/` layout forever.
+- [x] Implement Antigravity discovery instead of assuming one permanent path.
+- [x] Check possible Antigravity folders:
+  - [x] `~/.gemini/antigravity`
+  - [x] `~/Library/Application Support/Antigravity`
 - [ ] Extract from each session:
   - [x] Prompt.
   - [x] Agent response.
@@ -231,8 +231,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Commands run.
   - [ ] Errors faced.
   - [ ] How the issue was solved.
-  - [ ] Project/repo context.
-  - [ ] Skill tags.
+  - [x] Project/repo context.
+  - [x] Skill tags.
   - [x] Timestamp.
   - [x] Agent name.
   - [ ] Confidence score.
@@ -256,8 +256,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Store raw transcript locally only unless explicit cloud raw storage is enabled.
 - [x] Add ingestion run tracking.
 - [x] Add ingestion error handling.
-- [ ] Add tests for each parser.
-- [ ] Add tests for redaction.
+- [x] Add tests for each parser.
+- [x] Add tests for redaction.
 
 ## 7. Local Mac Daemon
 
@@ -265,9 +265,9 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Add command:
   - [x] `pnpm devrank local-daemon`
 - [ ] Run the daemon using macOS `launchd`.
-- [ ] Watch known AI-agent folders.
+- [x] Watch known AI-agent folders.
 - [x] Detect new transcript files.
-- [ ] Detect changed transcript files.
+- [x] Detect changed transcript files.
 - [x] Parse messages.
 - [x] Redact secrets.
 - [x] Summarize sessions.
@@ -275,11 +275,11 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Keep raw transcripts local by default.
 - [ ] Trigger Hermes skill extraction weekly.
 - [ ] Create local config with watchers:
-  - [ ] Claude watcher for `~/.claude`.
-  - [ ] Codex watcher for `~/.codex/sessions`.
-  - [ ] OpenCode watcher for `~/.local/share/opencode`.
-  - [ ] Antigravity watcher for `~/.gemini/antigravity`.
-  - [ ] Antigravity watcher for `~/Library/Application Support/Antigravity`.
+  - [x] Claude watcher for `~/.claude`.
+  - [x] Codex watcher for `~/.codex/sessions`.
+  - [x] OpenCode watcher for `~/.local/share/opencode`.
+  - [x] Antigravity watcher for `~/.gemini/antigravity`.
+  - [x] Antigravity watcher for `~/Library/Application Support/Antigravity`.
 - [ ] Create local config with privacy settings:
   - [ ] `uploadRawChats=false`.
   - [ ] `redactSecrets=true`.
@@ -815,11 +815,11 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 ### Week 2: AI Chat Ingestion
 
-- [ ] Build Claude adapter.
+- [x] Build Claude adapter.
 - [x] Build Codex adapter.
 - [ ] Add optional Codex Cloud/Web import path only if a supported export source is available.
-- [ ] Build OpenCode adapter.
-- [ ] Build Antigravity discovery adapter.
+- [x] Build OpenCode adapter.
+- [x] Build Antigravity discovery adapter.
 - [x] Build secret redaction.
 - [x] Build session summarization.
 - [ ] Build AI Chat Dashboard.

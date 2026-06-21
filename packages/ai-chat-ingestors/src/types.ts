@@ -1,7 +1,9 @@
 import type { EvidenceItem, EvidenceSource } from "@repo/shared";
 
+export type MessageRole = "user" | "assistant" | "tool" | "system";
+
 export interface ChatMessage {
-  role: "user" | "assistant" | "tool" | "system";
+  role: MessageRole;
   content: string;
   createdAt?: string;
 }
@@ -18,10 +20,19 @@ export interface ParsedSession {
   filesTouched: string[];
   commandsRun: string[];
   redactions: string[];
+  projectContext?: string;
+  skillTags: string[];
 }
 
 export interface IngestionResult {
   sessions: ParsedSession[];
   evidence: EvidenceItem[];
   redactionCount: number;
+  adapterCounts: Record<string, number>;
+}
+
+export interface LocalAiIngestionOptions {
+  codexSessionsDir?: string;
+  sourceRoots?: string[];
+  enabledAdapters?: Array<"codex" | "claude" | "opencode" | "antigravity">;
 }

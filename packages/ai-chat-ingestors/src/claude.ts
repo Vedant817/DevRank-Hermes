@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { redactSecrets } from "./redaction.js";
-import type { ParsedSession } from "./types.js";
+import type { ChatMessage, ParsedSession } from "./types.js";
 import {
   asRecord,
   detectRole,
@@ -11,14 +11,13 @@ import {
   stableId,
 } from "./utils.js";
 
-export async function parseCodexSessionFile(filePath: string): Promise<ParsedSession> {
+export async function parseClaudeSessionFile(filePath: string): Promise<ParsedSession> {
   const raw = await readFile(filePath, "utf8");
   const redacted = redactSecrets(raw);
-  const messages = [];
+  const messages: ChatMessage[] = [];
   const toolCalls = new Set<string>();
   const filesTouched = new Set<string>();
   const commandsRun = new Set<string>();
-  const redactions = new Set(redacted.redactions);
   const projectContexts = new Set<string>();
 
   for (const line of redacted.text.split("\n")) {
@@ -33,8 +32,9 @@ export async function parseCodexSessionFile(filePath: string): Promise<ParsedSes
     }
 
     const record = asRecord(parsed);
-    const role = detectRole(record);
-    const content = extractText(record.item ?? record.message ?? record);
+    const messageRecord = asRecord(record.message);
+    const role = detectRole(messageRecord, detectRole(record));
+    const content = extractText(record.message ?? record.content ?? record.text);
 
     if (content.trim().length > 0) {
       messages.push({
@@ -44,41 +44,46 @@ export async function parseCodexSessionFile(filePath: string): Promise<ParsedSes
       });
     }
 
-    const toolName = record.tool_name ?? record.name;
+    const toolName = record.toolName ?? record.tool_name ?? record.name;
     if (typeof toolName === "string") {
       toolCalls.add(toolName);
     }
 
-    const command = record.cmd ?? record.command;
+    const command = record.command ?? record.cmd;
     if (typeof command === "string") {
       commandsRun.add(command);
     }
 
-    const pathValue = record.path ?? record.file_path;
-    if (typeof pathValue === "string") {
-      filesTouched.add(pathValue);
+    const file = record.filePath ?? record.file_path ?? record.path;
+    if (typeof file === "string") {
+      filesTouched.add(file);
     }
 
-    const cwd = record.cwd ?? record.workdir ?? record.repository;
+    const cwd = record.cwd ?? record.projectPath;
     if (typeof cwd === "string") {
       projectContexts.add(cwd);
+    }
+
+    const branch = record.gitBranch;
+    if (typeof branch === "string") {
+      projectContexts.add(`git:${branch}`);
     }
   }
 
   return {
     id: stableId(filePath),
     source: "local_session",
-    agentName: "Codex",
+    agentName: "Claude Code",
     title: messages[0]?.content.slice(0, 80) ?? path.basename(filePath),
     sourcePath: filePath,
-    startedAt: await fileTimestamp(filePath),
+    startedAt: messages[0]?.createdAt ?? await fileTimestamp(filePath),
     messages,
     toolCalls: [...toolCalls],
     filesTouched: [...filesTouched],
     commandsRun: [...commandsRun],
-    redactions: [...redactions],
-    projectContext: [...projectContexts][0],
-    skillTags: ["codex", "local-ai"],
+    redactions: redacted.redactions,
+    projectContext: [...projectContexts].join("; ") || undefined,
+    skillTags: ["claude", "local-ai"],
   };
 }
 
@@ -90,15 +95,21 @@ function safeJsonParse(line: string): unknown | undefined {
   }
 }
 
-export async function ingestCodexSessions(roots: string[] | string): Promise<ParsedSession[]> {
+export async function ingestClaudeSessions(roots: string[] | string): Promise<ParsedSession[]> {
   const resolvedRoots = Array.isArray(roots) ? roots : [roots];
-  const sessions = [];
+  const sessions: ParsedSession[] = [];
 
   for (const root of resolvedRoots) {
-    const files = await findFiles(root, (filePath) => filePath.endsWith(".jsonl"));
+    const files = await findFiles(
+      root,
+      (filePath) => filePath.endsWith(".jsonl"),
+      {
+        excludeDirectoryNames: ["cache", "plugins", "telemetry"],
+      },
+    );
 
     for (const file of files) {
-      sessions.push(await parseCodexSessionFile(file));
+      sessions.push(await parseClaudeSessionFile(file));
     }
   }
 

@@ -129,14 +129,6 @@ const supermemoryRequirement: EnvRequirement = {
   oneOf: [["SUPERMEMORY_API_KEY"]],
 };
 
-const localAgentPaths = [
-  join(homedir(), ".claude"),
-  join(homedir(), ".codex", "sessions"),
-  join(homedir(), ".local", "share", "opencode"),
-  join(homedir(), ".gemini", "antigravity"),
-  join(homedir(), "Library", "Application Support", "Antigravity"),
-];
-
 const commands: CommandSpec[] = [
   {
     name: "env:check",
@@ -187,7 +179,7 @@ const commands: CommandSpec[] = [
       dryRun: booleanOption(parsed, "dry-run"),
       rawStorageEnabled: booleanOption(parsed, "upload-raw-chats") || envFlag(env, "DEVRANK_UPLOAD_RAW_CHATS", false),
       redactSecrets: !booleanOption(parsed, "no-redact-secrets") && envFlag(env, "DEVRANK_REDACT_SECRETS", true),
-      sources: stringListOption(parsed, "source") ?? localAgentPaths,
+      sources: stringListOption(parsed, "source"),
       storeEmbeddings: !booleanOption(parsed, "no-store-embeddings") && envFlag(env, "DEVRANK_STORE_EMBEDDINGS", true),
     }),
     invoke: invokeLocalAiIngest,
@@ -250,7 +242,7 @@ const commands: CommandSpec[] = [
       dryRun: booleanOption(parsed, "dry-run"),
       rawStorageEnabled: booleanOption(parsed, "upload-raw-chats") || envFlag(env, "DEVRANK_UPLOAD_RAW_CHATS", false),
       redactSecrets: !booleanOption(parsed, "no-redact-secrets") && envFlag(env, "DEVRANK_REDACT_SECRETS", true),
-      sources: stringListOption(parsed, "source") ?? localAgentPaths,
+      sources: stringListOption(parsed, "source"),
       storeEmbeddings: !booleanOption(parsed, "no-store-embeddings") && envFlag(env, "DEVRANK_STORE_EMBEDDINGS", true),
       watch: booleanOption(parsed, "watch"),
     }),
@@ -698,7 +690,8 @@ async function invokeLocalAiIngest(moduleExports: ModuleExports, context: Comman
   if (packageHandler) {
     const codexDir = codexSessionsDir(context);
     const result = await packageHandler({
-      codexSessionsDir: codexSessionsDir(context),
+      codexSessionsDir: codexDir,
+      sourceRoots: configStringList(context, "sources"),
     });
 
     return persistIngestionResult(context, result, `local_session:${codexDir}`);
@@ -765,6 +758,7 @@ function invokeLocalDaemon(moduleExports: ModuleExports, context: CommandContext
   return directHandler({
     codexSessionsDir: codexSessionsDir(context),
     persist: !configBoolean(context, "dryRun"),
+    sources: configStringList(context, "sources"),
     watch: configBoolean(context, "watch"),
   });
 }

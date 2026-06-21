@@ -6,7 +6,7 @@
     "dev": "turbo run dev",
     "devrank": "pnpm --filter @repo/cli devrank",
     "lint": "turbo run lint",
-    "test": "turbo run check-types",
+    "test": "turbo run check-types && pnpm --filter @repo/ai-chat-ingestors test:unit",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"
   },
