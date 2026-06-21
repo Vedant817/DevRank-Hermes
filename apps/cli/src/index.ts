@@ -1,0 +1,965 @@
+#!/usr/bin/env node
+import "dotenv/config";
+
+import { homedir } from "node:os";
+import { join } from "node:path";
+import {
+  checkVectorSupport,
+  closeSqlClient,
+  createSqlClient,
+  getLatestScoreSnapshot,
+  insertDailyPlan,
+  insertIngestionRun,
+  insertScoreSnapshot,
+  listEvidenceItems,
+  runDbMigrations,
+  upsertEvidenceItems,
+} from "@repo/db";
+import { formatDailyPlanForSlack, generateDailyPlan } from "@repo/planner";
+import { computeSdeReadinessSnapshot } from "@repo/scoring";
+import { runMarketBenchmark } from "@repo/search";
+import { sendSlackMessage } from "@repo/slack";
+
+type OptionValue = boolean | string | string[];
+
+type ParsedArgs = {
+  commandName?: string;
+  options: Record<string, OptionValue>;
+  positionals: string[];
+  raw: string[];
+};
+
+type EnvRequirement = {
+  label: string;
+  oneOf: string[][];
+};
+
+type OptionRequirement = {
+  name: string;
+  label: string;
+};
+
+type CommandContext = {
+  command: string;
+  options: Record<string, OptionValue>;
+  positionals: string[];
+  env: NodeJS.ProcessEnv;
+  config: Record<string, unknown>;
+};
+
+type CommandHandler = (context: CommandContext) => Promise<unknown> | unknown;
+type UnknownFunction = (...args: unknown[]) => unknown;
+type ModuleExports = Record<string, unknown>;
+type CommandInvoker = (
+  moduleExports: ModuleExports,
+  context: CommandContext,
+  moduleName: string,
+) => Promise<unknown> | unknown;
+
+type CommandSpec = {
+  name: string;
+  description: string;
+  usage: string;
+  moduleCandidates: string[];
+  exportCandidates: string[];
+  envRequirements: EnvRequirement[];
+  optionRequirements?: OptionRequirement[];
+  buildConfig: (parsed: ParsedArgs, env: NodeJS.ProcessEnv) => Record<string, unknown>;
+  localHandler?: CommandHandler;
+  invoke?: CommandInvoker;
+};
+
+class CliError extends Error {
+  constructor(
+    message: string,
+    readonly exitCode = 1,
+  ) {
+    super(message);
+    this.name = "CliError";
+  }
+}
+
+const databaseRequirement: EnvRequirement = {
+  label: "Supabase/Postgres connection",
+  oneOf: [["DEVRANK_DATABASE_URL"], ["DATABASE_URL"], ["SUPABASE_DATABASE_URL"]],
+};
+
+const githubAuthRequirement: EnvRequirement = {
+  label: "GitHub REST auth",
+  oneOf: [
+    ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+    ["GITHUB_TOKEN"],
+    ["GITHUB_APP_ID", "GITHUB_INSTALLATION_ID", "GITHUB_PRIVATE_KEY"],
+    ["GITHUB_APP_ID", "GITHUB_INSTALLATION_ID", "GITHUB_PRIVATE_KEY_PATH"],
+  ],
+};
+
+const linearAuthRequirement: EnvRequirement = {
+  label: "Linear auth",
+  oneOf: [["LINEAR_API_KEY"]],
+};
+
+const slackRequirement: EnvRequirement = {
+  label: "Slack webhook",
+  oneOf: [["SLACK_WEBHOOK_URL"]],
+};
+
+const marketSearchRequirement: EnvRequirement = {
+  label: "Market benchmark search",
+  oneOf: [["TAVILY_API_KEY"]],
+};
+
+const apiTokenRequirement: EnvRequirement = {
+  label: "API route auth",
+  oneOf: [["DEVRANK_API_TOKEN"]],
+};
+
+const cronRequirement: EnvRequirement = {
+  label: "Cron route auth",
+  oneOf: [["CRON_SECRET"]],
+};
+
+const hermesRequirement: EnvRequirement = {
+  label: "Hermes/OpenRouter auth",
+  oneOf: [["OPENROUTER_API_KEY"]],
+};
+
+const supermemoryRequirement: EnvRequirement = {
+  label: "Supermemory auth",
+  oneOf: [["SUPERMEMORY_API_KEY"]],
+};
+
+const localAgentPaths = [
+  join(homedir(), ".claude"),
+  join(homedir(), ".codex", "sessions"),
+  join(homedir(), ".local", "share", "opencode"),
+  join(homedir(), ".gemini", "antigravity"),
+  join(homedir(), "Library", "Application Support", "Antigravity"),
+];
+
+const commands: CommandSpec[] = [
+  {
+    name: "env:check",
+    description: "Show the exact environment variables needed for one feature or all features.",
+    usage: "devrank env:check [--feature <database|github|linear|slack|market|context|hermes|api|all>]",
+    moduleCandidates: [],
+    exportCandidates: [],
+    envRequirements: [],
+    buildConfig: (parsed) => ({
+      feature: stringOption(parsed, "feature") ?? "all",
+    }),
+    localHandler: handleEnvCheck,
+  },
+  {
+    name: "db:migrate",
+    description: "Run DevRank OS migrations against Supabase/Postgres.",
+    usage: "devrank db:migrate",
+    moduleCandidates: [],
+    exportCandidates: [],
+    envRequirements: [databaseRequirement],
+    buildConfig: (_parsed, env) => ({
+      databaseEnv: firstPresentEnv(env, databaseRequirement),
+    }),
+    localHandler: handleDbMigrate,
+  },
+  {
+    name: "db:check-vector",
+    description: "Verify pgvector is installed and queryable.",
+    usage: "devrank db:check-vector",
+    moduleCandidates: [],
+    exportCandidates: [],
+    envRequirements: [databaseRequirement],
+    buildConfig: (_parsed, env) => ({
+      databaseEnv: firstPresentEnv(env, databaseRequirement),
+    }),
+    localHandler: handleDbCheckVector,
+  },
+  {
+    name: "ingest:local-ai",
+    description: "Ingest local AI-agent sessions through the local chat ingestion package.",
+    usage: "devrank ingest:local-ai [--codex-sessions-dir <path>] [--source <path>] [--dry-run]",
+    moduleCandidates: ["@repo/ai-chat-ingestors", "@repo/local-agent"],
+    exportCandidates: ["ingestLocalAiChats", "ingestLocalAI", "ingestLocalAi", "ingestLocalChats", "run"],
+    envRequirements: [databaseRequirement],
+    buildConfig: (parsed, env) => ({
+      codexSessionsDir: stringOption(parsed, "codex-sessions-dir"),
+      databaseEnv: firstPresentEnv(env, databaseRequirement),
+      dryRun: booleanOption(parsed, "dry-run"),
+      rawStorageEnabled: booleanOption(parsed, "upload-raw-chats") || envFlag(env, "DEVRANK_UPLOAD_RAW_CHATS", false),
+      redactSecrets: !booleanOption(parsed, "no-redact-secrets") && envFlag(env, "DEVRANK_REDACT_SECRETS", true),
+      sources: stringListOption(parsed, "source") ?? localAgentPaths,
+      storeEmbeddings: !booleanOption(parsed, "no-store-embeddings") && envFlag(env, "DEVRANK_STORE_EMBEDDINGS", true),
+    }),
+    invoke: invokeLocalAiIngest,
+  },
+  {
+    name: "github:backfill",
+    description: "Backfill repository, pull request, and issue history through the GitHub package.",
+    usage: "devrank github:backfill --user <github-user> [--dry-run]",
+    moduleCandidates: ["@repo/github"],
+    exportCandidates: ["backfillGithubUser", "backfillGitHub", "backfillGithub", "githubBackfill", "run"],
+    envRequirements: [databaseRequirement, githubAuthRequirement],
+    optionRequirements: [{ name: "user", label: "GitHub username or organization to backfill" }],
+    buildConfig: (parsed, env) => ({
+      authMode: firstPresentEnv(env, githubAuthRequirement) === "GITHUB_TOKEN" ? "token" : "github-app",
+      databaseEnv: firstPresentEnv(env, databaseRequirement),
+      dryRun: booleanOption(parsed, "dry-run"),
+      user: stringOption(parsed, "user"),
+    }),
+    invoke: invokeGithubBackfill,
+  },
+  {
+    name: "scores:recompute",
+    description: "Recompute and persist a score snapshot from stored evidence.",
+    usage: "devrank scores:recompute [--limit <count>] [--dry-run]",
+    moduleCandidates: [],
+    exportCandidates: [],
+    envRequirements: [databaseRequirement],
+    buildConfig: (parsed, env) => ({
+      databaseEnv: firstPresentEnv(env, databaseRequirement),
+      dryRun: booleanOption(parsed, "dry-run"),
+      limit: numberOption(parsed, "limit", 500),
+    }),
+    localHandler: handleScoresRecompute,
+  },
+  {
+    name: "linear:backfill",
+    description: "Backfill Linear workspaces, projects, cycles, and issues through the Linear package.",
+    usage: "devrank linear:backfill [--first <count>] [--workspace <workspace>] [--dry-run]",
+    moduleCandidates: ["@repo/linear"],
+    exportCandidates: ["backfillLinear", "linearBackfill", "run"],
+    envRequirements: [databaseRequirement, linearAuthRequirement],
+    buildConfig: (parsed, env) => ({
+      databaseEnv: firstPresentEnv(env, databaseRequirement),
+      dryRun: booleanOption(parsed, "dry-run"),
+      first: numberOption(parsed, "first", 100),
+      workspace: stringOption(parsed, "workspace"),
+    }),
+    invoke: invokeLinearBackfill,
+  },
+  {
+    name: "local-daemon",
+    description: "Start the local Mac daemon through the local-agent package.",
+    usage: "devrank local-daemon [--codex-sessions-dir <path>] [--watch] [--dry-run]",
+    moduleCandidates: ["@repo/local-agent", "local-agent"],
+    exportCandidates: ["runLocalAgent", "startLocalDaemon", "startDaemon", "runDaemon", "run"],
+    envRequirements: [databaseRequirement],
+    buildConfig: (parsed, env) => ({
+      codexSessionsDir: stringOption(parsed, "codex-sessions-dir"),
+      databaseEnv: firstPresentEnv(env, databaseRequirement),
+      dryRun: booleanOption(parsed, "dry-run"),
+      rawStorageEnabled: booleanOption(parsed, "upload-raw-chats") || envFlag(env, "DEVRANK_UPLOAD_RAW_CHATS", false),
+      redactSecrets: !booleanOption(parsed, "no-redact-secrets") && envFlag(env, "DEVRANK_REDACT_SECRETS", true),
+      sources: stringListOption(parsed, "source") ?? localAgentPaths,
+      storeEmbeddings: !booleanOption(parsed, "no-store-embeddings") && envFlag(env, "DEVRANK_STORE_EMBEDDINGS", true),
+      watch: booleanOption(parsed, "watch"),
+    }),
+    invoke: invokeLocalDaemon,
+  },
+  {
+    name: "planner:daily",
+    description: "Generate and persist today's plan from the latest score snapshot.",
+    usage: "devrank planner:daily [--date <YYYY-MM-DD>] [--urgent-linear-task <text>] [--send-slack] [--dry-run]",
+    moduleCandidates: [],
+    exportCandidates: [],
+    envRequirements: [databaseRequirement],
+    buildConfig: (parsed, env) => ({
+      databaseEnv: firstPresentEnv(env, databaseRequirement),
+      date: stringOption(parsed, "date"),
+      dryRun: booleanOption(parsed, "dry-run"),
+      sendSlack: booleanOption(parsed, "send-slack"),
+      urgentLinearTask: stringOption(parsed, "urgent-linear-task"),
+    }),
+    localHandler: handlePlannerDaily,
+  },
+  {
+    name: "slack:test",
+    description: "Send a real Slack webhook test message.",
+    usage: "devrank slack:test [--text <message>]",
+    moduleCandidates: [],
+    exportCandidates: [],
+    envRequirements: [slackRequirement],
+    buildConfig: (parsed) => ({
+      text: stringOption(parsed, "text") ?? "DevRank OS Slack webhook test.",
+    }),
+    localHandler: handleSlackTest,
+  },
+  {
+    name: "market:benchmark",
+    description: "Run the market skill benchmark with live search results.",
+    usage: "devrank market:benchmark [--query <search-query>]...",
+    moduleCandidates: [],
+    exportCandidates: [],
+    envRequirements: [marketSearchRequirement],
+    buildConfig: (parsed) => ({
+      queries: stringListOption(parsed, "query") ?? [
+        "SDE fresher backend roles India",
+        "Java Spring Boot backend roles India",
+        "Node.js backend roles India",
+        "AWS Kubernetes Kafka backend roles India",
+        "AI agent engineer roles India",
+      ],
+    }),
+    localHandler: handleMarketBenchmark,
+  },
+];
+
+const commandMap = new Map(commands.map((command) => [command.name, command]));
+
+async function main(argv: string[]) {
+  const parsed = parseArgs(argv);
+
+  if (!parsed.commandName || parsed.commandName === "help" || booleanOption(parsed, "help") || booleanOption(parsed, "h")) {
+    printHelp(parsed.commandName && parsed.commandName !== "help" ? parsed.commandName : undefined);
+    return;
+  }
+
+  const command = commandMap.get(parsed.commandName);
+
+  if (!command) {
+    throw new CliError(`Unknown command "${parsed.commandName}".\n\n${renderHelp()}`, 2);
+  }
+
+  if (booleanOption(parsed, "help") || booleanOption(parsed, "h")) {
+    printHelp(command.name);
+    return;
+  }
+
+  validateCommand(command, parsed, process.env);
+
+  const handler = command.localHandler ?? await loadHandler(command);
+  const result = await handler({
+    command: command.name,
+    config: command.buildConfig(parsed, process.env),
+    env: process.env,
+    options: parsed.options,
+    positionals: parsed.positionals,
+  });
+
+  if (result !== undefined) {
+    printResult(result);
+  }
+}
+
+function parseArgs(argv: string[]): ParsedArgs {
+  const firstArg = argv[0];
+  const commandName = firstArg && !firstArg.startsWith("-") ? firstArg : undefined;
+  const rest = commandName ? argv.slice(1) : argv;
+  const parsed: ParsedArgs = {
+    commandName,
+    options: {},
+    positionals: [],
+    raw: argv,
+  };
+
+  for (let index = 0; index < rest.length; index += 1) {
+    const token = rest[index];
+
+    if (token === undefined) {
+      continue;
+    }
+
+    if (token === "--") {
+      parsed.positionals.push(...rest.slice(index + 1));
+      break;
+    }
+
+    if (token.startsWith("--")) {
+      const optionToken = token.slice(2);
+      const equalsIndex = optionToken.indexOf("=");
+
+      if (equalsIndex >= 0) {
+        addOption(parsed.options, optionToken.slice(0, equalsIndex), optionToken.slice(equalsIndex + 1));
+        continue;
+      }
+
+      if (optionToken.startsWith("no-")) {
+        addOption(parsed.options, optionToken, true);
+        continue;
+      }
+
+      const next = rest[index + 1];
+
+      if (next && !next.startsWith("--")) {
+        addOption(parsed.options, optionToken, next);
+        index += 1;
+      } else {
+        addOption(parsed.options, optionToken, true);
+      }
+
+      continue;
+    }
+
+    if (token.startsWith("-") && token.length > 1) {
+      for (const shortName of token.slice(1)) {
+        addOption(parsed.options, shortName, true);
+      }
+      continue;
+    }
+
+    parsed.positionals.push(token);
+  }
+
+  return parsed;
+}
+
+function addOption(options: Record<string, OptionValue>, name: string, value: OptionValue) {
+  const current = options[name];
+
+  if (current === undefined) {
+    options[name] = value;
+    return;
+  }
+
+  if (Array.isArray(current)) {
+    options[name] = [...current, String(value)];
+    return;
+  }
+
+  options[name] = [String(current), String(value)];
+}
+
+function validateCommand(command: CommandSpec, parsed: ParsedArgs, env: NodeJS.ProcessEnv) {
+  const missingEnv = command.envRequirements.filter((requirement) => !requirementMet(requirement, env));
+  const missingOptions = (command.optionRequirements ?? []).filter((requirement) => !stringOption(parsed, requirement.name));
+
+  if (missingEnv.length === 0 && missingOptions.length === 0) {
+    return;
+  }
+
+  const messages = [
+    ...missingOptions.map((requirement) => `- Option --${requirement.name}: ${requirement.label}`),
+    ...missingEnv.map((requirement) => `- ${requirement.label}: set ${describeRequirement(requirement)}`),
+  ];
+
+  throw new CliError(`Cannot run ${command.name}; required configuration is missing:\n${messages.join("\n")}`, 2);
+}
+
+function requirementMet(requirement: EnvRequirement, env: NodeJS.ProcessEnv) {
+  return requirement.oneOf.some((group) => group.every((name) => envValue(env, name) !== undefined));
+}
+
+function firstPresentEnv(env: NodeJS.ProcessEnv, requirement: EnvRequirement) {
+  for (const group of requirement.oneOf) {
+    if (group.every((name) => envValue(env, name) !== undefined)) {
+      return group[0];
+    }
+  }
+
+  return undefined;
+}
+
+function describeRequirement(requirement: EnvRequirement) {
+  return requirement.oneOf.map((group) => group.join(" + ")).join(" or ");
+}
+
+function envValue(env: NodeJS.ProcessEnv, name: string) {
+  const value = env[name];
+  return value && value.trim().length > 0 ? value : undefined;
+}
+
+function envFlag(env: NodeJS.ProcessEnv, name: string, fallback: boolean) {
+  const value = envValue(env, name);
+
+  if (!value) {
+    return fallback;
+  }
+
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+}
+
+function booleanOption(parsed: ParsedArgs, name: string) {
+  const value = parsed.options[name];
+
+  if (Array.isArray(value)) {
+    return value.some((item) => item === "true" || item === "1");
+  }
+
+  if (typeof value === "string") {
+    return value === "true" || value === "1";
+  }
+
+  return value === true;
+}
+
+function stringOption(parsed: ParsedArgs, name: string) {
+  const value = parsed.options[name];
+
+  if (Array.isArray(value)) {
+    return value.at(-1);
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+
+  return undefined;
+}
+
+function stringListOption(parsed: ParsedArgs, name: string) {
+  const value = parsed.options[name];
+
+  if (Array.isArray(value)) {
+    return value.filter((item) => item.trim().length > 0);
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return [value];
+  }
+
+  return undefined;
+}
+
+function numberOption(parsed: ParsedArgs, name: string, fallback: number) {
+  const value = stringOption(parsed, name);
+
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+    throw new CliError(`Option --${name} must be a positive number.`, 2);
+  }
+
+  return parsedValue;
+}
+
+async function handleEnvCheck(context: CommandContext) {
+  const feature = configString(context, "feature") ?? "all";
+  const featureRequirements: Record<string, EnvRequirement[]> = {
+    api: [apiTokenRequirement, cronRequirement],
+    context: [databaseRequirement, supermemoryRequirement],
+    database: [databaseRequirement],
+    github: [databaseRequirement, githubAuthRequirement],
+    hermes: [hermesRequirement],
+    linear: [databaseRequirement, linearAuthRequirement],
+    market: [marketSearchRequirement],
+    slack: [slackRequirement],
+  };
+  const selected: Array<[string, EnvRequirement[] | undefined]> =
+    feature === "all"
+      ? Object.entries(featureRequirements)
+      : [[feature, featureRequirements[feature]]];
+
+  if (selected.some(([, requirements]) => requirements === undefined)) {
+    throw new CliError(`Unknown feature "${feature}". Use one of: ${Object.keys(featureRequirements).join(", ")}, all.`, 2);
+  }
+
+  return {
+    feature,
+    checks: selected.map(([name, requirements]) => {
+      const checkedRequirements = requirements ?? [];
+
+      return {
+        feature: name,
+        ready: checkedRequirements.every((requirement) => requirementMet(requirement, context.env)),
+        requirements: checkedRequirements.map((requirement) => ({
+          label: requirement.label,
+          configured: requirementMet(requirement, context.env),
+          required: describeRequirement(requirement),
+        })),
+      };
+    }),
+  };
+}
+
+async function handleDbMigrate() {
+  const result = await runDbMigrations();
+
+  return {
+    migrated: true,
+    applied: result.applied,
+  };
+}
+
+async function handleDbCheckVector() {
+  const result = await checkVectorSupport();
+
+  return {
+    pgvector: result.extensionInstalled && result.distance === 0,
+    ...result,
+  };
+}
+
+async function handleScoresRecompute(context: CommandContext) {
+  const sql = createSqlClient();
+
+  try {
+    const evidence = await listEvidenceItems(sql, {
+      limit: configNumber(context, "limit", 500),
+    });
+    const snapshot = computeSdeReadinessSnapshot(evidence);
+
+    if (!configBoolean(context, "dryRun")) {
+      await insertScoreSnapshot(sql, snapshot);
+    }
+
+    return {
+      dryRun: configBoolean(context, "dryRun"),
+      evidenceCount: evidence.length,
+      snapshot,
+    };
+  } finally {
+    await closeSqlClient(sql);
+  }
+}
+
+async function handlePlannerDaily(context: CommandContext) {
+  const sql = createSqlClient();
+
+  try {
+    const snapshot = await getLatestScoreSnapshot(sql);
+
+    if (!snapshot) {
+      throw new CliError("No score snapshot exists yet. Run devrank scores:recompute first.", 2);
+    }
+
+    const plan = generateDailyPlan(
+      snapshot,
+      configString(context, "date"),
+      configString(context, "urgentLinearTask"),
+    );
+    const slackText = formatDailyPlanForSlack(plan);
+    let slackDelivered = false;
+
+    if (!configBoolean(context, "dryRun")) {
+      await insertDailyPlan(sql, plan);
+    }
+
+    if (configBoolean(context, "sendSlack")) {
+      await sendSlackMessage(slackText);
+      slackDelivered = true;
+    }
+
+    return {
+      dryRun: configBoolean(context, "dryRun"),
+      plan,
+      slackDelivered,
+      slackText,
+    };
+  } finally {
+    await closeSqlClient(sql);
+  }
+}
+
+async function handleSlackTest(context: CommandContext) {
+  return sendSlackMessage(configString(context, "text") ?? "DevRank OS Slack webhook test.");
+}
+
+async function handleMarketBenchmark(context: CommandContext) {
+  return runMarketBenchmark(configStringList(context, "queries"));
+}
+
+async function loadHandler(command: CommandSpec): Promise<CommandHandler> {
+  const missingModules: string[] = [];
+
+  for (const moduleName of command.moduleCandidates) {
+    try {
+      const moduleExports = (await import(moduleName)) as ModuleExports;
+      const invoker = command.invoke;
+
+      if (invoker) {
+        return (context) => invoker(moduleExports, context, moduleName);
+      }
+
+      const handler = findHandler(moduleExports, command.exportCandidates);
+
+      if (!handler) {
+        throw new CliError(
+          `Package API "${moduleName}" is available, but ${command.name} needs one of these function exports: ${command.exportCandidates.join(", ")}.`,
+        );
+      }
+
+      return (context) => handler(context);
+    } catch (error) {
+      if (isMissingTargetModule(error, moduleName)) {
+        missingModules.push(moduleName);
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new CliError(
+    [
+      `Command ${command.name} is wired, but no package API is available yet.`,
+      `Tried: ${command.moduleCandidates.join(", ")}.`,
+      `Expected one of these exports: ${command.exportCandidates.join(", ")}.`,
+    ].join("\n"),
+  );
+}
+
+async function invokeLocalAiIngest(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+  const packageHandler = optionalFunction(moduleExports, ["ingestLocalAiChats"]);
+
+  if (packageHandler) {
+    const codexDir = codexSessionsDir(context);
+    const result = await packageHandler({
+      codexSessionsDir: codexSessionsDir(context),
+    });
+
+    return persistIngestionResult(context, result, `local_session:${codexDir}`);
+  }
+
+  const handler = requiredFunction(
+    moduleExports,
+    ["ingestLocalAI", "ingestLocalAi", "ingestLocalChats", "run"],
+    moduleName,
+    context.command,
+  );
+
+  return handler(context);
+}
+
+function invokeGithubBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+  const directHandler = optionalFunction(moduleExports, ["backfillGitHub", "backfillGithub", "githubBackfill", "run"]);
+
+  if (directHandler) {
+    return directHandler(context);
+  }
+
+  const token = envValue(context.env, "GITHUB_PERSONAL_ACCESS_TOKEN") ?? envValue(context.env, "GITHUB_TOKEN");
+
+  if (!token) {
+    throw new CliError(
+      [
+        `Package API "${moduleName}" exposes backfillGithubUser, which requires token-based REST auth.`,
+        "Set GITHUB_PERSONAL_ACCESS_TOKEN or GITHUB_TOKEN, or add a direct backfillGitHub export that supports GitHub App credentials.",
+      ].join("\n"),
+      2,
+    );
+  }
+
+  const createGithubClient = requiredFunction(moduleExports, ["createGithubClient"], moduleName, context.command);
+  const backfillGithubUser = requiredFunction(moduleExports, ["backfillGithubUser"], moduleName, context.command);
+  const client = createGithubClient({
+    ...context.env,
+    GITHUB_PERSONAL_ACCESS_TOKEN: token,
+  });
+
+  return backfillGithubUser(client, configString(context, "user"));
+}
+
+function invokeLinearBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+  const directHandler = optionalFunction(moduleExports, ["linearBackfill", "run"]);
+
+  if (directHandler) {
+    return directHandler(context);
+  }
+
+  const backfillLinear = requiredFunction(moduleExports, ["backfillLinear"], moduleName, context.command);
+  return backfillLinear(configNumber(context, "first", 100));
+}
+
+function invokeLocalDaemon(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+  const directHandler = requiredFunction(
+    moduleExports,
+    ["runLocalAgent", "startLocalDaemon", "startDaemon", "runDaemon", "run"],
+    moduleName,
+    context.command,
+  );
+
+  return directHandler({
+    codexSessionsDir: codexSessionsDir(context),
+    persist: !configBoolean(context, "dryRun"),
+    watch: configBoolean(context, "watch"),
+  });
+}
+
+async function persistIngestionResult(context: CommandContext, result: unknown, source: string) {
+  if (configBoolean(context, "dryRun") || !isIngestionLike(result)) {
+    return result;
+  }
+
+  const sql = createSqlClient();
+
+  try {
+    const writtenEvidence = await upsertEvidenceItems(sql, result.evidence);
+    await insertIngestionRun(sql, {
+      source,
+      status: "success",
+      summary: `Imported ${result.sessions.length} session(s) and ${result.evidence.length} evidence item(s).`,
+    });
+
+    return {
+      ...result,
+      writtenEvidence,
+    };
+  } catch (error) {
+    await insertIngestionRun(sql, {
+      source,
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  } finally {
+    await closeSqlClient(sql);
+  }
+}
+
+function isIngestionLike(value: unknown): value is {
+  evidence: Parameters<typeof upsertEvidenceItems>[1];
+  sessions: unknown[];
+} {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return Array.isArray(record.evidence) && Array.isArray(record.sessions);
+}
+
+function codexSessionsDir(context: CommandContext) {
+  const configured = configString(context, "codexSessionsDir");
+
+  if (configured) {
+    return configured;
+  }
+
+  const sources = configStringList(context, "sources");
+  return sources.find((source) => source.includes(".codex")) ?? join(homedir(), ".codex", "sessions");
+}
+
+function configString(context: CommandContext, key: string) {
+  const value = context.config[key];
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+
+  return undefined;
+}
+
+function configNumber(context: CommandContext, key: string, fallback: number) {
+  const value = context.config[key];
+  return typeof value === "number" ? value : fallback;
+}
+
+function configBoolean(context: CommandContext, key: string) {
+  return context.config[key] === true;
+}
+
+function configStringList(context: CommandContext, key: string) {
+  const value = context.config[key];
+
+  if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+    return value;
+  }
+
+  return [];
+}
+
+function optionalFunction(moduleExports: ModuleExports, candidates: string[]) {
+  return findHandler(moduleExports, candidates);
+}
+
+function requiredFunction(moduleExports: ModuleExports, candidates: string[], moduleName: string, commandName: string) {
+  const handler = optionalFunction(moduleExports, candidates);
+
+  if (!handler) {
+    throw new CliError(
+      `Package API "${moduleName}" is available, but ${commandName} needs one of these function exports: ${candidates.join(", ")}.`,
+    );
+  }
+
+  return handler;
+}
+
+function findHandler(moduleExports: ModuleExports, candidates: string[]): UnknownFunction | undefined {
+  for (const exportName of candidates) {
+    const value = moduleExports[exportName];
+
+    if (typeof value === "function") {
+      return value as UnknownFunction;
+    }
+  }
+
+  const defaultExport = moduleExports.default;
+
+  if (typeof defaultExport === "function") {
+    return defaultExport as UnknownFunction;
+  }
+
+  return undefined;
+}
+
+function isMissingTargetModule(error: unknown, moduleName: string) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const code = "code" in error ? String(error.code) : undefined;
+  return code === "ERR_MODULE_NOT_FOUND" && error.message.includes(moduleName);
+}
+
+function printResult(result: unknown) {
+  if (typeof result === "string") {
+    console.log(result);
+    return;
+  }
+
+  console.log(JSON.stringify(result, null, 2));
+}
+
+function printHelp(commandName?: string) {
+  console.log(renderHelp(commandName));
+}
+
+function renderHelp(commandName?: string) {
+  if (commandName) {
+    const command = commandMap.get(commandName);
+
+    if (!command) {
+      return renderHelp();
+    }
+
+    const lines = [
+      command.description,
+      "",
+      `Usage: ${command.usage}`,
+      "",
+      "Required environment:",
+      ...command.envRequirements.map((requirement) => `  ${requirement.label}: ${describeRequirement(requirement)}`),
+    ];
+
+    if (command.moduleCandidates.length > 0) {
+      lines.push(
+        "",
+        `Package API: ${command.moduleCandidates.join(" or ")} exporting ${command.exportCandidates.join(" or ")}.`,
+      );
+    }
+
+    return lines.join("\n");
+  }
+
+  return [
+    "DevRank OS CLI",
+    "",
+    "Usage: devrank <command> [options]",
+    "",
+    "Commands:",
+    ...commands.map((command) => `  ${command.name.padEnd(18)} ${command.description}`),
+    "",
+    "Run devrank <command> --help for command-specific requirements.",
+  ].join("\n");
+}
+
+main(process.argv.slice(2)).catch((error: unknown) => {
+  if (error instanceof CliError) {
+    console.error(error.message);
+    process.exitCode = error.exitCode;
+    return;
+  }
+
+  if (error instanceof Error) {
+    console.error(error.message);
+    process.exitCode = 1;
+    return;
+  }
+
+  console.error(String(error));
+  process.exitCode = 1;
+});
