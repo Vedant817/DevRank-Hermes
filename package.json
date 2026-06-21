@@ -1,0 +1,36 @@
+{
+  "name": "devrank-os",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "devrank": "pnpm --filter @repo/cli devrank",
+    "lint": "turbo run lint",
+    "test": "turbo run check-types",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "check-types": "turbo run check-types"
+  },
+  "devDependencies": {
+    "prettier": "^3.7.4",
+    "turbo": "^2.9.18",
+    "typescript": "5.9.2"
+  },
+  "packageManager": "pnpm@11.6.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@octokit/app": "^16.1.2",
+    "@octokit/rest": "^22.0.1",
+    "@octokit/webhooks": "^14.2.0",
+    "@slack/webhook": "^7.0.9",
+    "chokidar": "^5.0.0",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "openai": "^6.42.0",
+    "pino": "^10.3.1",
+    "postgres": "^3.4.9",
+    "tsx": "^4.22.4",
+    "zod": "^4.4.3"
+  }
+}

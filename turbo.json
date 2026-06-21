@@ -1,0 +1,53 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "ui": "tui",
+  "globalEnv": [
+    "CONTEXT_PROVIDER",
+    "CRON_SECRET",
+    "DATABASE_URL",
+    "DEVRANK_API_TOKEN",
+    "DEVRANK_DATABASE_URL",
+    "DEVRANK_REDACT_SECRETS",
+    "DEVRANK_STORE_EMBEDDINGS",
+    "DEVRANK_UPLOAD_RAW_CHATS",
+    "EXA_API_KEY",
+    "FIRECRAWL_API_KEY",
+    "GITHUB_APP_ID",
+    "GITHUB_INSTALLATION_ID",
+    "GITHUB_PERSONAL_ACCESS_TOKEN",
+    "GITHUB_PRIVATE_KEY",
+    "GITHUB_PRIVATE_KEY_PATH",
+    "GITHUB_TOKEN",
+    "GITHUB_WEBHOOK_SECRET",
+    "LINEAR_API_KEY",
+    "LINEAR_WEBHOOK_SECRET",
+    "LOCAL_AGENT_REDACT_SECRETS",
+    "LOCAL_AGENT_UPLOAD_RAW_CHATS",
+    "OPENROUTER_API_KEY",
+    "SLACK_WEBHOOK_URL",
+    "SUPABASE_DATABASE_URL",
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_URL",
+    "SUPERMEMORY_API_KEY",
+    "SUPERMEMORY_PROJECT_ID",
+    "TAVILY_API_KEY"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "!.next/dev/**"]
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "check-types": {
+      "dependsOn": ["^check-types"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}
