@@ -27,19 +27,33 @@ export interface ParsedSession {
 export interface IngestionResult {
   sessions: ParsedSession[];
   evidence: EvidenceItem[];
+  embeddings: EvidenceEmbedding[];
   redactionCount: number;
   adapterCounts: Record<string, number>;
   privacy: {
-    embeddingStatus: "disabled";
+    embeddingStatus: "disabled" | "generated";
     rawStorageStatus: "local_only";
     redactionStatus: "passed";
     uploadRawChats: false;
-    storeEmbeddings: false;
+    storeEmbeddings: boolean;
   };
 }
 
+export interface EvidenceEmbedding {
+  embedding: number[];
+  model: string;
+  source: EvidenceSource;
+  sourceId: string;
+}
+
+export type LocalAiEmbeddingGenerator = (texts: string[]) => Promise<{
+  embeddings: number[][];
+  model: string;
+}>;
+
 export interface LocalAiIngestionOptions {
   codexSessionsDir?: string;
+  embeddingGenerator?: LocalAiEmbeddingGenerator;
   sourceRoots?: string[];
   enabledAdapters?: Array<"codex" | "claude" | "opencode" | "antigravity">;
   rawStorageEnabled?: boolean;

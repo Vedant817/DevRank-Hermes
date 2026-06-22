@@ -2,6 +2,7 @@ import {
   closeSqlClient,
   createSqlClient,
   insertIngestionRun,
+  upsertEvidenceEmbeddings,
   upsertEvidenceItems,
 } from "@repo/db";
 import {
@@ -71,14 +72,16 @@ export async function POST(request: Request) {
       sourceRoots: [sourcePath],
     });
     const sql = createSqlClient();
+    let writtenEmbeddings = 0;
     let writtenEvidence = 0;
 
     try {
       writtenEvidence = await upsertEvidenceItems(sql, result.evidence);
+      writtenEmbeddings = await upsertEvidenceEmbeddings(sql, result.embeddings);
       await insertIngestionRun(sql, {
         source: `local_session:${sourcePath}`,
         status: "success",
-        summary: `Imported ${result.sessions.length} session(s) and ${result.evidence.length} evidence item(s).`,
+        summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), and ${writtenEmbeddings} embedding(s).`,
       });
     } finally {
       await closeSqlClient(sql);
@@ -89,8 +92,11 @@ export async function POST(request: Request) {
       sourcePath,
       sessionCount: result.sessions.length,
       evidenceCount: result.evidence.length,
+      embeddingCount: result.embeddings.length,
       writtenEvidence,
+      writtenEmbeddings,
       redactionCount: result.redactionCount,
+      privacy: result.privacy,
       evidence: result.evidence,
     });
   } catch (error) {

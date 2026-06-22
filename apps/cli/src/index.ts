@@ -15,6 +15,7 @@ import {
   listEvidenceItems,
   runDbMigrations,
   upsertGithubBackfill,
+  upsertEvidenceEmbeddings,
   upsertEvidenceItems,
   upsertLinearBackfill,
 } from "@repo/db";
@@ -130,6 +131,11 @@ const hermesRequirement: EnvRequirement = {
   oneOf: [["OPENROUTER_API_KEY"]],
 };
 
+const embeddingsRequirement: EnvRequirement = {
+  label: "Embedding provider auth",
+  oneOf: [["EMBEDDING_API_KEY"], ["OPENROUTER_API_KEY"]],
+};
+
 const supermemoryRequirement: EnvRequirement = {
   label: "Supermemory auth",
   oneOf: [["SUPERMEMORY_API_KEY"]],
@@ -139,7 +145,7 @@ const commands: CommandSpec[] = [
   {
     name: "env:check",
     description: "Show the exact environment variables needed for one feature or all features.",
-    usage: "devrank env:check [--feature <database|github|linear|slack|market|context|hermes|api|all>]",
+    usage: "devrank env:check [--feature <database|github|linear|slack|market|context|hermes|embeddings|api|all>]",
     moduleCandidates: [],
     exportCandidates: [],
     envRequirements: [],
@@ -598,6 +604,7 @@ async function handleEnvCheck(context: CommandContext) {
     api: [apiTokenRequirement, cronRequirement],
     context: [databaseRequirement, supermemoryRequirement],
     database: [databaseRequirement],
+    embeddings: [embeddingsRequirement],
     github: [databaseRequirement, githubAuthRequirement],
     hermes: [hermesRequirement],
     linear: [databaseRequirement, linearAuthRequirement],
@@ -1054,14 +1061,18 @@ async function persistIngestionResult(context: CommandContext, result: unknown, 
 
   try {
     const writtenEvidence = await upsertEvidenceItems(sql, result.evidence);
+    const writtenEmbeddings = Array.isArray(result.embeddings)
+      ? await upsertEvidenceEmbeddings(sql, result.embeddings)
+      : 0;
     await insertIngestionRun(sql, {
       source,
       status: "success",
-      summary: `Imported ${result.sessions.length} session(s) and ${result.evidence.length} evidence item(s).`,
+      summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), and ${writtenEmbeddings} embedding(s).`,
     });
 
     return {
       ...result,
+      writtenEmbeddings,
       writtenEvidence,
     };
   } catch (error) {
@@ -1078,6 +1089,7 @@ async function persistIngestionResult(context: CommandContext, result: unknown, 
 
 function isIngestionLike(value: unknown): value is {
   evidence: Parameters<typeof upsertEvidenceItems>[1];
+  embeddings?: Parameters<typeof upsertEvidenceEmbeddings>[1];
   sessions: unknown[];
 } {
   if (typeof value !== "object" || value === null) {

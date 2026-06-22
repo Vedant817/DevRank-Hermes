@@ -17,6 +17,8 @@ scores, learning plans, Slack targets, and mentor summaries.
   summary generation.
 - `packages/scoring`: deterministic SDE-readiness scoring.
 - `packages/planner`: daily plan generation and Slack formatting.
+- `packages/embeddings`: OpenRouter-compatible embedding generation for
+  redacted evidence summaries.
 - `packages/github`, `packages/linear`, `packages/slack`, `packages/search`,
   `packages/context`, `packages/hermes`: external integrations.
 
@@ -52,10 +54,20 @@ HERMES_HTTP_REFERER=https://your-app.example
 HERMES_TITLE=DevRank OS
 ```
 
+Redacted local AI summaries can be embedded into pgvector using OpenRouter's
+embedding endpoint:
+
+```text
+DEVRANK_STORE_EMBEDDINGS=true
+EMBEDDING_MODEL=openai/text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
+```
+
 ## Main Commands
 
 ```bash
 pnpm devrank ingest:local-ai --codex-sessions-dir ~/.codex/sessions
+pnpm devrank ingest:local-ai --codex-sessions-dir ~/.codex/sessions --store-embeddings
 pnpm devrank scores:recompute
 pnpm devrank planner:daily
 pnpm devrank github:backfill --user vedantmahajan271

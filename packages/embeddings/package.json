@@ -1,5 +1,5 @@
 {
-  "name": "@repo/ai-chat-ingestors",
+  "name": "@repo/embeddings",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -16,8 +16,6 @@
     "test:unit": "tsx --test test/*.test.ts"
   },
   "dependencies": {
-    "@repo/embeddings": "workspace:*",
-    "@repo/hermes": "workspace:*",
     "@repo/shared": "workspace:*"
   },
   "devDependencies": {

@@ -190,4 +190,11 @@ export const migrations = [
         where source_id is not null;
     `,
   },
+  {
+    id: "005_memory_embeddings_unique_item_model",
+    sql: `
+      create unique index if not exists memory_embeddings_item_model_unique
+        on memory_embeddings (memory_item_id, model);
+    `,
+  },
 ];

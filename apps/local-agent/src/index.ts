@@ -7,6 +7,7 @@ import {
   closeSqlClient,
   createSqlClient,
   insertIngestionRun,
+  upsertEvidenceEmbeddings,
   upsertEvidenceItems,
 } from "@repo/db";
 import { loadLocalAgentConfig, type LocalAgentPrivacyConfig } from "./config.js";
@@ -106,10 +107,11 @@ async function ingestAndMaybePersist(input: {
 
   try {
     await upsertEvidenceItems(sql, result.evidence);
+    const writtenEmbeddings = await upsertEvidenceEmbeddings(sql, result.embeddings);
     await insertIngestionRun(sql, {
       source: `local_session:${input.codexSessionsDir}`,
       status: "success",
-      summary: `Imported ${result.sessions.length} session(s) and ${result.evidence.length} evidence item(s).`,
+      summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), and ${writtenEmbeddings} embedding(s).`,
     });
   } catch (error) {
     await insertIngestionRun(sql, {

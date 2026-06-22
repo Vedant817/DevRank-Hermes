@@ -1,3 +1,4 @@
+import { embedTexts } from "@repo/embeddings";
 import { summarizeSession } from "./summarize.js";
 import {
   codexDefaultRoot,
@@ -22,9 +23,15 @@ export async function ingestLocalAiChats(options: LocalAiIngestionOptions = {}):
     sessions.push(...adapterSessions);
   }
 
+  const evidence = sessions.map(summarizeSession);
+  const embeddings = privacy.storeEmbeddings
+    ? await buildEmbeddings(evidence, options.embeddingGenerator ?? ((texts) => embedTexts(texts)))
+    : [];
+
   return {
     sessions,
-    evidence: sessions.map(summarizeSession),
+    evidence,
+    embeddings,
     redactionCount: sessions.reduce((total, session) => total + session.redactions.length, 0),
     adapterCounts,
     privacy,
@@ -40,17 +47,35 @@ function resolvePrivacy(options: LocalAiIngestionOptions): IngestionResult["priv
     throw new Error("Raw chat cloud storage is not implemented; keep raw transcripts local.");
   }
 
-  if (options.storeEmbeddings === true) {
-    throw new Error("Embedding storage is not implemented; enable it only after a real embedding provider is wired.");
-  }
-
   return {
-    embeddingStatus: "disabled",
+    embeddingStatus: options.storeEmbeddings === true ? "generated" : "disabled",
     rawStorageStatus: "local_only",
     redactionStatus: "passed",
     uploadRawChats: false,
-    storeEmbeddings: false,
+    storeEmbeddings: options.storeEmbeddings === true,
   };
+}
+
+async function buildEmbeddings(
+  evidence: IngestionResult["evidence"],
+  embeddingGenerator: NonNullable<LocalAiIngestionOptions["embeddingGenerator"]>,
+): Promise<IngestionResult["embeddings"]> {
+  if (evidence.length === 0) {
+    return [];
+  }
+
+  const result = await embeddingGenerator(evidence.map((item) => `${item.title}\n\n${item.summary}`));
+
+  if (result.embeddings.length !== evidence.length) {
+    throw new Error("Embedding generator returned a different vector count than the evidence count.");
+  }
+
+  return evidence.map((item, index) => ({
+    embedding: result.embeddings[index] ?? [],
+    model: result.model,
+    source: item.source,
+    sourceId: item.id,
+  }));
 }
 
 function rootsForAdapter(

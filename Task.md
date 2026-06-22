@@ -193,8 +193,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] `repo_summary_embeddings`
   - [ ] `chat_summary_embeddings`
   - [ ] `skill_evidence_embeddings`
-- [ ] Implement the rule: summarize first, redact second, embed third.
-- [ ] Do not embed everything raw.
+- [x] Implement the rule: redact raw transcript first, summarize second, embed only the redacted summary.
+- [x] Do not embed everything raw.
 - [x] Add migrations.
 - [ ] Run migrations locally.
 - [ ] Verify all indexes and foreign keys.
@@ -244,7 +244,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Repeated mistakes.
   - [ ] Strong patterns.
   - [x] Summaries.
-  - [ ] Embeddings.
+  - [x] Embeddings.
 - [x] Redact secrets before sending anything to OpenRouter, Hermes, search, or cloud APIs.
 - [ ] Redact:
   - [x] API keys.
@@ -938,7 +938,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Secret redaction blocks sensitive values before upload.
 - [x] Raw transcripts stay local by default.
 - [x] Session summaries are stored in Supabase Postgres.
-- [ ] Embeddings are generated only from summarized and redacted content.
+- [x] Embeddings are generated only from summarized and redacted content.
 - [x] External context writes are blocked until summarization and redaction pass.
 - [ ] Supermemory retrieval works only in the configured scope if Supermemory is enabled.
 - [x] Missing Supermemory credentials do not break Supabase-only mode.

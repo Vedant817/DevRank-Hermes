@@ -120,6 +120,7 @@ test("ingests through the adapter registry", async () => {
   assert.equal(result.sessions.length, 1);
   assert.equal(result.adapterCounts.codex, 1);
   assert.equal(result.evidence.length, 1);
+  assert.deepEqual(result.embeddings, []);
   assert.deepEqual(result.privacy, {
     embeddingStatus: "disabled",
     rawStorageStatus: "local_only",
@@ -137,10 +138,6 @@ test("rejects unsupported production privacy modes instead of ignoring flags", a
   await assert.rejects(
     ingestLocalAiChats({ enabledAdapters: [], redactSecrets: false }),
     /requires secret redaction/,
-  );
-  await assert.rejects(
-    ingestLocalAiChats({ enabledAdapters: [], storeEmbeddings: true }),
-    /Embedding storage is not implemented/,
   );
 });
 
@@ -170,4 +167,39 @@ test("routes known source roots to matching adapters", async () => {
   assert.equal(result.adapterCounts.opencode, 0);
   assert.equal(result.adapterCounts.antigravity, 0);
   assert.equal(result.sessions.length, 2);
+});
+
+test("generates embeddings from redacted evidence summaries when enabled", async () => {
+  const root = await mkdtemp(join(tmpdir(), "devrank-embedding-ingest-"));
+  const file = join(root, "session.jsonl");
+  const generatedInputs: string[][] = [];
+
+  await writeFile(file, JSON.stringify({
+    role: "user",
+    message: "Build tests with token=secret-value",
+  }));
+
+  const result = await ingestLocalAiChats({
+    embeddingGenerator: async (texts) => {
+      generatedInputs.push(texts);
+
+      return {
+        embeddings: texts.map(() => [0.1, 0.2, 0.3]),
+        model: "test-embedding-model",
+      };
+    },
+    enabledAdapters: ["codex"],
+    sourceRoots: [root],
+    storeEmbeddings: true,
+  });
+
+  assert.equal(result.privacy.embeddingStatus, "generated");
+  assert.equal(result.privacy.storeEmbeddings, true);
+  assert.equal(result.embeddings.length, 1);
+  assert.equal(result.embeddings[0]?.model, "test-embedding-model");
+  assert.deepEqual(result.embeddings[0]?.embedding, [0.1, 0.2, 0.3]);
+  assert.equal(result.embeddings[0]?.source, "local_session");
+  assert.equal(result.embeddings[0]?.sourceId, result.evidence[0]?.id);
+  assert.match(generatedInputs[0]?.[0] ?? "", /\[REDACTED_SECRET\]/);
+  assert.doesNotMatch(generatedInputs[0]?.[0] ?? "", /secret-value/);
 });

@@ -55,6 +55,13 @@ export interface PersistableLinearBackfill {
   issues: PersistableLinearIssue[];
 }
 
+export interface PersistableEvidenceEmbedding {
+  embedding: number[];
+  model: string;
+  source: EvidenceSource;
+  sourceId: string;
+}
+
 type MemoryItemRow = {
   id: string;
   source: string;
@@ -362,6 +369,32 @@ export async function upsertEvidenceItems(
         metadata = excluded.metadata
     `;
     written += 1;
+  }
+
+  return written;
+}
+
+export async function upsertEvidenceEmbeddings(
+  sql: SqlClient,
+  embeddings: PersistableEvidenceEmbedding[],
+): Promise<number> {
+  let written = 0;
+
+  for (const item of embeddings) {
+    const vector = vectorLiteral(item.embedding);
+    const rows = await sql<{ id: string }[]>`
+      insert into memory_embeddings (memory_item_id, embedding, model, created_at)
+      select id, ${vector}::vector, ${item.model}, now()
+      from memory_items
+      where source = ${item.source}
+        and source_id = ${item.sourceId}
+      on conflict (memory_item_id, model) do update set
+        embedding = excluded.embedding,
+        created_at = now()
+      returning id
+    `;
+
+    written += rows.length;
   }
 
   return written;
@@ -923,4 +956,18 @@ function numberCount(value: string | number | undefined) {
 
 function toIso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function vectorLiteral(values: number[]) {
+  if (values.length === 0) {
+    throw new Error("Embedding vector cannot be empty.");
+  }
+
+  for (const value of values) {
+    if (!Number.isFinite(value)) {
+      throw new Error("Embedding vector contains a non-finite value.");
+    }
+  }
+
+  return `[${values.join(",")}]`;
 }
