@@ -23,6 +23,7 @@ create table if not exists ai_sessions (
   id uuid primary key default gen_random_uuid(),
   agent_id uuid references ai_agents(id),
   source_type text not null,
+  source_id text,
   source_path text,
   title text not null,
   started_at timestamptz,
@@ -177,3 +178,13 @@ create table if not exists memory_embeddings (
   model text not null,
   created_at timestamptz not null default now()
 );
+
+alter table ai_sessions
+  add column if not exists source_id text;
+
+create unique index if not exists memory_embeddings_item_model_unique
+  on memory_embeddings (memory_item_id, model);
+
+create unique index if not exists ai_sessions_source_type_source_id_unique
+  on ai_sessions (source_type, source_id)
+  where source_id is not null;
