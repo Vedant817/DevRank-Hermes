@@ -304,7 +304,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Use Hermes as the reasoning/orchestration layer, not the database.
 - [ ] Implement Hermes workflows for:
   - [x] Summarizing local AI-agent chats.
-  - [ ] Creating reusable skills.
+  - [x] Creating reusable skills.
   - [ ] Calling repo-analysis tools.
   - [x] Creating weekly improvement plans.
   - [ ] Reviewing PR quality.

@@ -66,6 +66,9 @@ importers:
       '@repo/github':
         specifier: workspace:*
         version: link:../../packages/github
+      '@repo/hermes':
+        specifier: workspace:*
+        version: link:../../packages/hermes
       '@repo/linear':
         specifier: workspace:*
         version: link:../../packages/linear

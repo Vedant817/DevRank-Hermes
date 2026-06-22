@@ -16,6 +16,7 @@
     "@repo/ai-chat-ingestors": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/github": "workspace:*",
+    "@repo/hermes": "workspace:*",
     "@repo/linear": "workspace:*",
     "@repo/local-agent": "workspace:*",
     "@repo/planner": "workspace:*",

@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import "dotenv/config";
 
+import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   checkVectorSupport,
   closeSqlClient,
@@ -15,12 +16,14 @@ import {
   runDbMigrations,
   upsertEvidenceItems,
 } from "@repo/db";
+import { buildReusableSkillArtifacts, writeReusableSkillArtifacts } from "@repo/hermes";
 import { formatDailyPlanForSlack, generateDailyPlan } from "@repo/planner";
 import { computeSdeReadinessSnapshot } from "@repo/scoring";
 import { runMarketBenchmark } from "@repo/search";
 import { sendSlackMessage } from "@repo/slack";
 
 type OptionValue = boolean | string | string[];
+type EvidenceItemForCli = Awaited<ReturnType<typeof listEvidenceItems>>[number];
 
 type ParsedArgs = {
   commandName?: string;
@@ -300,6 +303,22 @@ const commands: CommandSpec[] = [
     invoke: invokeHermesSkillExtract,
   },
   {
+    name: "hermes:skills:create",
+    description: "Create reusable Hermes skill Markdown artifacts from evidence.",
+    usage: "devrank hermes:skills:create [--from-file <evidence.json>] [--output <dir>] [--limit <count>] [--generated-at <iso-date>]",
+    moduleCandidates: [],
+    exportCandidates: [],
+    envRequirements: [],
+    buildConfig: (parsed, env) => ({
+      databaseEnv: firstPresentEnv(env, databaseRequirement),
+      fromFile: stringOption(parsed, "from-file"),
+      generatedAt: stringOption(parsed, "generated-at"),
+      limit: numberOption(parsed, "limit", 500),
+      outputDir: stringOption(parsed, "output") ?? "artifacts/hermes-skills",
+    }),
+    localHandler: handleHermesSkillsCreate,
+  },
+  {
     name: "planner:daily",
     description: "Generate and persist today's plan from the latest score snapshot.",
     usage: "devrank planner:daily [--date <YYYY-MM-DD>] [--urgent-linear-task <text>] [--send-slack] [--dry-run]",
@@ -348,6 +367,17 @@ const commands: CommandSpec[] = [
 ];
 
 const commandMap = new Map(commands.map((command) => [command.name, command]));
+const evidenceSources = new Set<EvidenceItemForCli["source"]>([
+  "local_session",
+  "cloud_export",
+  "manual_export",
+  "workspace_export",
+  "github",
+  "linear",
+  "market",
+  "skill",
+  "manual",
+]);
 
 async function main(argv: string[]) {
   const parsed = parseArgs(argv);
@@ -693,6 +723,51 @@ async function handleSlackTest(context: CommandContext) {
 
 async function handleMarketBenchmark(context: CommandContext) {
   return runMarketBenchmark(configStringList(context, "queries"));
+}
+
+async function handleHermesSkillsCreate(context: CommandContext) {
+  const evidence = await loadReusableSkillEvidence(context);
+  const artifacts = buildReusableSkillArtifacts(evidence, {
+    generatedAt: configString(context, "generatedAt"),
+  });
+
+  if (artifacts.length === 0) {
+    throw new CliError("No reusable skill artifacts could be created from the provided evidence.", 2);
+  }
+
+  const outputDir = resolve(configString(context, "outputDir") ?? "artifacts/hermes-skills");
+  const result = await writeReusableSkillArtifacts(artifacts, outputDir);
+
+  return {
+    evidenceCount: evidence.length,
+    artifactCount: artifacts.length,
+    ...result,
+  };
+}
+
+async function loadReusableSkillEvidence(context: CommandContext): Promise<Awaited<ReturnType<typeof listEvidenceItems>>> {
+  const fromFile = configString(context, "fromFile");
+
+  if (fromFile) {
+    return parseEvidenceFile(await readFile(resolve(fromFile), "utf8"));
+  }
+
+  if (!requirementMet(databaseRequirement, context.env)) {
+    throw new CliError(
+      `Cannot run ${context.command}; set ${describeRequirement(databaseRequirement)} or pass --from-file <evidence.json>.`,
+      2,
+    );
+  }
+
+  const sql = createSqlClient();
+
+  try {
+    return await listEvidenceItems(sql, {
+      limit: configNumber(context, "limit", 500),
+    });
+  } finally {
+    await closeSqlClient(sql);
+  }
 }
 
 async function loadHandler(command: CommandSpec): Promise<CommandHandler> {
@@ -1056,6 +1131,78 @@ function printResult(result: unknown) {
 
 function printHelp(commandName?: string) {
   console.log(renderHelp(commandName));
+}
+
+function parseEvidenceFile(contents: string): Awaited<ReturnType<typeof listEvidenceItems>> {
+  const parsed = JSON.parse(contents) as unknown;
+  const evidence = evidenceArrayFromJson(parsed);
+
+  return evidence.map(parseEvidenceItem);
+}
+
+function evidenceArrayFromJson(parsed: unknown) {
+  if (Array.isArray(parsed)) {
+    return parsed;
+  }
+
+  if (typeof parsed === "object" && parsed !== null) {
+    const record = parsed as Record<string, unknown>;
+
+    if (Array.isArray(record.evidence)) {
+      return record.evidence;
+    }
+  }
+
+  throw new CliError("Evidence file must contain an evidence array or an object with an evidence array.", 2);
+}
+
+function parseEvidenceItem(value: unknown, index: number): EvidenceItemForCli {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new CliError(`Evidence item at index ${index} must be an object.`, 2);
+  }
+
+  const record = value as Record<string, unknown>;
+  const id = requiredJsonString(record, "id", index);
+  const source = requiredJsonString(record, "source", index);
+  const title = requiredJsonString(record, "title", index);
+  const summary = requiredJsonString(record, "summary", index);
+  const occurredAt = requiredJsonString(record, "occurredAt", index);
+  const metadata = optionalJsonRecord(record.metadata);
+  const url = typeof record.url === "string" && record.url.trim().length > 0 ? record.url : undefined;
+
+  return {
+    id,
+    source: parseEvidenceSource(source, index),
+    title,
+    summary,
+    occurredAt,
+    metadata,
+    ...(url ? { url } : {}),
+  };
+}
+
+function parseEvidenceSource(source: string, index: number): EvidenceItemForCli["source"] {
+  if (!evidenceSources.has(source as EvidenceItemForCli["source"])) {
+    throw new CliError(`Evidence item at index ${index} has unsupported source "${source}".`, 2);
+  }
+
+  return source as EvidenceItemForCli["source"];
+}
+
+function requiredJsonString(record: Record<string, unknown>, key: string, index: number) {
+  const value = record[key];
+
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new CliError(`Evidence item at index ${index} must include a non-empty string "${key}".`, 2);
+  }
+
+  return value;
+}
+
+function optionalJsonRecord(value: unknown) {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
 }
 
 function renderHelp(commandName?: string) {

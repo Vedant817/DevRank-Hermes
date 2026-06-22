@@ -47,3 +47,17 @@ test("does not use prior skill rows as source evidence", () => {
 
   assert.deepEqual(skills, []);
 });
+
+test("does not match skill keywords inside unrelated words", () => {
+  const skills = extractSkillEvidence([
+    {
+      id: "session-1",
+      source: "local_session",
+      title: "OpenRouter provider setup",
+      summary: "Configured model provider redaction without changing HTTP handlers.",
+      occurredAt: "2026-01-01T00:00:00.000Z",
+    },
+  ]);
+
+  assert.equal(skills.some((item) => item.id === "skill:backend-api-engineering"), false);
+});

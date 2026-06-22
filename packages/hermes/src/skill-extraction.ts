@@ -37,7 +37,7 @@ const skillRules: SkillRule[] = [
   {
     name: "Cloud automation and delivery",
     slug: "cloud-automation-and-delivery",
-    keywords: ["vercel", "cron", "launchd", "daemon", "deploy", "ci", "workflow"],
+    keywords: ["vercel", "cron", "launchd", "daemon", "deploy", "deployment", "ci", "github actions", "workflow run"],
   },
   {
     name: "Project execution and planning",
@@ -73,7 +73,7 @@ export function extractSkillEvidence(
 function evidenceMatchesRule(item: EvidenceItem, rule: SkillRule) {
   const text = evidenceSearchText(item);
 
-  return rule.keywords.some((keyword) => text.includes(keyword));
+  return rule.keywords.some((keyword) => keywordMatchesText(text, keyword));
 }
 
 function skillEvidenceItem(rule: SkillRule, matches: EvidenceItem[], generatedAt: string): EvidenceItem {
@@ -125,6 +125,16 @@ function confidenceForCount(count: number) {
   }
 
   return "low";
+}
+
+function keywordMatchesText(text: string, keyword: string) {
+  const escaped = keyword
+    .toLowerCase()
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\s+/g, "\\s+");
+  const pattern = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`);
+
+  return pattern.test(text);
 }
 
 function hashEvidenceIds(ids: string[]) {
