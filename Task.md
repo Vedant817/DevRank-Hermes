@@ -51,7 +51,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Do not depend on private UI scraping, browser session cookies, or unsupported cloud-history endpoints.
 - [ ] Make GitHub tracking, dashboard, score snapshots, and Slack daily target cloud-capable so they work when the Mac is off.
 - [x] Schedule daily planning carefully for India time because Vercel cron runs in UTC.
-- [ ] Account for Vercel Hobby cron limits if using the Hobby plan.
+- [x] Account for Vercel Hobby cron limits if using the Hobby plan.
 
 ## 2. Database Choice
 
@@ -498,10 +498,12 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Add daily plan cron:
   - [x] Path: `/api/cron/daily-plan`.
   - [x] Schedule: `30 2 * * *`.
-  - [x] Confirm `02:30 UTC = 08:00 IST`.
+  - [x] Confirm `02:30 UTC = 08:00 IST` on plans with per-minute precision.
+  - [x] Document Hobby timing as a `02:00-02:59 UTC` / `07:30-08:29 IST` delivery window.
 - [x] Add weekly review cron:
   - [x] Path: `/api/cron/weekly-review`.
   - [x] Schedule: `30 3 * * 0`.
+  - [x] Document Hobby timing as a `03:00-03:59 UTC` / `08:30-09:29 IST` Sunday window.
 - [x] Keep cron schedules in UTC.
 - [x] Use GitHub webhooks for event-driven PR updates.
 - [x] Use Linear webhooks for event-driven project and issue updates.
@@ -933,7 +935,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Linear project dashboard filters by workspace, team, project, status, and priority if Linear is enabled.
 - [ ] Score recomputation updates snapshots.
 - [ ] Slack daily message sends manually.
-- [ ] Slack daily message sends through cron at the intended IST time.
+- [ ] Slack daily message sends through cron inside the documented IST delivery window.
 - [ ] Local collector ingests Codex sessions.
 - [ ] Local collector imports Codex Cloud/Web history only from supported exports or manually provided summaries.
 - [ ] Local collector ingests Claude sessions after path verification.

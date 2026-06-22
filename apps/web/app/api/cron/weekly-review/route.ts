@@ -14,6 +14,7 @@ import {
   requireCronAuth,
 } from "../../_lib/route-utils";
 import { runHermesMentorSummary } from "@repo/hermes";
+import { weeklyReviewCronSchedule } from "../_lib/schedule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +49,7 @@ export async function GET(request: Request) {
 
       return jsonOk({
         review,
+        cron: weeklyReviewCronSchedule,
         evidenceCount: evidence.length,
         weakestLanes,
       });

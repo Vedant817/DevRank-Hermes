@@ -118,4 +118,11 @@ routes. The root `vercel.json` mirrors `apps/web/vercel.json` so cron
 configuration is visible in root-linked checks, but the deployable Next.js app
 lives under `apps/web`.
 
+Vercel cron schedules are UTC. `30 2 * * *` targets 08:00 IST for the daily
+plan on plans with per-minute precision, and `30 3 * * 0` targets 09:00 IST
+for the weekly review. On the Hobby plan, Vercel may invoke a daily cron at any
+point within the configured UTC hour, so treat the daily plan as a
+07:30-08:29 IST delivery window and the weekly review as an 08:30-09:29 IST
+Sunday window.
+
 Architecture and setup notes live in `docs/` and `infra/`.

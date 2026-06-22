@@ -24,6 +24,7 @@ import {
   formatDailyPlanForSlack,
   generateDailyPlan,
 } from "@repo/planner";
+import { dailyPlanCronSchedule } from "../_lib/schedule";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,6 +74,7 @@ export async function GET(request: Request) {
 
       return jsonOk({
         plan,
+        cron: dailyPlanCronSchedule,
         linearIssue,
         slackText,
         slackDelivered: true,
