@@ -2,7 +2,8 @@ import {
   closeSqlClient,
   createSqlClient,
   insertScoreSnapshot,
-  listEvidenceItems,
+  listScoringEvidence,
+  type ScoringEvidenceScope,
 } from "@repo/db";
 import {
   getOptionalString,
@@ -19,7 +20,7 @@ import { evidenceSources } from "@repo/shared";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SCOPES = new Set(["all", "user", "repo", "pull_request"]);
+const SCOPES = new Set<string>(["all", "user", "repo", "pull_request"]);
 const EVIDENCE_SOURCES = new Set<string>(evidenceSources);
 
 type EvidenceItems = Parameters<typeof computeSdeReadinessSnapshot>[0];
@@ -75,25 +76,35 @@ export async function POST(request: Request) {
     });
   }
 
-  if (scope !== "all") {
-    return jsonError(422, "unsupported_scope", "Persisted recomputation currently supports scope=all.", {
-      scope,
-      targetId,
-    });
-  }
-
   try {
     const sql = createSqlClient();
 
     try {
-      const evidence = await listEvidenceItems(sql);
+      const scoringScope = scope as ScoringEvidenceScope;
+      const evidence = await listScoringEvidence(sql, {
+        scope: scoringScope,
+        targetId,
+      });
+
+      if (evidence.length === 0) {
+        return jsonError(422, "evidence_required", "No persisted evidence matched the requested score recomputation scope.", {
+          scope,
+          targetId,
+        });
+      }
+
       const snapshot = computeSdeReadinessSnapshot(evidence);
-      await insertScoreSnapshot(sql, snapshot);
+
+      if (scope === "all" || scope === "user") {
+        await insertScoreSnapshot(sql, snapshot);
+      }
 
       return jsonOk({
         snapshot,
         evidenceCount: evidence.length,
-        stored: true,
+        scope,
+        targetId,
+        stored: scope === "all" || scope === "user",
       });
     } finally {
       await closeSqlClient(sql);

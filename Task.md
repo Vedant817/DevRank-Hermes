@@ -512,7 +512,13 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Connect Supabase Postgres environment variables.
 - [ ] Connect Linear environment variables if Linear sync is enabled.
 - [ ] Connect Supermemory environment variables only if the optional external context provider is enabled.
-- [ ] Confirm cloud app can recompute scores without the Mac running.
+- [x] Confirm cloud app score recompute reads persisted Postgres evidence without the Mac running:
+  - [x] `memory_items`.
+  - [x] `github_repos`.
+  - [x] `github_pull_requests`.
+  - [x] `linear_projects`.
+  - [x] `linear_issues`.
+  - [x] Scoped repo and pull-request recompute.
 - [ ] Confirm cloud app can send Slack daily target without the Mac running.
 
 ## 13. Slack Daily Target
@@ -850,7 +856,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Handle PR opened/updated webhook.
 - [ ] Handle PR review webhook.
 - [ ] Handle push webhook.
-- [ ] Implement score recomputation.
+- [x] Implement score recomputation.
 - [ ] Build PR Review Dashboard.
 - [ ] Set up Linear API access if Linear is in MVP.
 - [ ] Backfill Linear projects and issues if Linear is in MVP.

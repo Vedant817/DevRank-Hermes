@@ -99,6 +99,48 @@ type IngestionRunRow = {
   finished_at: Date | string | null;
 };
 
+type GithubRepoEvidenceRow = {
+  id: string | number;
+  full_name: string;
+  language: string | null;
+  html_url: string | null;
+  pushed_at: Date | string | null;
+  updated_at: Date | string | null;
+};
+
+type GithubPullRequestEvidenceRow = {
+  id: string | number;
+  repo_full_name: string;
+  number: number;
+  title: string;
+  state: string;
+  html_url: string | null;
+  merged_at: Date | string | null;
+  updated_at: Date | string | null;
+};
+
+type LinearProjectEvidenceRow = {
+  id: string;
+  name: string;
+  state: string | null;
+  progress: string | number | null;
+  url: string | null;
+  synced_at: Date | string;
+};
+
+type LinearIssueEvidenceRow = {
+  id: string;
+  identifier: string;
+  title: string;
+  state: string | null;
+  priority: number | null;
+  assignee: string | null;
+  url: string | null;
+  synced_at: Date | string;
+};
+
+export type ScoringEvidenceScope = "all" | "user" | "repo" | "pull_request";
+
 export interface DashboardSummary {
   counts: {
     evidenceItems: number;
@@ -505,6 +547,51 @@ export async function listEvidenceItems(
   return rows.map(rowToEvidenceItem);
 }
 
+export async function listScoringEvidence(
+  sql: SqlClient,
+  options: {
+    limit?: number;
+    scope?: ScoringEvidenceScope;
+    targetId?: string;
+  } = {},
+): Promise<EvidenceItem[]> {
+  const limit = Math.max(1, Math.min(options.limit ?? 500, 5_000));
+  const scope = options.scope ?? "all";
+
+  if (scope === "repo") {
+    if (!options.targetId) {
+      throw new Error("repo scoped scoring requires targetId.");
+    }
+
+    return [
+      ...await listRepoMemoryEvidence(sql, options.targetId, limit),
+      ...await listGithubRepoEvidence(sql, options.targetId, limit),
+      ...await listGithubPullRequestEvidence(sql, { repoFullName: options.targetId }, limit),
+    ];
+  }
+
+  if (scope === "pull_request") {
+    if (!options.targetId) {
+      throw new Error("pull_request scoped scoring requires targetId.");
+    }
+
+    const target = parsePullRequestTarget(options.targetId);
+
+    return [
+      ...await listPullRequestMemoryEvidence(sql, target, limit),
+      ...await listGithubPullRequestEvidence(sql, target, limit),
+    ];
+  }
+
+  return [
+    ...await listEvidenceItems(sql, { limit }),
+    ...await listGithubRepoEvidence(sql, undefined, limit),
+    ...await listGithubPullRequestEvidence(sql, {}, limit),
+    ...await listLinearProjectEvidence(sql, limit),
+    ...await listLinearIssueEvidence(sql, limit),
+  ];
+}
+
 function rowToEvidenceItem(row: MemoryItemRow): EvidenceItem {
   const metadata = row.metadata ?? {};
   const occurredAt = metadata.occurredAt;
@@ -523,6 +610,260 @@ function rowToEvidenceItem(row: MemoryItemRow): EvidenceItem {
   }
 
   return item;
+}
+
+async function listRepoMemoryEvidence(sql: SqlClient, repoFullName: string, limit: number) {
+  const rows = await sql<MemoryItemRow[]>`
+    select id::text, source, source_id, title, summary, metadata, created_at
+    from memory_items
+    where source = 'github'
+      and metadata->>'repository' = ${repoFullName}
+    order by created_at desc
+    limit ${limit}
+  `;
+
+  return rows.map(rowToEvidenceItem);
+}
+
+async function listPullRequestMemoryEvidence(
+  sql: SqlClient,
+  target: PullRequestTarget,
+  limit: number,
+) {
+  const rows = target.repoFullName
+    ? await sql<MemoryItemRow[]>`
+        select id::text, source, source_id, title, summary, metadata, created_at
+        from memory_items
+        where source = 'github'
+          and metadata->>'repository' = ${target.repoFullName}
+          and metadata->>'pullRequestNumber' = ${String(target.number)}
+        order by created_at desc
+        limit ${limit}
+      `
+    : await sql<MemoryItemRow[]>`
+        select id::text, source, source_id, title, summary, metadata, created_at
+        from memory_items
+        where source = 'github'
+          and metadata->>'pullRequestNumber' = ${String(target.number)}
+        order by created_at desc
+        limit ${limit}
+      `;
+
+  return rows.map(rowToEvidenceItem);
+}
+
+async function listGithubRepoEvidence(
+  sql: SqlClient,
+  repoFullName: string | undefined,
+  limit: number,
+): Promise<EvidenceItem[]> {
+  const rows = repoFullName
+    ? await sql<GithubRepoEvidenceRow[]>`
+        select id, full_name, language, html_url, pushed_at, updated_at
+        from github_repos
+        where full_name = ${repoFullName}
+        order by coalesce(updated_at, pushed_at, synced_at) desc
+        limit ${limit}
+      `
+    : await sql<GithubRepoEvidenceRow[]>`
+        select id, full_name, language, html_url, pushed_at, updated_at
+        from github_repos
+        order by coalesce(updated_at, pushed_at, synced_at) desc
+        limit ${limit}
+      `;
+
+  return rows.map((row) => ({
+    id: `github:repo:${row.id}`,
+    source: "github",
+    title: `GitHub repository: ${row.full_name}`,
+    summary: [
+      `Repository ${row.full_name} is tracked in GitHub backfill.`,
+      row.language ? `Primary language: ${row.language}.` : "",
+    ].filter(Boolean).join(" "),
+    occurredAt: toIso(row.updated_at ?? row.pushed_at ?? new Date().toISOString()),
+    ...(row.html_url ? { url: row.html_url } : {}),
+    metadata: {
+      repository: row.full_name,
+      language: row.language,
+      kind: "github_repo",
+    },
+  }));
+}
+
+type PullRequestTarget = {
+  number: number;
+  repoFullName?: string;
+};
+
+async function listGithubPullRequestEvidence(
+  sql: SqlClient,
+  target: Partial<PullRequestTarget>,
+  limit: number,
+): Promise<EvidenceItem[]> {
+  const rows = target.repoFullName && target.number !== undefined
+    ? await sql<GithubPullRequestEvidenceRow[]>`
+        select
+          pr.id,
+          repo.full_name as repo_full_name,
+          pr.number,
+          pr.title,
+          pr.state,
+          pr.html_url,
+          pr.merged_at,
+          pr.updated_at
+        from github_pull_requests pr
+        join github_repos repo on repo.id = pr.repo_id
+        where repo.full_name = ${target.repoFullName}
+          and pr.number = ${target.number}
+        order by coalesce(pr.updated_at, pr.synced_at) desc
+        limit ${limit}
+      `
+    : target.repoFullName
+      ? await sql<GithubPullRequestEvidenceRow[]>`
+          select
+            pr.id,
+            repo.full_name as repo_full_name,
+            pr.number,
+            pr.title,
+            pr.state,
+            pr.html_url,
+            pr.merged_at,
+            pr.updated_at
+          from github_pull_requests pr
+          join github_repos repo on repo.id = pr.repo_id
+          where repo.full_name = ${target.repoFullName}
+          order by coalesce(pr.updated_at, pr.synced_at) desc
+          limit ${limit}
+        `
+      : target.number !== undefined
+        ? await sql<GithubPullRequestEvidenceRow[]>`
+            select
+              pr.id,
+              repo.full_name as repo_full_name,
+              pr.number,
+              pr.title,
+              pr.state,
+              pr.html_url,
+              pr.merged_at,
+              pr.updated_at
+            from github_pull_requests pr
+            join github_repos repo on repo.id = pr.repo_id
+            where pr.number = ${target.number}
+            order by coalesce(pr.updated_at, pr.synced_at) desc
+            limit ${limit}
+          `
+        : await sql<GithubPullRequestEvidenceRow[]>`
+            select
+              pr.id,
+              repo.full_name as repo_full_name,
+              pr.number,
+              pr.title,
+              pr.state,
+              pr.html_url,
+              pr.merged_at,
+              pr.updated_at
+            from github_pull_requests pr
+            join github_repos repo on repo.id = pr.repo_id
+            order by coalesce(pr.updated_at, pr.synced_at) desc
+            limit ${limit}
+          `;
+
+  return rows.map((row) => ({
+    id: `github:pull_request:${row.id}`,
+    source: "github",
+    title: `GitHub PR ${row.repo_full_name}#${row.number}: ${row.title}`,
+    summary: [
+      `Pull request ${row.repo_full_name}#${row.number} is ${row.state}.`,
+      row.merged_at ? "It has been merged." : "",
+    ].filter(Boolean).join(" "),
+    occurredAt: toIso(row.updated_at ?? row.merged_at ?? new Date().toISOString()),
+    ...(row.html_url ? { url: row.html_url } : {}),
+    metadata: {
+      repository: row.repo_full_name,
+      pullRequestNumber: row.number,
+      state: row.state,
+      kind: "github_pull_request",
+    },
+  }));
+}
+
+async function listLinearProjectEvidence(sql: SqlClient, limit: number): Promise<EvidenceItem[]> {
+  const rows = await sql<LinearProjectEvidenceRow[]>`
+    select id, name, state, progress, url, synced_at
+    from linear_projects
+    order by synced_at desc
+    limit ${limit}
+  `;
+
+  return rows.map((row) => ({
+    id: `linear:project:${row.id}`,
+    source: "linear",
+    title: `Linear project: ${row.name}`,
+    summary: [
+      `Project ${row.name} is tracked in Linear.`,
+      row.state ? `State: ${row.state}.` : "",
+      row.progress !== null ? `Progress: ${Number(row.progress)}%.` : "",
+    ].filter(Boolean).join(" "),
+    occurredAt: toIso(row.synced_at),
+    ...(row.url ? { url: row.url } : {}),
+    metadata: {
+      projectId: row.id,
+      state: row.state,
+      progress: row.progress,
+      kind: "linear_project",
+    },
+  }));
+}
+
+async function listLinearIssueEvidence(sql: SqlClient, limit: number): Promise<EvidenceItem[]> {
+  const rows = await sql<LinearIssueEvidenceRow[]>`
+    select id, identifier, title, state, priority, assignee, url, synced_at
+    from linear_issues
+    order by priority desc, synced_at desc
+    limit ${limit}
+  `;
+
+  return rows.map((row) => ({
+    id: `linear:issue:${row.id}`,
+    source: "linear",
+    title: `Linear issue ${row.identifier}: ${row.title}`,
+    summary: [
+      `Issue ${row.identifier} is tracked in Linear.`,
+      row.state ? `State: ${row.state}.` : "",
+      row.priority !== null ? `Priority: ${row.priority}.` : "",
+      row.assignee ? `Assignee: ${row.assignee}.` : "",
+    ].filter(Boolean).join(" "),
+    occurredAt: toIso(row.synced_at),
+    ...(row.url ? { url: row.url } : {}),
+    metadata: {
+      issueId: row.id,
+      identifier: row.identifier,
+      state: row.state,
+      priority: row.priority,
+      assignee: row.assignee,
+      kind: "linear_issue",
+    },
+  }));
+}
+
+function parsePullRequestTarget(targetId: string): PullRequestTarget {
+  const trimmed = targetId.trim();
+  const match = /^(?<repo>[^#]+)#(?<number>\d+)$/.exec(trimmed);
+
+  if (match?.groups?.number) {
+    return {
+      repoFullName: match.groups.repo,
+      number: Number(match.groups.number),
+    };
+  }
+
+  const number = Number(trimmed);
+
+  if (!Number.isInteger(number) || number < 1) {
+    throw new Error("pull_request targetId must be a PR number or owner/repo#number.");
+  }
+
+  return { number };
 }
 
 function dailyPlanFromRow(row: DailyPlanRow): DailyPlan & { createdAt: string } {
