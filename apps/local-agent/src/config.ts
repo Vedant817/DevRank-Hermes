@@ -64,7 +64,7 @@ export function createDefaultLocalAgentConfig(input: LocalAgentConfigInput = {})
     privacy: {
       uploadRawChats: false,
       redactSecrets: true,
-      storeEmbeddings: true,
+      storeEmbeddings: false,
       ...input.privacy,
     },
   };
@@ -142,7 +142,7 @@ function normalizeLocalAgentConfig(value: unknown, input: LocalAgentConfigInput 
     privacy: {
       uploadRawChats: booleanValue(privacy.uploadRawChats, false),
       redactSecrets: booleanValue(privacy.redactSecrets, true),
-      storeEmbeddings: booleanValue(privacy.storeEmbeddings, true),
+      storeEmbeddings: booleanValue(privacy.storeEmbeddings, false),
     },
     sources: sources && sources.length > 0 ? sources : undefined,
   });

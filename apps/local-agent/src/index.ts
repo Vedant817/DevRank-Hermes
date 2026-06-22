@@ -38,6 +38,7 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
   const result = await ingestAndMaybePersist({
     codexSessionsDir,
     persist,
+    privacy: config.privacy,
     sourceRoots,
   });
   const skillExtraction = await runWeeklySkillExtractionIfDue({
@@ -63,6 +64,7 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
     await ingestAndMaybePersist({
       codexSessionsDir,
       persist,
+      privacy: config.privacy,
       sourceRoots,
     });
     await runWeeklySkillExtractionIfDue({
@@ -85,11 +87,15 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
 async function ingestAndMaybePersist(input: {
   codexSessionsDir: string;
   persist: boolean;
+  privacy: LocalAgentPrivacyConfig;
   sourceRoots: string[];
 }) {
   const result = await ingestLocalAiChats({
     codexSessionsDir: input.codexSessionsDir,
+    rawStorageEnabled: input.privacy.uploadRawChats,
+    redactSecrets: input.privacy.redactSecrets,
     sourceRoots: input.sourceRoots,
+    storeEmbeddings: input.privacy.storeEmbeddings,
   });
 
   if (!input.persist) {

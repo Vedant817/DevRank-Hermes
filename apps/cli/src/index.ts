@@ -174,10 +174,10 @@ const commands: CommandSpec[] = [
   {
     name: "ingest:local-ai",
     description: "Ingest local AI-agent sessions through the local chat ingestion package.",
-    usage: "devrank ingest:local-ai [--codex-sessions-dir <path>] [--source <path>] [--dry-run]",
+    usage: "devrank ingest:local-ai [--codex-sessions-dir <path>] [--source <path>] [--dry-run] [--upload-raw-chats] [--store-embeddings]",
     moduleCandidates: ["@repo/ai-chat-ingestors", "@repo/local-agent"],
     exportCandidates: ["ingestLocalAiChats", "ingestLocalAI", "ingestLocalAi", "ingestLocalChats", "run"],
-    envRequirements: [databaseRequirement],
+    envRequirements: [],
     buildConfig: (parsed, env) => ({
       codexSessionsDir: stringOption(parsed, "codex-sessions-dir"),
       databaseEnv: firstPresentEnv(env, databaseRequirement),
@@ -185,7 +185,7 @@ const commands: CommandSpec[] = [
       rawStorageEnabled: booleanOption(parsed, "upload-raw-chats") || envFlag(env, "DEVRANK_UPLOAD_RAW_CHATS", false),
       redactSecrets: !booleanOption(parsed, "no-redact-secrets") && envFlag(env, "DEVRANK_REDACT_SECRETS", true),
       sources: stringListOption(parsed, "source"),
-      storeEmbeddings: !booleanOption(parsed, "no-store-embeddings") && envFlag(env, "DEVRANK_STORE_EMBEDDINGS", true),
+      storeEmbeddings: booleanOption(parsed, "store-embeddings") || envFlag(env, "DEVRANK_STORE_EMBEDDINGS", false),
     }),
     invoke: invokeLocalAiIngest,
   },
@@ -237,10 +237,10 @@ const commands: CommandSpec[] = [
   {
     name: "local-daemon",
     description: "Start the local Mac daemon through the local-agent package.",
-    usage: "devrank local-daemon [--config <path>] [--codex-sessions-dir <path>] [--source <path>] [--watch] [--force-skill-extraction] [--dry-run]",
+    usage: "devrank local-daemon [--config <path>] [--codex-sessions-dir <path>] [--source <path>] [--watch] [--force-skill-extraction] [--dry-run] [--upload-raw-chats] [--store-embeddings]",
     moduleCandidates: ["@repo/local-agent", "local-agent"],
     exportCandidates: ["runLocalAgent", "startLocalDaemon", "startDaemon", "runDaemon", "run"],
-    envRequirements: [databaseRequirement],
+    envRequirements: [],
     buildConfig: (parsed, env) => ({
       configPath: stringOption(parsed, "config"),
       codexSessionsDir: stringOption(parsed, "codex-sessions-dir"),
@@ -250,7 +250,7 @@ const commands: CommandSpec[] = [
       rawStorageEnabled: booleanOption(parsed, "upload-raw-chats") || envFlag(env, "DEVRANK_UPLOAD_RAW_CHATS", false),
       redactSecrets: !booleanOption(parsed, "no-redact-secrets") && envFlag(env, "DEVRANK_REDACT_SECRETS", true),
       sources: stringListOption(parsed, "source"),
-      storeEmbeddings: !booleanOption(parsed, "no-store-embeddings") && envFlag(env, "DEVRANK_STORE_EMBEDDINGS", true),
+      storeEmbeddings: booleanOption(parsed, "store-embeddings") || envFlag(env, "DEVRANK_STORE_EMBEDDINGS", false),
       watch: booleanOption(parsed, "watch"),
     }),
     invoke: invokeLocalDaemon,
@@ -819,7 +819,10 @@ async function invokeLocalAiIngest(moduleExports: ModuleExports, context: Comman
     const codexDir = codexSessionsDir(context);
     const result = await packageHandler({
       codexSessionsDir: codexDir,
+      rawStorageEnabled: configBoolean(context, "rawStorageEnabled"),
+      redactSecrets: configBoolean(context, "redactSecrets"),
       sourceRoots: configOptionalStringList(context, "sources"),
+      storeEmbeddings: configBoolean(context, "storeEmbeddings"),
     });
 
     return persistIngestionResult(context, result, `local_session:${codexDir}`);
@@ -950,6 +953,11 @@ function invokeLocalDaemon(moduleExports: ModuleExports, context: CommandContext
     configPath: configString(context, "configPath"),
     forceSkillExtraction: configBoolean(context, "forceSkillExtraction"),
     persist: !configBoolean(context, "dryRun"),
+    privacy: {
+      uploadRawChats: configBoolean(context, "rawStorageEnabled"),
+      redactSecrets: configBoolean(context, "redactSecrets"),
+      storeEmbeddings: configBoolean(context, "storeEmbeddings"),
+    },
     sources: configOptionalStringList(context, "sources"),
     watch: configBoolean(context, "watch"),
   });

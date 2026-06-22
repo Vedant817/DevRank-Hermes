@@ -283,7 +283,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Create local config with privacy settings:
   - [x] `uploadRawChats=false`.
   - [x] `redactSecrets=true`.
-  - [x] `storeEmbeddings=true`.
+  - [x] `storeEmbeddings=false` until a real embedding provider is wired.
 - [ ] Verify daemon starts after login.
 - [x] Verify daemon handles missing folders without crashing.
 - [ ] Verify daemon resumes after restart.

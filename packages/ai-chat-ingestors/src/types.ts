@@ -29,10 +29,20 @@ export interface IngestionResult {
   evidence: EvidenceItem[];
   redactionCount: number;
   adapterCounts: Record<string, number>;
+  privacy: {
+    embeddingStatus: "disabled";
+    rawStorageStatus: "local_only";
+    redactionStatus: "passed";
+    uploadRawChats: false;
+    storeEmbeddings: false;
+  };
 }
 
 export interface LocalAiIngestionOptions {
   codexSessionsDir?: string;
   sourceRoots?: string[];
   enabledAdapters?: Array<"codex" | "claude" | "opencode" | "antigravity">;
+  rawStorageEnabled?: boolean;
+  redactSecrets?: boolean;
+  storeEmbeddings?: boolean;
 }

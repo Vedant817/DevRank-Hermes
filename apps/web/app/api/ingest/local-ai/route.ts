@@ -6,6 +6,7 @@ import {
 } from "@repo/db";
 import {
   getOptionalString,
+  isJsonObject,
   jsonError,
   jsonOk,
   methodNotAllowed,
@@ -66,6 +67,8 @@ export async function POST(request: Request) {
   try {
     const result = await ingestLocalAiChats({
       codexSessionsDir: sourcePath,
+      ...parsePrivacyOptions(body.value),
+      sourceRoots: [sourcePath],
     });
     const sql = createSqlClient();
     let writtenEvidence = 0;
@@ -95,4 +98,18 @@ export async function POST(request: Request) {
       message: error instanceof Error ? error.message : "Unknown ingestion error.",
     });
   }
+}
+
+function parsePrivacyOptions(value: Record<string, unknown>) {
+  const privacy = isJsonObject(value.privacy) ? value.privacy : {};
+
+  return {
+    rawStorageEnabled: booleanValue(privacy.uploadRawChats, false),
+    redactSecrets: booleanValue(privacy.redactSecrets, true),
+    storeEmbeddings: booleanValue(privacy.storeEmbeddings, false),
+  };
+}
+
+function booleanValue(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
 }

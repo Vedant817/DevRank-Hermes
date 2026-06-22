@@ -120,6 +120,28 @@ test("ingests through the adapter registry", async () => {
   assert.equal(result.sessions.length, 1);
   assert.equal(result.adapterCounts.codex, 1);
   assert.equal(result.evidence.length, 1);
+  assert.deepEqual(result.privacy, {
+    embeddingStatus: "disabled",
+    rawStorageStatus: "local_only",
+    redactionStatus: "passed",
+    uploadRawChats: false,
+    storeEmbeddings: false,
+  });
+});
+
+test("rejects unsupported production privacy modes instead of ignoring flags", async () => {
+  await assert.rejects(
+    ingestLocalAiChats({ enabledAdapters: [], rawStorageEnabled: true }),
+    /Raw chat cloud storage is not implemented/,
+  );
+  await assert.rejects(
+    ingestLocalAiChats({ enabledAdapters: [], redactSecrets: false }),
+    /requires secret redaction/,
+  );
+  await assert.rejects(
+    ingestLocalAiChats({ enabledAdapters: [], storeEmbeddings: true }),
+    /Embedding storage is not implemented/,
+  );
 });
 
 test("routes known source roots to matching adapters", async () => {

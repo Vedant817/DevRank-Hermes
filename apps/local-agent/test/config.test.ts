@@ -21,7 +21,7 @@ test("creates default watcher paths with privacy-safe settings", () => {
   assert.equal(config.automation.weeklySkillExtraction.intervalDays, 7);
   assert.equal(config.privacy.uploadRawChats, false);
   assert.equal(config.privacy.redactSecrets, true);
-  assert.equal(config.privacy.storeEmbeddings, true);
+  assert.equal(config.privacy.storeEmbeddings, false);
 });
 
 test("writes and loads local agent config", async () => {

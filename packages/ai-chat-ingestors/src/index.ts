@@ -6,6 +6,7 @@ import {
 import type { IngestionResult, LocalAiIngestionOptions } from "./types.js";
 
 export async function ingestLocalAiChats(options: LocalAiIngestionOptions = {}): Promise<IngestionResult> {
+  const privacy = resolvePrivacy(options);
   const sessions = [];
   const adapterCounts: Record<string, number> = {};
   const enabled = new Set(options.enabledAdapters ?? localChatAdapters.map((adapter) => adapter.name));
@@ -26,6 +27,29 @@ export async function ingestLocalAiChats(options: LocalAiIngestionOptions = {}):
     evidence: sessions.map(summarizeSession),
     redactionCount: sessions.reduce((total, session) => total + session.redactions.length, 0),
     adapterCounts,
+    privacy,
+  };
+}
+
+function resolvePrivacy(options: LocalAiIngestionOptions): IngestionResult["privacy"] {
+  if (options.redactSecrets === false) {
+    throw new Error("Local AI ingestion requires secret redaction for production-safe evidence.");
+  }
+
+  if (options.rawStorageEnabled === true) {
+    throw new Error("Raw chat cloud storage is not implemented; keep raw transcripts local.");
+  }
+
+  if (options.storeEmbeddings === true) {
+    throw new Error("Embedding storage is not implemented; enable it only after a real embedding provider is wired.");
+  }
+
+  return {
+    embeddingStatus: "disabled",
+    rawStorageStatus: "local_only",
+    redactionStatus: "passed",
+    uploadRawChats: false,
+    storeEmbeddings: false,
   };
 }
 
