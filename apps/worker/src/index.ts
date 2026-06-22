@@ -4,7 +4,11 @@ import "dotenv/config";
 import {
   closeSqlClient,
   createSqlClient,
+  getLatestScoreSnapshot,
+  insertDailyPlan,
+  insertScoreSnapshot,
   listEvidenceItems,
+  listScoringEvidence,
 } from "@repo/db";
 import { generateDailyPlan, formatDailyPlanForSlack } from "@repo/planner";
 import { computeSdeReadinessSnapshot, explainWeakestLanes } from "@repo/scoring";
@@ -13,7 +17,46 @@ import { runMarketBenchmark } from "@repo/search";
 import { sendSlackMessage } from "@repo/slack";
 import type { EvidenceItem } from "@repo/shared";
 
-export async function runDailyPlanJob(evidence: EvidenceItem[] = []) {
+export async function runDailyPlanJob(evidence?: EvidenceItem[]) {
+  if (evidence !== undefined) {
+    if (evidence.length === 0) {
+      throw new Error("Daily plan requires evidence. Run ingestion first.");
+    }
+
+    return createDailyPlanFromEvidence(evidence, false);
+  }
+
+  const sql = createSqlClient();
+
+  try {
+    let snapshot = await getLatestScoreSnapshot(sql);
+
+    if (!snapshot) {
+      const persistedEvidence = await listScoringEvidence(sql);
+
+      if (persistedEvidence.length === 0) {
+        throw new Error("Daily plan requires a score snapshot or persisted evidence. Run ingestion first.");
+      }
+
+      snapshot = computeSdeReadinessSnapshot(persistedEvidence);
+      await insertScoreSnapshot(sql, snapshot);
+    }
+
+    const plan = generateDailyPlan(snapshot);
+    await insertDailyPlan(sql, plan);
+    const slackText = formatDailyPlanForSlack(plan);
+
+    if (process.env.SLACK_WEBHOOK_URL) {
+      await sendSlackMessage(slackText);
+    }
+
+    return { snapshot, plan, slackText, stored: true };
+  } finally {
+    await closeSqlClient(sql);
+  }
+}
+
+async function createDailyPlanFromEvidence(evidence: EvidenceItem[], stored: boolean) {
   const snapshot = computeSdeReadinessSnapshot(evidence);
   const plan = generateDailyPlan(snapshot);
   const slackText = formatDailyPlanForSlack(plan);
@@ -22,7 +65,7 @@ export async function runDailyPlanJob(evidence: EvidenceItem[] = []) {
     await sendSlackMessage(slackText);
   }
 
-  return { snapshot, plan, slackText };
+  return { snapshot, plan, slackText, stored };
 }
 
 export async function runWeeklyReviewJob(input?: {

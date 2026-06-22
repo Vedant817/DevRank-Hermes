@@ -710,6 +710,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] AI-agent workflow: 20 min.
   - [ ] Public proof: 1 small note/post every 2-3 days.
 - [x] Map weak testing, DevOps, system design, AI-agent, GitHub, DSA, backend, and public-proof lanes to deterministic tasks.
+- [x] Worker daily-plan job uses persisted score snapshots or persisted evidence instead of empty in-memory defaults.
 - [ ] Generate weekly plan:
   - [ ] Monday: Arrays/Hashing + backend API.
   - [ ] Tuesday: Binary Search/Two Pointers + database design.
