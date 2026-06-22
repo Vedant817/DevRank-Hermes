@@ -10,12 +10,51 @@ interface PlanRule {
 
 export interface GenerateDailyPlanOptions {
   date?: string;
+  includeDailyEssentials?: boolean;
   maxWeakLaneTasks?: number;
   urgentLinearTask?: string;
 }
 
 const DEFAULT_MAX_WEAK_LANE_TASKS = 3;
 const MAX_WEAK_LANE_TASKS = 8;
+const DAILY_ESSENTIALS: DailyPlanTask[] = [
+  {
+    title: "DSA: solve Arrays/Hashing - Medium and Binary Search - Medium, then record the patterns.",
+    category: "dsa",
+    minutes: 45,
+    evidence: "Daily DSA target",
+  },
+  {
+    title: "Backend: build one endpoint with validation, pagination, and tests.",
+    category: "backend",
+    minutes: 60,
+    evidence: "Daily backend target",
+  },
+  {
+    title: "System design: revise rate limiter + Redis token bucket tradeoffs.",
+    category: "system_design",
+    minutes: 45,
+    evidence: "Daily system design target",
+  },
+  {
+    title: "GitHub/portfolio: improve one repo README with architecture diagram and setup steps.",
+    category: "github",
+    minutes: 45,
+    evidence: "Daily portfolio target",
+  },
+  {
+    title: "AI-agent: use Hermes/Codex/Claude to generate tests, then manually verify and document changes.",
+    category: "ai_agent",
+    minutes: 30,
+    evidence: "Daily AI-agent target",
+  },
+  {
+    title: "Minimum non-zero day: complete one 15-minute evidence-backed task and log what changed.",
+    category: "public_proof",
+    minutes: 15,
+    evidence: "Minimum non-zero day",
+  },
+];
 
 const planRules: PlanRule[] = [
   {
@@ -75,15 +114,25 @@ export function generateDailyPlan(
 ): DailyPlan {
   const options = normalizeOptions(dateOrOptions, urgentLinearTask);
   const weakLanes = explainWeakestLanes(snapshot, options.maxWeakLaneTasks);
-  const tasks = weakLanes.map(taskForLane);
+  const tasks: DailyPlanTask[] = [];
 
   if (options.urgentLinearTask) {
-    tasks.unshift({
+    addTask(tasks, {
       title: options.urgentLinearTask,
       category: "linear",
       minutes: 30,
       evidence: "Linear priority",
     });
+  }
+
+  if (options.includeDailyEssentials) {
+    for (const task of DAILY_ESSENTIALS) {
+      addTask(tasks, task);
+    }
+  }
+
+  for (const lane of weakLanes) {
+    addTask(tasks, taskForLane(lane));
   }
 
   return {
@@ -95,20 +144,33 @@ export function generateDailyPlan(
 
 export function formatDailyPlanForSlack(plan: DailyPlan): string {
   const tasks = plan.tasks
-    .map((task, index) => `${index + 1}. ${task.title} (${task.minutes} min)`)
+    .map((task, index) => {
+      const evidence = task.evidence ? ` - ${task.evidence}` : "";
+
+      return `${index + 1}. ${task.title} (${task.minutes} min)${evidence}`;
+    })
     .join("\n");
 
-  return `DevRank OS plan for ${plan.date}\nTarget: ${plan.targetMinutes} min\n${tasks}`;
+  return [
+    `Good morning. Here is your DevRank OS plan for ${plan.date}.`,
+    "",
+    "Today's SDE Switch Plan",
+    `Target time: ${plan.targetMinutes} min`,
+    "Minimum non-zero day: complete one 15-minute evidence-backed task.",
+    "",
+    tasks,
+  ].join("\n");
 }
 
 function normalizeOptions(
   dateOrOptions: string | GenerateDailyPlanOptions,
   urgentLinearTask?: string,
-): Required<Pick<GenerateDailyPlanOptions, "date" | "maxWeakLaneTasks">> &
+): Required<Pick<GenerateDailyPlanOptions, "date" | "includeDailyEssentials" | "maxWeakLaneTasks">> &
   Pick<GenerateDailyPlanOptions, "urgentLinearTask"> {
   if (typeof dateOrOptions === "string") {
     return {
       date: dateOrOptions,
+      includeDailyEssentials: true,
       maxWeakLaneTasks: DEFAULT_MAX_WEAK_LANE_TASKS,
       urgentLinearTask: urgentLinearTask?.trim() || undefined,
     };
@@ -116,9 +178,28 @@ function normalizeOptions(
 
   return {
     date: dateOrOptions.date ?? new Date().toISOString().slice(0, 10),
+    includeDailyEssentials: dateOrOptions.includeDailyEssentials ?? true,
     maxWeakLaneTasks: normalizeTaskLimit(dateOrOptions.maxWeakLaneTasks),
     urgentLinearTask: dateOrOptions.urgentLinearTask?.trim() || undefined,
   };
+}
+
+function addTask(tasks: DailyPlanTask[], task: DailyPlanTask): void {
+  const existing = tasks.find((candidate) => candidate.category === task.category);
+
+  if (!existing) {
+    tasks.push({ ...task });
+    return;
+  }
+
+  if (!existing.evidence && task.evidence) {
+    existing.evidence = task.evidence;
+    return;
+  }
+
+  if (existing.evidence && task.evidence && !existing.evidence.includes(task.evidence)) {
+    existing.evidence = `${existing.evidence}; ${task.evidence}`;
+  }
 }
 
 function taskForLane(lane: string): DailyPlanTask {

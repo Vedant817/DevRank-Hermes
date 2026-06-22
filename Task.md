@@ -527,30 +527,30 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Store Slack webhook URL securely.
 - [x] Add Slack package integration.
 - [x] Build `/api/slack/send`.
-- [ ] Generate daily Slack message with:
-  - [ ] Greeting.
-  - [ ] Today's SDE Switch Plan.
-  - [ ] DSA tasks.
-  - [ ] Backend task.
-  - [ ] System design topic.
-  - [ ] GitHub/portfolio task.
-  - [ ] AI-agent skill task.
-  - [ ] Target time.
-  - [ ] Minimum non-zero day.
-- [ ] Include sample DSA targets:
-  - [ ] Arrays/Hashing - Medium.
-  - [ ] Binary Search - Medium.
-- [ ] Include backend target:
-  - [ ] Build one endpoint with validation, pagination, and tests.
-- [ ] Include system design target:
-  - [ ] Revise rate limiter + Redis token bucket.
-- [ ] Include GitHub target:
-  - [ ] Improve README of one repo with architecture diagram and setup steps.
-- [ ] Include Linear target when Linear is enabled:
-  - [ ] Finish or unblock one high-priority Linear issue.
-- [ ] Include AI-agent skill target:
-  - [ ] Use Hermes/Codex/Claude to generate tests.
-  - [ ] Manually verify and document what changed.
+- [x] Generate daily Slack message with:
+  - [x] Greeting.
+  - [x] Today's SDE Switch Plan.
+  - [x] DSA tasks.
+  - [x] Backend task.
+  - [x] System design topic.
+  - [x] GitHub/portfolio task.
+  - [x] AI-agent skill task.
+  - [x] Target time.
+  - [x] Minimum non-zero day.
+- [x] Include sample DSA targets:
+  - [x] Arrays/Hashing - Medium.
+  - [x] Binary Search - Medium.
+- [x] Include backend target:
+  - [x] Build one endpoint with validation, pagination, and tests.
+- [x] Include system design target:
+  - [x] Revise rate limiter + Redis token bucket.
+- [x] Include GitHub target:
+  - [x] Improve README of one repo with architecture diagram and setup steps.
+- [x] Include Linear target when Linear is enabled:
+  - [x] Finish or unblock one high-priority Linear issue.
+- [x] Include AI-agent skill target:
+  - [x] Use Hermes/Codex/Claude to generate tests.
+  - [x] Manually verify and document what changed.
 - [ ] Test Slack delivery manually.
 - [ ] Test Slack delivery through cron.
 
