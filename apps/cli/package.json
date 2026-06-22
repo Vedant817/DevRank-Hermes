@@ -22,6 +22,7 @@
     "@repo/planner": "workspace:*",
     "@repo/scoring": "workspace:*",
     "@repo/search": "workspace:*",
+    "@repo/shared": "workspace:*",
     "@repo/slack": "workspace:*",
     "dotenv": "^17.4.2"
   },

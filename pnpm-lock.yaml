@@ -84,6 +84,9 @@ importers:
       '@repo/search':
         specifier: workspace:*
         version: link:../../packages/search
+      '@repo/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@repo/slack':
         specifier: workspace:*
         version: link:../../packages/slack
@@ -213,6 +216,9 @@ importers:
       '@repo/scoring':
         specifier: workspace:*
         version: link:../../packages/scoring
+      '@repo/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@repo/slack':
         specifier: workspace:*
         version: link:../../packages/slack

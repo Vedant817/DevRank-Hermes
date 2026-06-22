@@ -19,6 +19,7 @@
     "@repo/linear": "workspace:*",
     "@repo/planner": "workspace:*",
     "@repo/scoring": "workspace:*",
+    "@repo/shared": "workspace:*",
     "@repo/slack": "workspace:*",
     "@repo/ui": "workspace:*",
     "next": "16.2.0",

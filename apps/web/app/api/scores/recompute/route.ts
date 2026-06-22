@@ -14,21 +14,13 @@ import {
   requireApiAuth,
 } from "../../_lib/route-utils";
 import { computeSdeReadinessSnapshot } from "@repo/scoring";
+import { evidenceSources } from "@repo/shared";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const SCOPES = new Set(["all", "user", "repo", "pull_request"]);
-const EVIDENCE_SOURCES = new Set([
-  "local_session",
-  "cloud_export",
-  "manual_export",
-  "workspace_export",
-  "github",
-  "linear",
-  "market",
-  "manual",
-]);
+const EVIDENCE_SOURCES = new Set<string>(evidenceSources);
 
 type EvidenceItems = Parameters<typeof computeSdeReadinessSnapshot>[0];
 type EvidenceItem = EvidenceItems[number];

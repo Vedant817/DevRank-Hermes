@@ -1,13 +1,16 @@
-export type EvidenceSource =
-  | "local_session"
-  | "cloud_export"
-  | "manual_export"
-  | "workspace_export"
-  | "github"
-  | "linear"
-  | "market"
-  | "skill"
-  | "manual";
+export const evidenceSources = [
+  "local_session",
+  "cloud_export",
+  "manual_export",
+  "workspace_export",
+  "github",
+  "linear",
+  "market",
+  "skill",
+  "manual",
+] as const;
+
+export type EvidenceSource = typeof evidenceSources[number];
 
 export interface EvidenceItem {
   id: string;

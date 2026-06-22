@@ -22,6 +22,7 @@ import { buildReusableSkillArtifacts, writeReusableSkillArtifacts } from "@repo/
 import { formatDailyPlanForSlack, generateDailyPlan } from "@repo/planner";
 import { computeSdeReadinessSnapshot } from "@repo/scoring";
 import { runMarketBenchmark } from "@repo/search";
+import { evidenceSources } from "@repo/shared";
 import { sendSlackMessage } from "@repo/slack";
 
 type OptionValue = boolean | string | string[];
@@ -369,17 +370,7 @@ const commands: CommandSpec[] = [
 ];
 
 const commandMap = new Map(commands.map((command) => [command.name, command]));
-const evidenceSources = new Set<EvidenceItemForCli["source"]>([
-  "local_session",
-  "cloud_export",
-  "manual_export",
-  "workspace_export",
-  "github",
-  "linear",
-  "market",
-  "skill",
-  "manual",
-]);
+const evidenceSourceSet = new Set<EvidenceItemForCli["source"]>(evidenceSources);
 
 async function main(argv: string[]) {
   const parsed = parseArgs(argv);
@@ -1272,7 +1263,7 @@ function parseEvidenceItem(value: unknown, index: number): EvidenceItemForCli {
 }
 
 function parseEvidenceSource(source: string, index: number): EvidenceItemForCli["source"] {
-  if (!evidenceSources.has(source as EvidenceItemForCli["source"])) {
+  if (!evidenceSourceSet.has(source as EvidenceItemForCli["source"])) {
     throw new CliError(`Evidence item at index ${index} has unsupported source "${source}".`, 2);
   }
 
