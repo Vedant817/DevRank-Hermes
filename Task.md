@@ -273,7 +273,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Summarize sessions.
 - [x] Push summary and metadata to Supabase Postgres.
 - [x] Keep raw transcripts local by default.
-- [ ] Trigger Hermes skill extraction weekly.
+- [x] Trigger Hermes skill extraction weekly.
 - [x] Create local config with watchers:
   - [x] Claude watcher for `~/.claude`.
   - [x] Codex watcher for `~/.codex/sessions`.

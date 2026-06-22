@@ -22,6 +22,7 @@
   "dependencies": {
     "@repo/ai-chat-ingestors": "workspace:*",
     "@repo/db": "workspace:*",
+    "@repo/hermes": "workspace:*",
     "@repo/shared": "workspace:*",
     "chokidar": "^5.0.0",
     "dotenv": "^17.4.2"

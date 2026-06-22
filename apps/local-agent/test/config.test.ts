@@ -17,6 +17,8 @@ test("creates default watcher paths with privacy-safe settings", () => {
 
   assert.equal(config.sources[0], "/tmp/devrank/codex");
   assert.equal(config.sources.includes(codexDefaultRoot), false);
+  assert.equal(config.automation.weeklySkillExtraction.enabled, true);
+  assert.equal(config.automation.weeklySkillExtraction.intervalDays, 7);
   assert.equal(config.privacy.uploadRawChats, false);
   assert.equal(config.privacy.redactSecrets, true);
   assert.equal(config.privacy.storeEmbeddings, true);

@@ -10,10 +10,12 @@ import {
   upsertEvidenceItems,
 } from "@repo/db";
 import { loadLocalAgentConfig, type LocalAgentPrivacyConfig } from "./config.js";
+import { runWeeklySkillExtractionIfDue } from "./skill-extraction.js";
 
 export interface LocalAgentOptions {
   codexSessionsDir?: string;
   configPath?: string;
+  forceSkillExtraction?: boolean;
   persist?: boolean;
   privacy?: Partial<LocalAgentPrivacyConfig>;
   sources?: string[];
@@ -38,9 +40,17 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
     persist,
     sourceRoots,
   });
+  const skillExtraction = await runWeeklySkillExtractionIfDue({
+    config: config.automation.weeklySkillExtraction,
+    force: options.forceSkillExtraction,
+    persist,
+  });
 
   if (!options.watch) {
-    return result;
+    return {
+      ...result,
+      skillExtraction,
+    };
   }
 
   const watcher = chokidar.watch(sourceRoots, {
@@ -55,6 +65,10 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
       persist,
       sourceRoots,
     });
+    await runWeeklySkillExtractionIfDue({
+      config: config.automation.weeklySkillExtraction,
+      persist,
+    });
   };
 
   watcher.on("add", reingest);
@@ -63,6 +77,7 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
   return {
     ...result,
     privacy: config.privacy,
+    skillExtraction,
     watching: sourceRoots,
   };
 }
@@ -107,6 +122,7 @@ async function ingestAndMaybePersist(input: {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const watch = process.argv.includes("--watch");
   const persist = !process.argv.includes("--dry-run");
+  const forceSkillExtraction = process.argv.includes("--force-skill-extraction");
   const configIndex = process.argv.indexOf("--config");
   const dirIndex = process.argv.indexOf("--codex-sessions-dir");
   const configPath = configIndex >= 0 ? process.argv[configIndex + 1] : undefined;
@@ -115,7 +131,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     .map((arg, index) => arg === "--source" ? process.argv[index + 1] : undefined)
     .filter((source): source is string => typeof source === "string");
 
-  runLocalAgent({ codexSessionsDir, configPath, persist, sources: sources.length > 0 ? sources : undefined, watch })
+  runLocalAgent({
+    codexSessionsDir,
+    configPath,
+    forceSkillExtraction,
+    persist,
+    sources: sources.length > 0 ? sources : undefined,
+    watch,
+  })
     .then((result) => {
       console.log(JSON.stringify(result, null, 2));
     })
@@ -127,3 +150,4 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 export * from "./config.js";
 export * from "./launchd.js";
+export * from "./skill-extraction.js";

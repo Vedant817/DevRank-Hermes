@@ -1,4 +1,5 @@
 import { readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
+export * from "./skill-extraction.js";
 
 export interface HermesMentorInput {
   evidenceSummary: string;

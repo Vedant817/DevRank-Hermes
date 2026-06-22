@@ -6,6 +6,7 @@ export type EvidenceSource =
   | "github"
   | "linear"
   | "market"
+  | "skill"
   | "manual";
 
 export interface EvidenceItem {

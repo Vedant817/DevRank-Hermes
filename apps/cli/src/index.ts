@@ -232,7 +232,7 @@ const commands: CommandSpec[] = [
   {
     name: "local-daemon",
     description: "Start the local Mac daemon through the local-agent package.",
-    usage: "devrank local-daemon [--config <path>] [--codex-sessions-dir <path>] [--source <path>] [--watch] [--dry-run]",
+    usage: "devrank local-daemon [--config <path>] [--codex-sessions-dir <path>] [--source <path>] [--watch] [--force-skill-extraction] [--dry-run]",
     moduleCandidates: ["@repo/local-agent", "local-agent"],
     exportCandidates: ["runLocalAgent", "startLocalDaemon", "startDaemon", "runDaemon", "run"],
     envRequirements: [databaseRequirement],
@@ -241,6 +241,7 @@ const commands: CommandSpec[] = [
       codexSessionsDir: stringOption(parsed, "codex-sessions-dir"),
       databaseEnv: firstPresentEnv(env, databaseRequirement),
       dryRun: booleanOption(parsed, "dry-run"),
+      forceSkillExtraction: booleanOption(parsed, "force-skill-extraction"),
       rawStorageEnabled: booleanOption(parsed, "upload-raw-chats") || envFlag(env, "DEVRANK_UPLOAD_RAW_CHATS", false),
       redactSecrets: !booleanOption(parsed, "no-redact-secrets") && envFlag(env, "DEVRANK_REDACT_SECRETS", true),
       sources: stringListOption(parsed, "source"),
@@ -283,6 +284,20 @@ const commands: CommandSpec[] = [
       write: booleanOption(parsed, "write"),
     }),
     invoke: invokeLocalDaemonLaunchd,
+  },
+  {
+    name: "hermes:skill-extract",
+    description: "Run Hermes skill extraction over persisted evidence.",
+    usage: "devrank hermes:skill-extract [--config <path>] [--force]",
+    moduleCandidates: ["@repo/local-agent", "local-agent"],
+    exportCandidates: ["runWeeklySkillExtractionIfDue", "loadLocalAgentConfig"],
+    envRequirements: [databaseRequirement],
+    buildConfig: (parsed, env) => ({
+      configPath: stringOption(parsed, "config"),
+      databaseEnv: firstPresentEnv(env, databaseRequirement),
+      force: booleanOption(parsed, "force"),
+    }),
+    invoke: invokeHermesSkillExtract,
   },
   {
     name: "planner:daily",
@@ -794,6 +809,7 @@ function invokeLocalDaemon(moduleExports: ModuleExports, context: CommandContext
   return directHandler({
     codexSessionsDir: codexSessionsDir(context),
     configPath: configString(context, "configPath"),
+    forceSkillExtraction: configBoolean(context, "forceSkillExtraction"),
     persist: !configBoolean(context, "dryRun"),
     sources: configOptionalStringList(context, "sources"),
     watch: configBoolean(context, "watch"),
@@ -866,6 +882,29 @@ function invokeLocalDaemonLaunchd(moduleExports: ModuleExports, context: Command
   }
 
   return requiredFunction(moduleExports, ["renderLaunchdPlist"], moduleName, context.command)(launchdOptions);
+}
+
+async function invokeHermesSkillExtract(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+  const loadLocalAgentConfig = requiredFunction(moduleExports, ["loadLocalAgentConfig"], moduleName, context.command);
+  const runWeeklySkillExtractionIfDue = requiredFunction(
+    moduleExports,
+    ["runWeeklySkillExtractionIfDue"],
+    moduleName,
+    context.command,
+  );
+  const config = await loadLocalAgentConfig({
+    configPath: configString(context, "configPath"),
+  }) as {
+    automation: {
+      weeklySkillExtraction: unknown;
+    };
+  };
+
+  return runWeeklySkillExtractionIfDue({
+    config: config.automation.weeklySkillExtraction,
+    force: configBoolean(context, "force"),
+    persist: true,
+  });
 }
 
 async function persistIngestionResult(context: CommandContext, result: unknown, source: string) {

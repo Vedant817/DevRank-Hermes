@@ -12,12 +12,27 @@ export interface LocalAgentPrivacyConfig {
   storeEmbeddings: boolean;
 }
 
+export interface LocalAgentWeeklySkillExtractionConfig {
+  enabled: boolean;
+  evidenceLimit: number;
+  intervalDays: number;
+  statePath: string;
+}
+
+export interface LocalAgentAutomationConfig {
+  weeklySkillExtraction: LocalAgentWeeklySkillExtractionConfig;
+}
+
 export interface LocalAgentConfig {
+  automation: LocalAgentAutomationConfig;
   sources: string[];
   privacy: LocalAgentPrivacyConfig;
 }
 
 export interface LocalAgentConfigInput {
+  automation?: {
+    weeklySkillExtraction?: Partial<LocalAgentWeeklySkillExtractionConfig>;
+  };
   codexSessionsDir?: string;
   configPath?: string;
   privacy?: Partial<LocalAgentPrivacyConfig>;
@@ -25,6 +40,7 @@ export interface LocalAgentConfigInput {
 }
 
 export const defaultLocalAgentConfigPath = join(homedir(), ".devrank", "local-agent.json");
+export const defaultLocalAgentStatePath = join(homedir(), ".devrank", "local-agent-state.json");
 
 export function createDefaultLocalAgentConfig(input: LocalAgentConfigInput = {}): LocalAgentConfig {
   const codexSessionsDir = input.codexSessionsDir ?? codexDefaultRoot;
@@ -35,6 +51,15 @@ export function createDefaultLocalAgentConfig(input: LocalAgentConfigInput = {})
   ];
 
   return {
+    automation: {
+      weeklySkillExtraction: {
+        enabled: true,
+        evidenceLimit: 250,
+        intervalDays: 7,
+        statePath: defaultLocalAgentStatePath,
+        ...input.automation?.weeklySkillExtraction,
+      },
+    },
     sources: uniqueNonEmptyStrings(sources),
     privacy: {
       uploadRawChats: false,
@@ -52,6 +77,13 @@ export async function loadLocalAgentConfig(input: LocalAgentConfigInput = {}): P
 
   return normalizeLocalAgentConfig({
     sources: input.sources ?? fileConfig?.sources ?? defaultConfig.sources,
+    automation: {
+      weeklySkillExtraction: {
+        ...defaultConfig.automation.weeklySkillExtraction,
+        ...fileConfig?.automation.weeklySkillExtraction,
+        ...input.automation?.weeklySkillExtraction,
+      },
+    },
     privacy: {
       ...defaultConfig.privacy,
       ...fileConfig?.privacy,
@@ -89,6 +121,8 @@ export async function writeDefaultLocalAgentConfig(input: LocalAgentConfigInput 
 
 function normalizeLocalAgentConfig(value: unknown, input: LocalAgentConfigInput = {}): LocalAgentConfig {
   const record = asRecord(value);
+  const automation = asRecord(record.automation);
+  const weeklySkillExtraction = asRecord(automation.weeklySkillExtraction);
   const privacy = asRecord(record.privacy);
 
   const sources = Array.isArray(record.sources)
@@ -96,6 +130,14 @@ function normalizeLocalAgentConfig(value: unknown, input: LocalAgentConfigInput 
     : undefined;
 
   return createDefaultLocalAgentConfig({
+    automation: {
+      weeklySkillExtraction: {
+        enabled: booleanValue(weeklySkillExtraction.enabled, true),
+        evidenceLimit: positiveNumberValue(weeklySkillExtraction.evidenceLimit, 250),
+        intervalDays: positiveNumberValue(weeklySkillExtraction.intervalDays, 7),
+        statePath: stringValue(weeklySkillExtraction.statePath, defaultLocalAgentStatePath),
+      },
+    },
     codexSessionsDir: input.codexSessionsDir,
     privacy: {
       uploadRawChats: booleanValue(privacy.uploadRawChats, false),
@@ -118,6 +160,14 @@ function uniqueNonEmptyStrings(values: string[]) {
 
 function booleanValue(value: unknown, fallback: boolean) {
   return typeof value === "boolean" ? value : fallback;
+}
+
+function positiveNumberValue(value: unknown, fallback: number) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function stringValue(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim().length > 0 ? value : fallback;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
