@@ -92,4 +92,11 @@ pnpm run lint
 pnpm run build
 ```
 
+## Deployment
+
+Use `apps/web` as the Vercel project root for the cloud dashboard and API
+routes. The root `vercel.json` mirrors `apps/web/vercel.json` so cron
+configuration is visible in root-linked checks, but the deployable Next.js app
+lives under `apps/web`.
+
 Architecture and setup notes live in `docs/` and `infra/`.
