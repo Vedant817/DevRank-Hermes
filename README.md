@@ -66,6 +66,10 @@ EMBEDDING_DIMENSIONS=1536
 `--upload-raw-chats` stores the full redacted transcript in Postgres. The local
 collector still refuses to run if secret redaction is disabled.
 
+The authenticated `/api/ingest/local-ai` endpoint also accepts redacted summary
+imports with `sourceType` set to `cloud_export`, `manual_export`, or
+`workspace_export`.
+
 ## Main Commands
 
 ```bash

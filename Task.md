@@ -212,11 +212,11 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Antigravity.
 - [x] Support known Codex sessions under `~/.codex/sessions/`.
 - [ ] Treat Codex Cloud/Web history as optional imported evidence:
-  - [ ] Accept only supported exports, workspace analytics/compliance exports, or manually provided task summaries.
-  - [ ] Record source type as `local_session`, `cloud_export`, `manual_export`, or `workspace_export`.
+  - [x] Accept only supported exports, workspace analytics/compliance exports, or manually provided task summaries.
+  - [x] Record source type as `local_session`, `cloud_export`, `manual_export`, or `workspace_export`.
   - [ ] Store cloud-history raw content only if explicit raw storage is enabled.
-  - [ ] Store redacted cloud-history summaries in Supabase before embedding.
-  - [ ] Preserve task URL, task ID, repository, branch, PR link, and timestamp when available.
+  - [x] Store redacted cloud-history summaries in Supabase before embedding.
+  - [x] Preserve task URL, task ID, repository, branch, PR link, and timestamp when available.
 - [x] Support known OpenCode session data under `~/.local/share/opencode/`.
 - [x] Support Claude project/config/memory/settings/skills data under project directories and `~/.claude`.
 - [x] Verify exact Claude conversation files on the local machine instead of assuming the community-reported `~/.claude/projects/` layout forever.

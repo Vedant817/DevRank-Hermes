@@ -14,6 +14,7 @@
     "@repo/ai-chat-ingestors": "workspace:*",
     "@repo/context": "workspace:*",
     "@repo/db": "workspace:*",
+    "@repo/embeddings": "workspace:*",
     "@repo/github": "workspace:*",
     "@repo/hermes": "workspace:*",
     "@repo/linear": "workspace:*",
