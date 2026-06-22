@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/create-next-app).
+# DevRank OS Web App
 
-## Getting Started
+This Next.js app is the cloud-facing dashboard and API surface for DevRank OS.
+It reads from Supabase Postgres, handles signed GitHub and Linear webhooks,
+accepts local-agent ingestion, recomputes score snapshots, runs scheduled plans,
+and sends Slack targets.
 
-First, run the development server:
+## Runtime Surfaces
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- `/`: database-backed dashboard for scores, evidence sources, daily plans, and
+  ingestion runs.
+- `/api/ingest/local-ai`: local-agent upload path for redacted session evidence.
+- `/api/github/webhook`: GitHub webhook endpoint with signature verification.
+- `/api/linear/webhook`: Linear webhook endpoint with signature verification.
+- `/api/scores/recompute`: recompute and persist score snapshots.
+- `/api/cron/daily-plan`: scheduled daily planning endpoint.
+- `/api/cron/weekly-review`: scheduled weekly review endpoint.
+- `/api/slack/send`: Slack incoming webhook delivery.
+- `/api/context/search` and `/api/context/write`: context provider routes.
+
+## Required Environment
+
+Use one of the supported database variables:
+
+```text
+DATABASE_URL=postgresql://...
+DEVRANK_DATABASE_URL=postgresql://...
+SUPABASE_DATABASE_URL=postgresql://...
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Feature routes require their own secrets when enabled:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```text
+GITHUB_WEBHOOK_SECRET=...
+LINEAR_WEBHOOK_SECRET=...
+SLACK_WEBHOOK_URL=...
+CRON_SECRET=...
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load Inter, a custom Google Font.
+## Local Development
 
-## Learn More
+```bash
+pnpm --filter web dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+The app runs on port `3000` by default.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Validation
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+pnpm --filter web check-types
+pnpm --filter web lint
+pnpm --filter web build
+```
 
-## Deploy on Vercel
+Run the root gates before committing a completed feature:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm test
+pnpm run lint
+pnpm run build
+```

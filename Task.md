@@ -126,6 +126,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `docs/architecture.md`.
   - [x] `docs/scoring-rubric.md`.
   - [x] `docs/resume-bullets.md`.
+- [x] Replace starter app READMEs and docs UI with DevRank-specific operational docs.
 
 ## 4. Supabase Database Setup
 
