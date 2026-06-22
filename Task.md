@@ -350,7 +350,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Create a GitHub App instead of relying only on a personal token.
 - [ ] Configure clean GitHub App permissions.
 - [ ] Enable webhooks.
-- [ ] Track new repo installation events.
+- [x] Track new repo installation events.
 - [x] Receive PR events.
 - [ ] Configure minimal permissions for private repos:
   - [ ] Repository metadata: read.
@@ -361,7 +361,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Code scanning alerts: read later if needed.
   - [ ] Webhooks: enabled.
 - [ ] Track GitHub events:
-  - [ ] `repository.created`
+  - [x] `repository.created`
   - [x] `push`
   - [x] `pull_request.opened`
   - [x] `pull_request.synchronize`

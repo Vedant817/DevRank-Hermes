@@ -13,17 +13,14 @@ import {
   upsertEvidenceItems,
   upsertGithubBackfill,
 } from "@repo/db";
-import { githubWebhookIngestion, verifyGithubWebhook } from "@repo/github";
+import {
+  githubWebhookIngestion,
+  isSupportedGithubWebhookEvent,
+  verifyGithubWebhook,
+} from "@repo/github";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const SUPPORTED_EVENTS = new Set([
-  "pull_request",
-  "pull_request_review",
-  "pull_request_review_comment",
-  "push",
-]);
 
 export function GET() {
   return methodNotAllowed(["POST"]);
@@ -67,11 +64,12 @@ export async function POST(request: Request) {
     });
   }
 
-  if (!SUPPORTED_EVENTS.has(event)) {
+  if (!isSupportedGithubWebhookEvent(event, action)) {
     return jsonOk(
       {
         ignored: true,
         reason: "unsupported_github_event",
+        action,
         event,
         deliveryId,
       },

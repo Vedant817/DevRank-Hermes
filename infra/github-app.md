@@ -7,8 +7,8 @@ local backfill during development.
 
 - URL: `/api/github/webhook`
 - Secret env var: `GITHUB_WEBHOOK_SECRET`
-- Events: repository, push, pull request, pull request review, review comment,
-  issues, release, and workflow run.
+- Events: repository created, push, pull request, pull request review, review
+  comment, issues, release, and workflow run.
 
 ## Minimal Permissions
 

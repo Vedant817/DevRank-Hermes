@@ -9,6 +9,13 @@ import type {
   GithubWebhookResult,
 } from "./types.js";
 
+const SUPPORTED_WEBHOOK_EVENTS = new Set([
+  "pull_request",
+  "pull_request_review",
+  "pull_request_review_comment",
+  "push",
+]);
+
 export async function verifyGithubWebhook(
   payload: string,
   signature: string | null,
@@ -33,6 +40,14 @@ export async function verifyGithubWebhook(
   if (!verified) {
     throw new Error("Invalid GitHub webhook signature.");
   }
+}
+
+export function isSupportedGithubWebhookEvent(eventName: string, action?: string): boolean {
+  if (eventName === "repository") {
+    return action === "created";
+  }
+
+  return SUPPORTED_WEBHOOK_EVENTS.has(eventName);
 }
 
 export function summarizeGithubWebhook(

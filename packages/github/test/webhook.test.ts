@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { githubWebhookIngestion, summarizeGithubWebhook } from "../src/webhook.js";
+import {
+  githubWebhookIngestion,
+  isSupportedGithubWebhookEvent,
+  summarizeGithubWebhook,
+} from "../src/webhook.js";
 
 test("extracts repo and pull request rows from GitHub webhook payload", () => {
   const payload = {
@@ -75,6 +79,39 @@ test("extracts push webhook commits", () => {
     repoFullName: "salescode/devrank-os",
     sha: "abc123",
   }]);
+});
+
+test("supports repository.created without accepting every repository action", () => {
+  assert.equal(isSupportedGithubWebhookEvent("repository", "created"), true);
+  assert.equal(isSupportedGithubWebhookEvent("repository", "deleted"), false);
+
+  const ingestion = githubWebhookIngestion("repository", "delivery-4", {
+    action: "created",
+    repository: {
+      id: 303,
+      full_name: "salescode/new-service",
+      name: "new-service",
+      owner: { login: "salescode" },
+      private: false,
+      default_branch: "main",
+      html_url: "https://github.com/salescode/new-service",
+      language: "TypeScript",
+      pushed_at: "2026-06-22T05:00:00Z",
+      updated_at: "2026-06-22T05:00:00Z",
+    },
+  });
+
+  assert.deepEqual(ingestion.summary, {
+    eventName: "repository",
+    deliveryId: "delivery-4",
+    action: "created",
+    repository: "salescode/new-service",
+    pullRequestNumber: undefined,
+  });
+  assert.equal(ingestion.backfill.repos.length, 1);
+  assert.equal(ingestion.backfill.repos[0]?.fullName, "salescode/new-service");
+  assert.deepEqual(ingestion.backfill.pullRequests, []);
+  assert.deepEqual(ingestion.backfill.commits, []);
 });
 
 test("summarizes sparse payloads without throwing", () => {
