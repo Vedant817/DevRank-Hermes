@@ -2,6 +2,7 @@ import { Webhooks } from "@octokit/webhooks";
 import { readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
 import type {
   GithubBackfillResult,
+  GithubCommitSummary,
   GithubPullRequestSummary,
   GithubRepoSummary,
   GithubWebhookIngestion,
@@ -69,8 +70,10 @@ function githubWebhookBackfill(payload: unknown): GithubBackfillResult {
   const record = asRecord(payload);
   const repo = githubRepoFromPayload(asRecord(record.repository));
   const pullRequest = githubPullRequestFromPayload(asRecord(record.pull_request), repo?.fullName);
+  const commits = repo ? githubCommitsFromPayload(record, repo.fullName) : [];
 
   return {
+    commits,
     repos: repo ? [repo] : [],
     pullRequests: pullRequest ? [pullRequest] : [],
   };
@@ -129,6 +132,44 @@ function githubPullRequestFromPayload(
     mergedAt: stringValue(pullRequest.merged_at) ?? null,
     updatedAt: stringValue(pullRequest.updated_at) ?? null,
   };
+}
+
+function githubCommitsFromPayload(
+  payload: Record<string, unknown>,
+  repoFullName: string,
+): GithubCommitSummary[] {
+  if (!Array.isArray(payload.commits)) {
+    return [];
+  }
+
+  const branch = branchFromRef(stringValue(payload.ref));
+  const commits: GithubCommitSummary[] = [];
+
+  for (const item of payload.commits) {
+    const commit = asRecord(item);
+    const sha = stringValue(commit.id) ?? stringValue(commit.sha);
+    const message = stringValue(commit.message);
+
+    if (sha === undefined || message === undefined) {
+      continue;
+    }
+
+    commits.push({
+      authorLogin: stringValue(asRecord(commit.author).username) ?? null,
+      branch,
+      committedAt: stringValue(commit.timestamp) ?? null,
+      htmlUrl: stringValue(commit.url) ?? null,
+      message,
+      repoFullName,
+      sha,
+    });
+  }
+
+  return commits;
+}
+
+function branchFromRef(ref: string | undefined) {
+  return ref?.startsWith("refs/heads/") ? ref.slice("refs/heads/".length) : null;
 }
 
 function ownerLogin(value: unknown) {

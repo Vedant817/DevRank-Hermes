@@ -230,9 +230,11 @@ function sourceRows(summary: DashboardSummary) {
     },
     {
       name: "GitHub",
-      status: `${summary.counts.githubRepos} repo(s), ${summary.counts.githubPullRequests} PR(s)`,
+      status: `${summary.counts.githubRepos} repo(s), ${summary.counts.githubPullRequests} PR(s), ${summary.counts.githubCommits} commit(s)`,
       state:
-        summary.counts.githubRepos > 0 || summary.counts.githubPullRequests > 0
+        summary.counts.githubRepos > 0 ||
+          summary.counts.githubPullRequests > 0 ||
+          summary.counts.githubCommits > 0
           ? "synced"
           : "empty",
     },

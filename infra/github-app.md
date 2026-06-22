@@ -29,5 +29,10 @@ GITHUB_PERSONAL_ACCESS_TOKEN=...
 Then run:
 
 ```bash
-pnpm devrank github:backfill --user vedantmahajan271
+pnpm devrank github:backfill --user vedantmahajan271 --commit-limit 100
 ```
+
+Backfill imports repositories, pull requests, and bounded recent commits. Use
+`--commit-limit <count>` to control recent default-branch commits per
+repository; the implementation caps this at 100 per repo to avoid unbounded
+production runs.

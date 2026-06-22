@@ -200,7 +200,7 @@ const commands: CommandSpec[] = [
   {
     name: "github:backfill",
     description: "Backfill repository, pull request, and issue history through the GitHub package.",
-    usage: "devrank github:backfill --user <github-user> [--dry-run]",
+    usage: "devrank github:backfill --user <github-user> [--commit-limit <count>] [--dry-run]",
     moduleCandidates: ["@repo/github"],
     exportCandidates: ["backfillGithubUser", "backfillGitHub", "backfillGithub", "githubBackfill", "run"],
     envRequirements: [databaseRequirement, githubAuthRequirement],
@@ -863,7 +863,12 @@ async function invokeGithubBackfill(moduleExports: ModuleExports, context: Comma
     GITHUB_PERSONAL_ACCESS_TOKEN: token,
   });
 
-  return persistGithubBackfillResult(context, await backfillGithubUser(client, configString(context, "user")));
+  return persistGithubBackfillResult(
+    context,
+    await backfillGithubUser(client, configString(context, "user"), {
+      commitLimitPerRepo: configNumber(context, "commit-limit", 100),
+    }),
+  );
 }
 
 async function persistGithubBackfillResult(context: CommandContext, result: unknown) {
@@ -878,7 +883,7 @@ async function persistGithubBackfillResult(context: CommandContext, result: unkn
     await insertIngestionRun(sql, {
       source: "github_backfill",
       status: "success",
-      summary: `Imported ${written.repos} GitHub repo(s) and ${written.pullRequests} pull request(s).`,
+      summary: `Imported ${written.repos} GitHub repo(s), ${written.pullRequests} pull request(s), and ${written.commits} commit(s).`,
     });
 
     return {
@@ -1112,7 +1117,9 @@ function isGithubBackfillLike(value: unknown): value is Parameters<typeof upsert
   }
 
   const record = value as Record<string, unknown>;
-  return Array.isArray(record.repos) && Array.isArray(record.pullRequests);
+  return Array.isArray(record.repos) &&
+    Array.isArray(record.pullRequests) &&
+    (record.commits === undefined || Array.isArray(record.commits));
 }
 
 function isLinearBackfillLike(value: unknown): value is Parameters<typeof upsertLinearBackfill>[1] {

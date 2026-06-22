@@ -22,9 +22,24 @@ export interface GithubPullRequestSummary {
   updatedAt: string | null;
 }
 
+export interface GithubCommitSummary {
+  authorLogin: string | null;
+  branch: string | null;
+  committedAt: string | null;
+  htmlUrl: string | null;
+  message: string;
+  repoFullName: string;
+  sha: string;
+}
+
 export interface GithubBackfillResult {
+  commits: GithubCommitSummary[];
   repos: GithubRepoSummary[];
   pullRequests: GithubPullRequestSummary[];
+}
+
+export interface GithubBackfillOptions {
+  commitLimitPerRepo?: number;
 }
 
 export interface GithubWebhookResult {

@@ -41,20 +41,40 @@ test("extracts repo and pull request rows from GitHub webhook payload", () => {
   assert.equal(ingestion.backfill.repos[0]?.fullName, "salescode/devrank-os");
   assert.equal(ingestion.backfill.pullRequests.length, 1);
   assert.equal(ingestion.backfill.pullRequests[0]?.repoFullName, "salescode/devrank-os");
+  assert.deepEqual(ingestion.backfill.commits, []);
 });
 
-test("keeps push webhook ingestion repo-only", () => {
+test("extracts push webhook commits", () => {
   const ingestion = githubWebhookIngestion("push", "delivery-2", {
+    ref: "refs/heads/master",
     repository: {
       id: 101,
       full_name: "salescode/devrank-os",
       name: "devrank-os",
       owner: { login: "salescode" },
     },
+    commits: [{
+      id: "abc123",
+      message: "Ship GitHub commit ingestion",
+      timestamp: "2026-06-22T04:00:00Z",
+      url: "https://github.com/salescode/devrank-os/commit/abc123",
+      author: {
+        username: "salescode",
+      },
+    }],
   });
 
   assert.equal(ingestion.backfill.repos.length, 1);
   assert.deepEqual(ingestion.backfill.pullRequests, []);
+  assert.deepEqual(ingestion.backfill.commits, [{
+    authorLogin: "salescode",
+    branch: "master",
+    committedAt: "2026-06-22T04:00:00Z",
+    htmlUrl: "https://github.com/salescode/devrank-os/commit/abc123",
+    message: "Ship GitHub commit ingestion",
+    repoFullName: "salescode/devrank-os",
+    sha: "abc123",
+  }]);
 });
 
 test("summarizes sparse payloads without throwing", () => {

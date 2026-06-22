@@ -33,7 +33,18 @@ export interface PersistableGithubPullRequest {
   updatedAt: string | null;
 }
 
+export interface PersistableGithubCommit {
+  authorLogin: string | null;
+  branch: string | null;
+  committedAt: string | null;
+  htmlUrl: string | null;
+  message: string;
+  repoFullName: string;
+  sha: string;
+}
+
 export interface PersistableGithubBackfill {
+  commits?: PersistableGithubCommit[];
   repos: PersistableGithubRepo[];
   pullRequests: PersistableGithubPullRequest[];
 }
@@ -109,6 +120,7 @@ type DashboardSourceRow = {
 };
 
 type DashboardCountsRow = {
+  github_commits: string | number;
   github_repos: string | number;
   github_pull_requests: string | number;
   linear_projects: string | number;
@@ -151,6 +163,16 @@ type GithubPullRequestEvidenceRow = {
   updated_at: Date | string | null;
 };
 
+type GithubCommitEvidenceRow = {
+  author_login: string | null;
+  branch: string | null;
+  committed_at: Date | string | null;
+  full_name: string;
+  html_url: string | null;
+  message: string;
+  sha: string;
+};
+
 type LinearProjectEvidenceRow = {
   id: string;
   name: string;
@@ -185,6 +207,7 @@ export interface DashboardSummary {
   counts: {
     evidenceItems: number;
     githubPullRequests: number;
+    githubCommits: number;
     githubRepos: number;
     linearIssues: number;
     linearProjects: number;
@@ -260,6 +283,7 @@ export async function getDashboardSummary(sql: SqlClient): Promise<DashboardSumm
       select
         (select count(*) from github_repos) as github_repos,
         (select count(*) from github_pull_requests) as github_pull_requests,
+        (select count(*) from github_commits) as github_commits,
         (select count(*) from linear_projects) as linear_projects,
         (select count(*) from linear_issues) as linear_issues,
         (select count(*) from slack_notifications) as slack_notifications
@@ -283,6 +307,7 @@ export async function getDashboardSummary(sql: SqlClient): Promise<DashboardSumm
   return {
     counts: {
       evidenceItems: sourceRows.reduce((total, row) => total + Number(row.count), 0),
+      githubCommits: numberCount(counts?.github_commits),
       githubPullRequests: numberCount(counts?.github_pull_requests),
       githubRepos: numberCount(counts?.github_repos),
       linearIssues: numberCount(counts?.linear_issues),
@@ -511,10 +536,12 @@ export async function upsertGithubBackfill(
   sql: SqlClient,
   input: PersistableGithubBackfill,
 ): Promise<{
+  commits: number;
   pullRequests: number;
   repos: number;
 }> {
   const repoIdsByFullName = new Map<string, number>();
+  let commits = 0;
   let repos = 0;
   let pullRequests = 0;
 
@@ -606,7 +633,48 @@ export async function upsertGithubBackfill(
     pullRequests += 1;
   }
 
+  for (const commit of input.commits ?? []) {
+    const repoId = repoIdsByFullName.get(commit.repoFullName)
+      ?? await getGithubRepoIdByFullName(sql, commit.repoFullName);
+
+    if (repoId === undefined) {
+      continue;
+    }
+
+    await sql`
+      insert into github_commits (
+        repo_id,
+        sha,
+        message,
+        author_login,
+        html_url,
+        committed_at,
+        branch,
+        synced_at
+      )
+      values (
+        ${repoId},
+        ${commit.sha},
+        ${commit.message},
+        ${commit.authorLogin},
+        ${commit.htmlUrl},
+        ${commit.committedAt},
+        ${commit.branch},
+        now()
+      )
+      on conflict (repo_id, sha) do update set
+        message = excluded.message,
+        author_login = excluded.author_login,
+        html_url = excluded.html_url,
+        committed_at = excluded.committed_at,
+        branch = excluded.branch,
+        synced_at = now()
+    `;
+    commits += 1;
+  }
+
   return {
+    commits,
     pullRequests,
     repos,
   };
@@ -744,6 +812,7 @@ export async function listScoringEvidence(
       ...await listRepoMemoryEvidence(sql, options.targetId, limit),
       ...await listGithubRepoEvidence(sql, options.targetId, limit),
       ...await listGithubPullRequestEvidence(sql, { repoFullName: options.targetId }, limit),
+      ...await listGithubCommitEvidence(sql, options.targetId, limit),
     ];
   }
 
@@ -764,6 +833,7 @@ export async function listScoringEvidence(
     ...await listEvidenceItems(sql, { limit }),
     ...await listGithubRepoEvidence(sql, undefined, limit),
     ...await listGithubPullRequestEvidence(sql, {}, limit),
+    ...await listGithubCommitEvidence(sql, undefined, limit),
     ...await listLinearProjectEvidence(sql, limit),
     ...await listLinearIssueEvidence(sql, limit),
   ];
@@ -964,6 +1034,67 @@ async function listGithubPullRequestEvidence(
   }));
 }
 
+async function listGithubCommitEvidence(
+  sql: SqlClient,
+  repoFullName: string | undefined,
+  limit: number,
+): Promise<EvidenceItem[]> {
+  const rows = repoFullName
+    ? await sql<GithubCommitEvidenceRow[]>`
+        select
+          repo.full_name,
+          commit.sha,
+          commit.message,
+          commit.author_login,
+          commit.html_url,
+          commit.committed_at,
+          commit.branch
+        from github_commits commit
+        join github_repos repo on repo.id = commit.repo_id
+        where repo.full_name = ${repoFullName}
+        order by coalesce(commit.committed_at, commit.synced_at) desc
+        limit ${limit}
+      `
+    : await sql<GithubCommitEvidenceRow[]>`
+        select
+          repo.full_name,
+          commit.sha,
+          commit.message,
+          commit.author_login,
+          commit.html_url,
+          commit.committed_at,
+          commit.branch
+        from github_commits commit
+        join github_repos repo on repo.id = commit.repo_id
+        order by coalesce(commit.committed_at, commit.synced_at) desc
+        limit ${limit}
+      `;
+
+  return rows.map((row) => {
+    const firstLine = row.message.split("\n").find((line) => line.trim().length > 0)?.trim()
+      ?? "Commit message unavailable";
+
+    return {
+      id: `github:commit:${row.full_name}:${row.sha}`,
+      source: "github",
+      title: `GitHub commit ${row.full_name}@${row.sha.slice(0, 7)}`,
+      summary: [
+        firstLine,
+        row.branch ? `Branch: ${row.branch}.` : "",
+        row.author_login ? `Author: ${row.author_login}.` : "",
+      ].filter(Boolean).join(" "),
+      occurredAt: toIso(row.committed_at ?? new Date().toISOString()),
+      ...(row.html_url ? { url: row.html_url } : {}),
+      metadata: {
+        repository: row.full_name,
+        branch: row.branch,
+        commitSha: row.sha,
+        kind: "github_commit",
+      },
+    };
+  });
+}
+
 async function listLinearProjectEvidence(sql: SqlClient, limit: number): Promise<EvidenceItem[]> {
   const rows = await sql<LinearProjectEvidenceRow[]>`
     select id, name, state, progress, url, synced_at
@@ -1059,6 +1190,21 @@ function dailyPlanFromRow(row: DailyPlanRow): DailyPlan & { createdAt: string } 
 
 function numberCount(value: string | number | undefined) {
   return Number(value ?? 0);
+}
+
+async function getGithubRepoIdByFullName(
+  sql: SqlClient,
+  fullName: string,
+): Promise<number | undefined> {
+  const rows = await sql<Array<{ id: string | number }>>`
+    select id
+    from github_repos
+    where full_name = ${fullName}
+    limit 1
+  `;
+  const id = rows[0]?.id;
+
+  return id === undefined ? undefined : Number(id);
 }
 
 function toIso(value: Date | string): string {

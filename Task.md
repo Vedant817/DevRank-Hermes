@@ -160,7 +160,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] `skills`
   - [ ] `skill_evidence`
   - [x] `github_repos`
-  - [ ] `github_commits`
+  - [x] `github_commits`
   - [x] `github_pull_requests`
   - [ ] `github_pr_files`
   - [ ] `github_pr_reviews`
@@ -376,7 +376,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Backfill:
   - [x] Repositories.
   - [x] Languages.
-  - [ ] Commits.
+  - [x] Commits.
   - [x] PRs.
   - [ ] Changed files.
   - [ ] Review comments.
@@ -389,6 +389,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Project complexity.
 - [ ] Use GitHub REST APIs for:
   - [x] Listing pull requests.
+  - [x] Listing recent default-branch commits.
   - [ ] Viewing pull requests.
   - [ ] Editing pull requests.
   - [ ] Creating pull requests if needed.
@@ -405,7 +406,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Verify webhook signatures.
 - [x] Store PR metadata.
 - [ ] Fetch changed files.
-- [ ] Fetch commits.
+- [x] Fetch commits from backfill and push webhooks.
 - [ ] Fetch reviews.
 - [ ] Fetch comments.
 - [ ] Run static analysis summary.
@@ -854,7 +855,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Set up GitHub OAuth/App.
 - [ ] Import all repos.
 - [ ] Import PRs.
-- [ ] Import commits.
+- [x] Import commits.
 - [ ] Implement repo scoring.
 - [ ] Build Portfolio Dashboard.
 
@@ -862,7 +863,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 - [ ] Handle PR opened/updated webhook.
 - [ ] Handle PR review webhook.
-- [ ] Handle push webhook.
+- [x] Handle push webhook.
 - [x] Implement score recomputation.
 - [ ] Build PR Review Dashboard.
 - [ ] Set up Linear API access if Linear is in MVP.

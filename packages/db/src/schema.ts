@@ -88,6 +88,18 @@ export const migrations = [
         synced_at timestamptz not null default now()
       );
 
+      create table if not exists github_commits (
+        repo_id bigint not null references github_repos(id) on delete cascade,
+        sha text not null,
+        message text not null,
+        author_login text,
+        html_url text,
+        committed_at timestamptz,
+        branch text,
+        synced_at timestamptz not null default now(),
+        primary key (repo_id, sha)
+      );
+
       create table if not exists linear_workspaces (
         id text primary key,
         name text not null,
@@ -206,6 +218,25 @@ export const migrations = [
       create unique index if not exists ai_sessions_source_type_source_id_unique
         on ai_sessions (source_type, source_id)
         where source_id is not null;
+    `,
+  },
+  {
+    id: "007_github_commits",
+    sql: `
+      create table if not exists github_commits (
+        repo_id bigint not null references github_repos(id) on delete cascade,
+        sha text not null,
+        message text not null,
+        author_login text,
+        html_url text,
+        committed_at timestamptz,
+        branch text,
+        synced_at timestamptz not null default now(),
+        primary key (repo_id, sha)
+      );
+
+      create index if not exists github_commits_repo_committed_at_idx
+        on github_commits (repo_id, committed_at desc);
     `,
   },
 ];
