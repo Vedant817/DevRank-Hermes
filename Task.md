@@ -303,7 +303,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Use free OpenRouter models only for early testing, not heavy production ranking.
 - [x] Use Hermes as the reasoning/orchestration layer, not the database.
 - [ ] Implement Hermes workflows for:
-  - [ ] Summarizing local AI-agent chats.
+  - [x] Summarizing local AI-agent chats.
   - [ ] Creating reusable skills.
   - [ ] Calling repo-analysis tools.
   - [x] Creating weekly improvement plans.

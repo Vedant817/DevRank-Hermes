@@ -34,7 +34,11 @@ function rootsForAdapter(
   options: LocalAiIngestionOptions,
 ) {
   if (options.sourceRoots && options.sourceRoots.length > 0) {
-    return options.sourceRoots;
+    if (options.enabledAdapters?.length === 1) {
+      return options.sourceRoots;
+    }
+
+    return options.sourceRoots.filter((root) => rootMatchesAdapter(adapterName, root));
   }
 
   if (adapterName === "codex" && options.codexSessionsDir) {
@@ -44,6 +48,25 @@ function rootsForAdapter(
   const adapter = localChatAdapters.find((candidate) => candidate.name === adapterName);
 
   return adapterName === "codex" ? [codexDefaultRoot] : adapter?.defaultRoots ?? [];
+}
+
+function rootMatchesAdapter(
+  adapterName: typeof localChatAdapters[number]["name"],
+  root: string,
+) {
+  const normalized = root.toLowerCase();
+
+  if (adapterName === "codex") {
+    return normalized.includes(".codex");
+  }
+  if (adapterName === "claude") {
+    return normalized.includes(".claude");
+  }
+  if (adapterName === "opencode") {
+    return normalized.includes("opencode");
+  }
+
+  return normalized.includes("antigravity");
 }
 
 export * from "./adapters.js";

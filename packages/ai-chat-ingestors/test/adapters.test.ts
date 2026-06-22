@@ -121,3 +121,31 @@ test("ingests through the adapter registry", async () => {
   assert.equal(result.adapterCounts.codex, 1);
   assert.equal(result.evidence.length, 1);
 });
+
+test("routes known source roots to matching adapters", async () => {
+  const root = await mkdtemp(join(tmpdir(), "devrank-routed-sources-"));
+  const codexRoot = join(root, ".codex", "sessions");
+  const claudeRoot = join(root, ".claude", "projects", "repo");
+  await mkdir(codexRoot, { recursive: true });
+  await mkdir(claudeRoot, { recursive: true });
+  await writeFile(join(codexRoot, "codex.jsonl"), JSON.stringify({
+    role: "user",
+    message: "Use Codex adapter",
+  }));
+  await writeFile(join(claudeRoot, "claude.jsonl"), JSON.stringify({
+    message: {
+      role: "user",
+      content: "Use Claude adapter",
+    },
+  }));
+
+  const result = await ingestLocalAiChats({
+    sourceRoots: [codexRoot, claudeRoot],
+  });
+
+  assert.equal(result.adapterCounts.codex, 1);
+  assert.equal(result.adapterCounts.claude, 1);
+  assert.equal(result.adapterCounts.opencode, 0);
+  assert.equal(result.adapterCounts.antigravity, 0);
+  assert.equal(result.sessions.length, 2);
+});

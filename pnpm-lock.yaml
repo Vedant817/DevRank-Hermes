@@ -293,6 +293,9 @@ importers:
 
   packages/ai-chat-ingestors:
     dependencies:
+      '@repo/hermes':
+        specifier: workspace:*
+        version: link:../hermes
       '@repo/shared':
         specifier: workspace:*
         version: link:../shared

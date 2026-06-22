@@ -1,4 +1,5 @@
 import type { EvidenceItem } from "@repo/shared";
+import { summarizeLocalAiChatSession } from "@repo/hermes";
 import type { ParsedSession } from "./types.js";
 
 function firstNonEmpty(lines: string[]): string {
@@ -12,23 +13,23 @@ export function summarizeSession(session: ParsedSession): EvidenceItem {
   const assistantMessages = session.messages
     .filter((message) => message.role === "assistant")
     .map((message) => message.content);
+  const hermesSummary = summarizeLocalAiChatSession({
+    agentName: session.agentName,
+    commandsRun: session.commandsRun,
+    filesTouched: session.filesTouched,
+    messages: session.messages,
+    projectContext: session.projectContext,
+    redactions: session.redactions,
+    skillTags: session.skillTags,
+    title: session.title,
+    toolCalls: session.toolCalls,
+  });
 
   const title = session.title || firstNonEmpty(userPrompts);
   const summaryParts = [
-    `Agent: ${session.agentName}.`,
-    userPrompts.length > 0
-      ? `User asked: ${firstNonEmpty(userPrompts).slice(0, 240)}`
-      : "No user prompt was detected.",
-    assistantMessages.length > 0
-      ? `Assistant responded with ${assistantMessages.length} message(s).`
-      : "No assistant response was detected.",
-    session.commandsRun.length > 0
-      ? `Commands: ${session.commandsRun.slice(0, 5).join(", ")}.`
-      : "",
-    session.filesTouched.length > 0
-      ? `Files: ${session.filesTouched.slice(0, 5).join(", ")}.`
-      : "",
-    session.projectContext ? `Project context: ${session.projectContext}.` : "",
+    hermesSummary.summary,
+    userPrompts.length === 0 ? "No user prompt was detected." : "",
+    assistantMessages.length === 0 ? "No assistant response was detected." : "",
   ].filter(Boolean);
 
   return {
@@ -44,7 +45,8 @@ export function summarizeSession(session: ParsedSession): EvidenceItem {
       commandsRun: session.commandsRun,
       redactions: session.redactions,
       projectContext: session.projectContext,
-      skillTags: session.skillTags,
+      skillTags: hermesSummary.skillTags,
+      hermesSummary,
     },
   };
 }

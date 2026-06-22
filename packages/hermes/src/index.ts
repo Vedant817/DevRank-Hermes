@@ -1,4 +1,5 @@
 import { readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
+export * from "./chat-summary.js";
 export * from "./skill-extraction.js";
 
 export interface HermesMentorInput {
