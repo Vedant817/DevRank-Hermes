@@ -444,8 +444,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Project updates.
   - [ ] Comments if needed for planning evidence.
   - [ ] Labels and priorities.
-  - [ ] Assignees.
-  - [ ] Status/workflow states.
+  - [x] Assignees.
+  - [x] Status/workflow states.
 - [ ] Build project-wise Linear dashboard data:
   - [ ] Open issues per project.
   - [ ] Done issues per project.

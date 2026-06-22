@@ -16,6 +16,7 @@ import {
   runDbMigrations,
   upsertGithubBackfill,
   upsertEvidenceItems,
+  upsertLinearBackfill,
 } from "@repo/db";
 import { buildReusableSkillArtifacts, writeReusableSkillArtifacts } from "@repo/hermes";
 import { formatDailyPlanForSlack, generateDailyPlan } from "@repo/planner";
@@ -894,15 +895,46 @@ async function persistGithubBackfillResult(context: CommandContext, result: unkn
   }
 }
 
-function invokeLinearBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+async function invokeLinearBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
   const directHandler = optionalFunction(moduleExports, ["linearBackfill", "run"]);
 
   if (directHandler) {
-    return directHandler(context);
+    return persistLinearBackfillResult(context, await directHandler(context));
   }
 
   const backfillLinear = requiredFunction(moduleExports, ["backfillLinear"], moduleName, context.command);
-  return backfillLinear(configNumber(context, "first", 100));
+  return persistLinearBackfillResult(context, await backfillLinear(configNumber(context, "first", 100)));
+}
+
+async function persistLinearBackfillResult(context: CommandContext, result: unknown) {
+  if (configBoolean(context, "dryRun") || !isLinearBackfillLike(result)) {
+    return result;
+  }
+
+  const sql = createSqlClient();
+
+  try {
+    const written = await upsertLinearBackfill(sql, result);
+    await insertIngestionRun(sql, {
+      source: "linear_backfill",
+      status: "success",
+      summary: `Imported ${written.projects} Linear project(s) and ${written.issues} issue(s).`,
+    });
+
+    return {
+      ...result,
+      written,
+    };
+  } catch (error) {
+    await insertIngestionRun(sql, {
+      source: "linear_backfill",
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  } finally {
+    await closeSqlClient(sql);
+  }
 }
 
 function invokeLocalDaemon(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
@@ -1064,6 +1096,15 @@ function isGithubBackfillLike(value: unknown): value is Parameters<typeof upsert
 
   const record = value as Record<string, unknown>;
   return Array.isArray(record.repos) && Array.isArray(record.pullRequests);
+}
+
+function isLinearBackfillLike(value: unknown): value is Parameters<typeof upsertLinearBackfill>[1] {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return Array.isArray(record.projects) && Array.isArray(record.issues);
 }
 
 function codexSessionsDir(context: CommandContext) {

@@ -1,5 +1,11 @@
 import { backfillLinear } from "@repo/linear";
 import {
+  closeSqlClient,
+  createSqlClient,
+  insertIngestionRun,
+  upsertLinearBackfill,
+} from "@repo/db";
+import {
   getOptionalInteger,
   jsonError,
   jsonOk,
@@ -36,10 +42,24 @@ export async function POST(request: Request) {
 
   try {
     const result = await backfillLinear(first.value);
+    const sql = createSqlClient();
+    let written = { issues: 0, projects: 0 };
+
+    try {
+      written = await upsertLinearBackfill(sql, result);
+      await insertIngestionRun(sql, {
+        source: "linear_backfill",
+        status: "success",
+        summary: `Imported ${written.projects} Linear project(s) and ${written.issues} issue(s).`,
+      });
+    } finally {
+      await closeSqlClient(sql);
+    }
 
     return jsonOk({
       projectCount: result.projects.length,
       issueCount: result.issues.length,
+      written,
       result,
     });
   } catch (error) {

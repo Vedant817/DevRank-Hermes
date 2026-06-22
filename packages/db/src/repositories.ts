@@ -30,6 +30,31 @@ export interface PersistableGithubBackfill {
   pullRequests: PersistableGithubPullRequest[];
 }
 
+export interface PersistableLinearProject {
+  id: string;
+  name: string;
+  state: string | null;
+  progress: number | null;
+  url: string | null;
+  teamName: string | null;
+}
+
+export interface PersistableLinearIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  priority: number;
+  url: string;
+  state: string | null;
+  assignee: string | null;
+  projectId: string | null;
+}
+
+export interface PersistableLinearBackfill {
+  projects: PersistableLinearProject[];
+  issues: PersistableLinearIssue[];
+}
+
 type MemoryItemRow = {
   id: string;
   source: string;
@@ -253,6 +278,92 @@ export async function upsertGithubBackfill(
   return {
     pullRequests,
     repos,
+  };
+}
+
+export async function upsertLinearBackfill(
+  sql: SqlClient,
+  input: PersistableLinearBackfill,
+): Promise<{
+  issues: number;
+  projects: number;
+}> {
+  const projectIds = new Set(input.projects.map((project) => project.id));
+  let projects = 0;
+  let issues = 0;
+
+  for (const project of input.projects) {
+    await sql`
+      insert into linear_projects (
+        id,
+        team_id,
+        name,
+        state,
+        progress,
+        url,
+        synced_at
+      )
+      values (
+        ${project.id},
+        ${null},
+        ${project.name},
+        ${project.state},
+        ${project.progress},
+        ${project.url},
+        now()
+      )
+      on conflict (id) do update set
+        name = excluded.name,
+        state = excluded.state,
+        progress = excluded.progress,
+        url = excluded.url,
+        synced_at = now()
+    `;
+    projects += 1;
+  }
+
+  for (const issue of input.issues) {
+    await sql`
+      insert into linear_issues (
+        id,
+        project_id,
+        team_id,
+        identifier,
+        title,
+        state,
+        priority,
+        assignee,
+        url,
+        synced_at
+      )
+      values (
+        ${issue.id},
+        ${issue.projectId && projectIds.has(issue.projectId) ? issue.projectId : null},
+        ${null},
+        ${issue.identifier},
+        ${issue.title},
+        ${issue.state},
+        ${issue.priority},
+        ${issue.assignee},
+        ${issue.url},
+        now()
+      )
+      on conflict (id) do update set
+        project_id = excluded.project_id,
+        identifier = excluded.identifier,
+        title = excluded.title,
+        state = excluded.state,
+        priority = excluded.priority,
+        assignee = excluded.assignee,
+        url = excluded.url,
+        synced_at = now()
+    `;
+    issues += 1;
+  }
+
+  return {
+    issues,
+    projects,
   };
 }
 

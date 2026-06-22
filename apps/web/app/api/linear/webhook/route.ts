@@ -1,12 +1,19 @@
 import {
   getRequiredEnv,
   jsonError,
+  jsonOk,
   methodNotAllowed,
-  packageUnavailable,
   parseWebhookJson,
   readRawBody,
 } from "../../_lib/route-utils";
-import { summarizeLinearWebhook, verifyLinearWebhook } from "@repo/linear";
+import {
+  closeSqlClient,
+  createSqlClient,
+  insertIngestionRun,
+  upsertEvidenceItems,
+  upsertLinearBackfill,
+} from "@repo/db";
+import { linearWebhookIngestion, verifyLinearWebhook } from "@repo/linear";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,12 +64,59 @@ export async function POST(request: Request) {
   const deliveryId = request.headers.get("linear-delivery")?.trim();
   const eventType = typeof payload.value.type === "string" ? payload.value.type : undefined;
   const action = typeof payload.value.action === "string" ? payload.value.action : undefined;
+  const ingestion = linearWebhookIngestion(payload.value);
+  let sql: ReturnType<typeof createSqlClient> | undefined;
 
-  return packageUnavailable("@repo/linear", "Linear webhook ingestion", {
-    eventType,
-    action,
-    deliveryId,
-    summary: summarizeLinearWebhook(payload.value),
-    secretConfigured: secret.value.length > 0,
-  });
+  try {
+    sql = createSqlClient();
+    const written = await upsertLinearBackfill(sql, ingestion.backfill);
+    const writtenEvidence = await upsertEvidenceItems(sql, [{
+      id: `linear:webhook:${eventType ?? "unknown"}:${deliveryId ?? String(webhookTimestamp)}`,
+      source: "linear",
+      title: `Linear ${eventType ?? "event"}${action ? ` ${action}` : ""}`,
+      summary: [
+        `Linear webhook ${eventType ?? "event"} was received.`,
+        action ? `Action: ${action}.` : "",
+        ingestion.summary.url ? `URL: ${ingestion.summary.url}.` : "",
+      ].filter(Boolean).join(" "),
+      occurredAt: new Date(webhookTimestamp).toISOString(),
+      metadata: {
+        action,
+        deliveryId,
+        eventType,
+        organizationId: ingestion.summary.organizationId,
+        url: ingestion.summary.url,
+      },
+    }]);
+
+    await insertIngestionRun(sql, {
+      source: "linear_webhook",
+      status: "success",
+      summary: `Processed Linear ${eventType ?? "event"} webhook with ${written.projects} project(s), ${written.issues} issue(s), and ${writtenEvidence} evidence item(s).`,
+    });
+
+    return jsonOk({
+      received: true,
+      eventType,
+      action,
+      deliveryId,
+      summary: ingestion.summary,
+      written,
+      writtenEvidence,
+    });
+  } catch (error) {
+    if (sql) {
+      await insertIngestionRun(sql, {
+        source: "linear_webhook",
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      }).catch(() => undefined);
+    }
+
+    return jsonError(503, "linear_webhook_ingestion_failed", error instanceof Error ? error.message : "Linear webhook ingestion failed.");
+  } finally {
+    if (sql) {
+      await closeSqlClient(sql);
+    }
+  }
 }

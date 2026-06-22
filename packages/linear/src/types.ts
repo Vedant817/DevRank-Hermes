@@ -29,3 +29,8 @@ export interface LinearWebhookResult {
   organizationId?: string;
   url?: string;
 }
+
+export interface LinearWebhookIngestion {
+  backfill: LinearBackfillResult;
+  summary: LinearWebhookResult;
+}
