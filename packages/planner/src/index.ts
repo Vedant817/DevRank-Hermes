@@ -1,62 +1,85 @@
 import type { DailyPlan, DailyPlanTask, ScoreSnapshot } from "@repo/shared";
 import { explainWeakestLanes } from "@repo/scoring";
 
-function taskForLane(lane: string): DailyPlanTask {
-  if (lane.includes("DSA")) {
-    return {
-      title: "Solve two medium DSA questions and record patterns learned.",
-      category: "dsa",
-      minutes: 45,
-      evidence: lane,
-    };
-  }
+interface PlanRule {
+  category: DailyPlanTask["category"];
+  match: string[];
+  minutes: number;
+  title: string;
+}
 
-  if (lane.includes("Backend")) {
-    return {
-      title: "Build or improve one API endpoint with validation and pagination.",
-      category: "backend",
-      minutes: 60,
-      evidence: lane,
-    };
-  }
+export interface GenerateDailyPlanOptions {
+  date?: string;
+  maxWeakLaneTasks?: number;
+  urgentLinearTask?: string;
+}
 
-  if (lane.includes("GitHub")) {
-    return {
-      title: "Improve one repository with README, tests, or architecture proof.",
-      category: "github",
-      minutes: 45,
-      evidence: lane,
-    };
-  }
+const DEFAULT_MAX_WEAK_LANE_TASKS = 3;
+const MAX_WEAK_LANE_TASKS = 8;
 
-  if (lane.includes("AI Agent")) {
-    return {
-      title: "Turn one repeated AI-agent workflow into a reusable documented skill.",
-      category: "ai_agent",
-      minutes: 30,
-      evidence: lane,
-    };
-  }
-
-  return {
-    title: `Create evidence for ${lane}.`,
+const planRules: PlanRule[] = [
+  {
+    match: ["dsa", "leetcode", "algorithm", "data structure"],
+    title: "Solve two medium DSA questions and record the patterns learned.",
+    category: "dsa",
+    minutes: 45,
+  },
+  {
+    match: ["backend", "api"],
+    title: "Build or improve one API endpoint with validation, pagination, and tests.",
+    category: "backend",
+    minutes: 60,
+  },
+  {
+    match: ["system design", "architecture"],
+    title: "Revise one system design component and document the tradeoffs.",
+    category: "system_design",
+    minutes: 45,
+  },
+  {
+    match: ["github", "portfolio", "repository", "readme", "pull request"],
+    title: "Improve one repository with README, tests, deployment, or architecture proof.",
+    category: "github",
+    minutes: 45,
+  },
+  {
+    match: ["test", "testing", "qa", "quality"],
+    title: "Add or harden tests around one user-facing or integration-critical path.",
+    category: "testing",
+    minutes: 45,
+  },
+  {
+    match: ["devops", "cloud", "vercel", "supabase", "ci", "deploy"],
+    title: "Verify one deploy, cron, database, or CI path and capture the evidence.",
+    category: "devops",
+    minutes: 40,
+  },
+  {
+    match: ["ai agent", "automation", "codex", "claude", "hermes"],
+    title: "Turn one repeated AI-agent workflow into a reusable documented skill.",
+    category: "ai_agent",
+    minutes: 30,
+  },
+  {
+    match: ["communication", "content", "public proof", "resume", "linkedin", "docs"],
+    title: "Write one evidence-backed project note, resume bullet, or public proof artifact.",
     category: "public_proof",
     minutes: 30,
-    evidence: lane,
-  };
-}
+  },
+];
 
 export function generateDailyPlan(
   snapshot: ScoreSnapshot,
-  date = new Date().toISOString().slice(0, 10),
+  dateOrOptions: string | GenerateDailyPlanOptions = {},
   urgentLinearTask?: string,
 ): DailyPlan {
-  const weakLanes = explainWeakestLanes(snapshot, 3);
+  const options = normalizeOptions(dateOrOptions, urgentLinearTask);
+  const weakLanes = explainWeakestLanes(snapshot, options.maxWeakLaneTasks);
   const tasks = weakLanes.map(taskForLane);
 
-  if (urgentLinearTask) {
+  if (options.urgentLinearTask) {
     tasks.unshift({
-      title: urgentLinearTask,
+      title: options.urgentLinearTask,
       category: "linear",
       minutes: 30,
       evidence: "Linear priority",
@@ -64,7 +87,7 @@ export function generateDailyPlan(
   }
 
   return {
-    date,
+    date: options.date,
     tasks,
     targetMinutes: tasks.reduce((total, task) => total + task.minutes, 0),
   };
@@ -76,4 +99,68 @@ export function formatDailyPlanForSlack(plan: DailyPlan): string {
     .join("\n");
 
   return `DevRank OS plan for ${plan.date}\nTarget: ${plan.targetMinutes} min\n${tasks}`;
+}
+
+function normalizeOptions(
+  dateOrOptions: string | GenerateDailyPlanOptions,
+  urgentLinearTask?: string,
+): Required<Pick<GenerateDailyPlanOptions, "date" | "maxWeakLaneTasks">> &
+  Pick<GenerateDailyPlanOptions, "urgentLinearTask"> {
+  if (typeof dateOrOptions === "string") {
+    return {
+      date: dateOrOptions,
+      maxWeakLaneTasks: DEFAULT_MAX_WEAK_LANE_TASKS,
+      urgentLinearTask: urgentLinearTask?.trim() || undefined,
+    };
+  }
+
+  return {
+    date: dateOrOptions.date ?? new Date().toISOString().slice(0, 10),
+    maxWeakLaneTasks: normalizeTaskLimit(dateOrOptions.maxWeakLaneTasks),
+    urgentLinearTask: dateOrOptions.urgentLinearTask?.trim() || undefined,
+  };
+}
+
+function taskForLane(lane: string): DailyPlanTask {
+  const normalizedLane = lane.toLowerCase();
+  const rule = planRules.find((candidate) =>
+    candidate.match.some((keyword) => keywordMatchesText(normalizedLane, keyword)),
+  );
+
+  if (!rule) {
+    return {
+      title: `Create evidence for ${lane}.`,
+      category: "public_proof",
+      minutes: 30,
+      evidence: lane,
+    };
+  }
+
+  return {
+    title: rule.title,
+    category: rule.category,
+    minutes: rule.minutes,
+    evidence: lane,
+  };
+}
+
+function keywordMatchesText(text: string, keyword: string): boolean {
+  const normalized = keyword.trim().toLowerCase();
+
+  if (normalized.length === 0) {
+    return false;
+  }
+
+  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i");
+
+  return pattern.test(text);
+}
+
+function normalizeTaskLimit(value: number | undefined): number {
+  if (value === undefined || !Number.isFinite(value)) {
+    return DEFAULT_MAX_WEAK_LANE_TASKS;
+  }
+
+  return Math.min(MAX_WEAK_LANE_TASKS, Math.max(1, Math.trunc(value)));
 }

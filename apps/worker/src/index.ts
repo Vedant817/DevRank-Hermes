@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 import "dotenv/config";
 
+import {
+  closeSqlClient,
+  createSqlClient,
+  listEvidenceItems,
+} from "@repo/db";
 import { generateDailyPlan, formatDailyPlanForSlack } from "@repo/planner";
-import { computeSdeReadinessSnapshot } from "@repo/scoring";
+import { computeSdeReadinessSnapshot, explainWeakestLanes } from "@repo/scoring";
 import { runHermesMentorSummary } from "@repo/hermes";
 import { runMarketBenchmark } from "@repo/search";
 import { sendSlackMessage } from "@repo/slack";
@@ -20,11 +25,47 @@ export async function runDailyPlanJob(evidence: EvidenceItem[] = []) {
   return { snapshot, plan, slackText };
 }
 
-export async function runWeeklyReviewJob(input: {
-  evidenceSummary: string;
-  weakestLanes: string[];
+export async function runWeeklyReviewJob(input?: {
+  evidenceSummary?: string;
+  weakestLanes?: string[];
 }) {
-  return runHermesMentorSummary(input);
+  if (input?.evidenceSummary && input.weakestLanes && input.weakestLanes.length > 0) {
+    return {
+      review: await runHermesMentorSummary({
+        evidenceSummary: input.evidenceSummary,
+        weakestLanes: input.weakestLanes,
+      }),
+      weakestLanes: input.weakestLanes,
+    };
+  }
+
+  const sql = createSqlClient();
+
+  try {
+    const evidence = await listEvidenceItems(sql, { limit: 100 });
+
+    if (evidence.length === 0) {
+      throw new Error("Weekly review requires persisted evidence. Run ingestion first.");
+    }
+
+    const snapshot = computeSdeReadinessSnapshot(evidence);
+    const weakestLanes = explainWeakestLanes(snapshot);
+    const evidenceSummary = evidence
+      .slice(0, 25)
+      .map((item) => `${item.title}: ${item.summary}`)
+      .join("\n");
+
+    return {
+      review: await runHermesMentorSummary({
+        evidenceSummary,
+        weakestLanes,
+      }),
+      evidenceCount: evidence.length,
+      weakestLanes,
+    };
+  } finally {
+    await closeSqlClient(sql);
+  }
 }
 
 export async function runMarketBenchmarkJob() {
@@ -42,7 +83,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     job === "daily-plan"
       ? () => runDailyPlanJob()
       : job === "weekly-review"
-        ? () => runWeeklyReviewJob({ evidenceSummary: "", weakestLanes: [] })
+        ? () => runWeeklyReviewJob()
         : job === "market-benchmark"
           ? () => runMarketBenchmarkJob()
           : undefined;

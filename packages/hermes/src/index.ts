@@ -3,6 +3,11 @@ export * from "./chat-summary.js";
 export * from "./reusable-skills.js";
 export * from "./skill-extraction.js";
 
+const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const DEFAULT_HERMES_MODEL = "openrouter/auto";
+const DEFAULT_HTTP_REFERER = "https://devrank-os.local";
+const DEFAULT_TITLE = "DevRank OS";
+
 export interface HermesMentorInput {
   evidenceSummary: string;
   weakestLanes: string[];
@@ -13,27 +18,59 @@ export interface HermesMentorOutput {
   summary: string;
 }
 
+export interface HermesRuntimeConfig {
+  baseUrl: string;
+  httpReferer: string;
+  model: string;
+  title: string;
+}
+
+export interface HermesMentorOptions {
+  fetch?: typeof fetch;
+}
+
+export function resolveHermesRuntimeConfig(env: RuntimeEnv): HermesRuntimeConfig {
+  return {
+    baseUrl: env.OPENROUTER_BASE_URL ?? DEFAULT_OPENROUTER_BASE_URL,
+    httpReferer: env.HERMES_HTTP_REFERER ?? DEFAULT_HTTP_REFERER,
+    model: env.HERMES_MODEL ?? DEFAULT_HERMES_MODEL,
+    title: env.HERMES_TITLE ?? DEFAULT_TITLE,
+  };
+}
+
 export async function runHermesMentorSummary(
   input: HermesMentorInput,
   env: RuntimeEnv = readRuntimeEnv(),
+  options: HermesMentorOptions = {},
 ): Promise<HermesMentorOutput> {
   const { OPENROUTER_API_KEY } = requireEnv(
     env,
     ["OPENROUTER_API_KEY"],
     "Hermes/OpenRouter mentor summary",
   );
+  const evidenceSummary = input.evidenceSummary.trim();
+  const weakestLanes = input.weakestLanes.map((lane) => lane.trim()).filter(Boolean);
 
-  const model = "qwen/qwen3-coder:free";
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+  if (evidenceSummary.length === 0) {
+    throw new Error("Hermes mentor summary requires evidenceSummary.");
+  }
+
+  if (weakestLanes.length === 0) {
+    throw new Error("Hermes mentor summary requires at least one weakest lane.");
+  }
+
+  const config = resolveHermesRuntimeConfig(env);
+  const fetchImpl = options.fetch ?? fetch;
+  const response = await fetchImpl(`${config.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${OPENROUTER_API_KEY}`,
       "Content-Type": "application/json",
-      "HTTP-Referer": "https://devrank-os.local",
-      "X-Title": "DevRank OS",
+      "HTTP-Referer": config.httpReferer,
+      "X-Title": config.title,
     },
     body: JSON.stringify({
-      model,
+      model: config.model,
       messages: [
         {
           role: "system",
@@ -42,14 +79,17 @@ export async function runHermesMentorSummary(
         },
         {
           role: "user",
-          content: `Evidence:\n${input.evidenceSummary}\n\nWeakest lanes:\n${input.weakestLanes.join(", ")}`,
+          content: `Evidence:\n${evidenceSummary}\n\nWeakest lanes:\n${weakestLanes.join(", ")}`,
         },
       ],
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`OpenRouter request failed with ${response.status}.`);
+    const errorText = await response.text().catch(() => "");
+    const detail = errorText.length > 0 ? `: ${errorText.slice(0, 240)}` : "";
+
+    throw new Error(`OpenRouter request failed with ${response.status}${detail}.`);
   }
 
   const json = await response.json() as {
@@ -62,7 +102,7 @@ export async function runHermesMentorSummary(
   }
 
   return {
-    model,
+    model: config.model,
     summary,
   };
 }

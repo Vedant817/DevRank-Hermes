@@ -12,7 +12,8 @@
   "scripts": {
     "lint": "eslint src --max-warnings 0",
     "check-types": "tsc --noEmit",
-    "build": "tsc"
+    "build": "tsc",
+    "test:unit": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@repo/scoring": "workspace:*",
@@ -23,6 +24,7 @@
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^22.15.3",
     "eslint": "^9.39.1",
+    "tsx": "^4.22.4",
     "typescript": "5.9.2"
   }
 }

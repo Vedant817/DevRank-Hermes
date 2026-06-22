@@ -18,6 +18,7 @@
     "job:weekly-review": "tsx src/index.ts weekly-review"
   },
   "dependencies": {
+    "@repo/db": "workspace:*",
     "@repo/hermes": "workspace:*",
     "@repo/planner": "workspace:*",
     "@repo/scoring": "workspace:*",

@@ -10,7 +10,7 @@ export const sdeReadinessRubric: RubricLane[] = [
   {
     label: "DSA",
     weight: 0.2,
-    keywords: ["dsa", "leetcode", "algorithm", "data structure"],
+    keywords: ["dsa", "leetcode", "algorithm", "algorithms", "data structure", "data structures"],
   },
   {
     label: "Backend/API/System Design",
@@ -25,12 +25,12 @@ export const sdeReadinessRubric: RubricLane[] = [
   {
     label: "Code Quality + Testing",
     weight: 0.15,
-    keywords: ["test", "lint", "typecheck", "refactor", "review"],
+    keywords: ["test", "tests", "testing", "qa", "lint", "typecheck", "refactor", "review"],
   },
   {
     label: "DevOps/Cloud",
     weight: 0.1,
-    keywords: ["vercel", "supabase", "ci", "deploy", "cron"],
+    keywords: ["vercel", "supabase", "ci", "deploy", "deployment", "cron"],
   },
   {
     label: "AI Agent/Automation Skills",

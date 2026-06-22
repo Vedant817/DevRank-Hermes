@@ -80,8 +80,12 @@ export async function POST(request: Request) {
 
   const weakestLanes = body.value.weakestLanes;
 
-  if (!Array.isArray(weakestLanes) || !weakestLanes.every((lane) => typeof lane === "string")) {
-    return jsonError(400, "invalid_weakest_lanes", "weakestLanes must be an array of strings.");
+  if (
+    !Array.isArray(weakestLanes) ||
+    weakestLanes.length === 0 ||
+    !weakestLanes.every((lane) => typeof lane === "string" && lane.trim().length > 0)
+  ) {
+    return jsonError(400, "invalid_weakest_lanes", "weakestLanes must be a non-empty array of strings.");
   }
 
   try {

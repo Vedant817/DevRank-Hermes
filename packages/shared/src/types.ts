@@ -38,7 +38,10 @@ export interface DailyPlanTask {
   category:
     | "dsa"
     | "backend"
+    | "frontend"
     | "system_design"
+    | "testing"
+    | "devops"
     | "github"
     | "linear"
     | "ai_agent"

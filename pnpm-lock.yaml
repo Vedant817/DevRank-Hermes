@@ -253,6 +253,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@repo/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@repo/hermes':
         specifier: workspace:*
         version: link:../../packages/hermes
@@ -510,6 +513,9 @@ importers:
       eslint:
         specifier: ^9.39.1
         version: 9.39.1
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
       typescript:
         specifier: 5.9.2
         version: 5.9.2
@@ -532,6 +538,9 @@ importers:
       eslint:
         specifier: ^9.39.1
         version: 9.39.1
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
       typescript:
         specifier: 5.9.2
         version: 5.9.2

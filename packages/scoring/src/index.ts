@@ -12,7 +12,7 @@ function scoreLane(evidence: EvidenceItem[], keywords: string[]): number {
 
   const matched = evidence.filter((item) => {
     const text = evidenceText(item);
-    return keywords.some((keyword) => text.includes(keyword));
+    return keywords.some((keyword) => keywordMatchesText(text, keyword));
   });
 
   const coverage = matched.length / Math.max(evidence.length, 1);
@@ -29,7 +29,7 @@ export function computeSdeReadinessSnapshot(
     const laneScore = scoreLane(evidence, lane.keywords);
     const matchingEvidence = evidence.filter((item) => {
       const text = evidenceText(item);
-      return lane.keywords.some((keyword) => text.includes(keyword));
+      return lane.keywords.some((keyword) => keywordMatchesText(text, keyword));
     });
 
     return {
@@ -53,6 +53,19 @@ export function computeSdeReadinessSnapshot(
     generatedAt,
     breakdown,
   };
+}
+
+function keywordMatchesText(text: string, keyword: string): boolean {
+  const normalized = keyword.trim().toLowerCase();
+
+  if (normalized.length === 0) {
+    return false;
+  }
+
+  const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i");
+
+  return pattern.test(text);
 }
 
 export function explainWeakestLanes(snapshot: ScoreSnapshot, limit = 3): string[] {

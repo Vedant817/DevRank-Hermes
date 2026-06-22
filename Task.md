@@ -301,8 +301,14 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Use `hermes model` for interactive setup.
   - [x] Or set `OPENROUTER_API_KEY`.
   - [ ] Or run `hermes chat --provider openrouter --model openrouter/auto`.
+- [x] Configure Hermes/OpenRouter in code through runtime env instead of a fixed free model:
+  - [x] `HERMES_MODEL`.
+  - [x] `OPENROUTER_BASE_URL`.
+  - [x] `HERMES_HTTP_REFERER`.
+  - [x] `HERMES_TITLE`.
 - [x] Use free OpenRouter models only for early testing, not heavy production ranking.
 - [x] Use Hermes as the reasoning/orchestration layer, not the database.
+- [x] Require real evidence summary and non-empty weakest lanes before calling OpenRouter.
 - [ ] Implement Hermes workflows for:
   - [x] Summarizing local AI-agent chats.
   - [x] Creating reusable skills.
@@ -692,11 +698,12 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Generate daily plan with:
   - [x] DSA: 2 questions.
   - [x] Backend/SDE: 60-90 min.
-  - [ ] System Design: 30 min.
+  - [x] System Design: 30 min.
   - [x] GitHub project: 45-60 min.
   - [x] Linear project task if Linear has urgent or blocked work.
   - [x] AI-agent workflow: 20 min.
   - [ ] Public proof: 1 small note/post every 2-3 days.
+- [x] Map weak testing, DevOps, system design, AI-agent, GitHub, DSA, backend, and public-proof lanes to deterministic tasks.
 - [ ] Generate weekly plan:
   - [ ] Monday: Arrays/Hashing + backend API.
   - [ ] Tuesday: Binary Search/Two Pointers + database design.

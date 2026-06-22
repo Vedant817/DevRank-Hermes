@@ -41,6 +41,17 @@ Feature-specific env can be checked with:
 pnpm devrank env:check --feature all
 ```
 
+Hermes/OpenRouter defaults to `openrouter/auto` and can be made explicit for
+production:
+
+```text
+OPENROUTER_API_KEY=...
+HERMES_MODEL=openrouter/auto
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+HERMES_HTTP_REFERER=https://your-app.example
+HERMES_TITLE=DevRank OS
+```
+
 ## Main Commands
 
 ```bash
