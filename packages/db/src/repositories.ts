@@ -71,6 +71,60 @@ type ScoreSnapshotRow = {
   created_at: Date | string;
 };
 
+type DashboardSourceRow = {
+  source: string;
+  count: string | number;
+};
+
+type DashboardCountsRow = {
+  github_repos: string | number;
+  github_pull_requests: string | number;
+  linear_projects: string | number;
+  linear_issues: string | number;
+  slack_notifications: string | number;
+};
+
+type DailyPlanRow = {
+  plan_date: Date | string;
+  target_minutes: number;
+  tasks: DailyPlan["tasks"] | string;
+  created_at: Date | string;
+};
+
+type IngestionRunRow = {
+  source: string;
+  status: string;
+  summary: string | null;
+  error: string | null;
+  finished_at: Date | string | null;
+};
+
+export interface DashboardSummary {
+  counts: {
+    evidenceItems: number;
+    githubPullRequests: number;
+    githubRepos: number;
+    linearIssues: number;
+    linearProjects: number;
+    slackNotifications: number;
+  };
+  evidenceBySource: Array<{
+    count: number;
+    source: string;
+  }>;
+  latestDailyPlan?: DailyPlan & {
+    createdAt: string;
+  };
+  latestIngestionRuns: Array<{
+    error?: string;
+    finishedAt?: string;
+    source: string;
+    status: string;
+    summary?: string;
+  }>;
+  latestScoreSnapshot?: ScoreSnapshot;
+}
+
 export async function insertScoreSnapshot(
   sql: SqlClient,
   snapshot: ScoreSnapshot,
@@ -108,6 +162,64 @@ export async function getLatestScoreSnapshot(
     overall: Number(row.overall),
     generatedAt: toIso(row.created_at),
     breakdown,
+  };
+}
+
+export async function getDashboardSummary(sql: SqlClient): Promise<DashboardSummary> {
+  const [scoreSnapshot, sourceRows, countRows, planRows, ingestionRows] = await Promise.all([
+    getLatestScoreSnapshot(sql),
+    sql<DashboardSourceRow[]>`
+      select source, count(*) as count
+      from memory_items
+      group by source
+      order by source
+    `,
+    sql<DashboardCountsRow[]>`
+      select
+        (select count(*) from github_repos) as github_repos,
+        (select count(*) from github_pull_requests) as github_pull_requests,
+        (select count(*) from linear_projects) as linear_projects,
+        (select count(*) from linear_issues) as linear_issues,
+        (select count(*) from slack_notifications) as slack_notifications
+    `,
+    sql<DailyPlanRow[]>`
+      select plan_date, tasks, target_minutes, created_at
+      from daily_plans
+      order by created_at desc
+      limit 1
+    `,
+    sql<IngestionRunRow[]>`
+      select source, status, summary, error, finished_at
+      from ingestion_runs
+      order by started_at desc
+      limit 6
+    `,
+  ]);
+  const counts = countRows[0];
+  const latestDailyPlan = planRows[0] ? dailyPlanFromRow(planRows[0]) : undefined;
+
+  return {
+    counts: {
+      evidenceItems: sourceRows.reduce((total, row) => total + Number(row.count), 0),
+      githubPullRequests: numberCount(counts?.github_pull_requests),
+      githubRepos: numberCount(counts?.github_repos),
+      linearIssues: numberCount(counts?.linear_issues),
+      linearProjects: numberCount(counts?.linear_projects),
+      slackNotifications: numberCount(counts?.slack_notifications),
+    },
+    evidenceBySource: sourceRows.map((row) => ({
+      count: Number(row.count),
+      source: row.source,
+    })),
+    latestDailyPlan,
+    latestIngestionRuns: ingestionRows.map((row) => ({
+      source: row.source,
+      status: row.status,
+      ...(row.summary ? { summary: row.summary } : {}),
+      ...(row.error ? { error: row.error } : {}),
+      ...(row.finished_at ? { finishedAt: toIso(row.finished_at) } : {}),
+    })),
+    latestScoreSnapshot: scoreSnapshot,
   };
 }
 
@@ -411,6 +523,24 @@ function rowToEvidenceItem(row: MemoryItemRow): EvidenceItem {
   }
 
   return item;
+}
+
+function dailyPlanFromRow(row: DailyPlanRow): DailyPlan & { createdAt: string } {
+  const tasks =
+    typeof row.tasks === "string"
+      ? JSON.parse(row.tasks) as DailyPlan["tasks"]
+      : row.tasks;
+
+  return {
+    date: row.plan_date instanceof Date ? row.plan_date.toISOString().slice(0, 10) : String(row.plan_date),
+    targetMinutes: row.target_minutes,
+    tasks,
+    createdAt: toIso(row.created_at),
+  };
+}
+
+function numberCount(value: string | number | undefined) {
+  return Number(value ?? 0);
 }
 
 function toIso(value: Date | string): string {

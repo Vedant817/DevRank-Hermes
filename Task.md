@@ -74,7 +74,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Plans.
   - [ ] Rankings.
   - [ ] Daily targets.
-  - [ ] Dashboard metrics.
+  - [x] Dashboard metrics.
 - [ ] Ensure pgvector supports semantic memory search over:
   - [ ] AI chats.
   - [ ] Repo summaries.
@@ -544,18 +544,23 @@ Use this file as the step-by-step checkpoint list from project start to project 
 ## 14. Dashboards
 
 - [x] Build dashboard shell in `apps/web`.
+- [x] Back dashboard shell with live Supabase/Postgres summary queries and setup empty states.
+- [x] Show latest score snapshot and rubric breakdown from `score_snapshots`.
+- [x] Show source health/counts from GitHub, Linear, local sessions, Hermes, and Slack.
+- [x] Show latest daily plan from `daily_plans`.
+- [x] Show recent ingestion runs from `ingestion_runs`.
 - [ ] Create Dashboard A: Skill Rank Dashboard.
 - [ ] Skill Rank Dashboard shows:
-  - [ ] Overall SDE readiness score.
-  - [ ] Backend score.
+  - [x] Overall SDE readiness score.
+  - [x] Backend score.
   - [ ] Frontend score.
-  - [ ] System design score.
-  - [ ] DSA score.
-  - [ ] Testing/QA automation score.
-  - [ ] DevOps score.
-  - [ ] AI-agent/orchestration score.
-  - [ ] GitHub portfolio score.
-  - [ ] Communication/content score.
+  - [x] System design score.
+  - [x] DSA score.
+  - [x] Testing/QA automation score.
+  - [x] DevOps score.
+  - [x] AI-agent/orchestration score.
+  - [x] GitHub portfolio score.
+  - [x] Communication/content score.
 - [ ] Create Dashboard B: AI Agent Learning Dashboard.
 - [ ] AI Agent Learning Dashboard shows:
   - [ ] Which agents were used most.
@@ -732,7 +737,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Keep Supabase Postgres + pgvector as the canonical store for:
   - [x] Scores.
   - [x] Skill evidence.
-  - [ ] Dashboard metrics.
+  - [x] Dashboard metrics.
   - [x] GitHub and Linear sync state.
   - [x] Audit trail.
   - [x] Redaction status.
