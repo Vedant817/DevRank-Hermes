@@ -197,4 +197,15 @@ export const migrations = [
         on memory_embeddings (memory_item_id, model);
     `,
   },
+  {
+    id: "006_ai_sessions_source_identity",
+    sql: `
+      alter table ai_sessions
+        add column if not exists source_id text;
+
+      create unique index if not exists ai_sessions_source_type_source_id_unique
+        on ai_sessions (source_type, source_id)
+        where source_id is not null;
+    `,
+  },
 ];

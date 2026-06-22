@@ -937,6 +937,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Local collector discovers Antigravity data.
 - [x] Secret redaction blocks sensitive values before upload.
 - [x] Raw transcripts stay local by default.
+- [x] Full redacted transcripts can be stored in Postgres only after explicit upload policy.
 - [x] Session summaries are stored in Supabase Postgres.
 - [x] Embeddings are generated only from summarized and redacted content.
 - [x] External context writes are blocked until summarization and redaction pass.

@@ -63,11 +63,15 @@ EMBEDDING_MODEL=openai/text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
 ```
 
+`--upload-raw-chats` stores the full redacted transcript in Postgres. The local
+collector still refuses to run if secret redaction is disabled.
+
 ## Main Commands
 
 ```bash
 pnpm devrank ingest:local-ai --codex-sessions-dir ~/.codex/sessions
 pnpm devrank ingest:local-ai --codex-sessions-dir ~/.codex/sessions --store-embeddings
+pnpm devrank ingest:local-ai --codex-sessions-dir ~/.codex/sessions --upload-raw-chats
 pnpm devrank scores:recompute
 pnpm devrank planner:daily
 pnpm devrank github:backfill --user vedantmahajan271

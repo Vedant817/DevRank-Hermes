@@ -2,6 +2,7 @@ import {
   closeSqlClient,
   createSqlClient,
   insertIngestionRun,
+  upsertAiChatSessions,
   upsertEvidenceEmbeddings,
   upsertEvidenceItems,
 } from "@repo/db";
@@ -74,14 +75,16 @@ export async function POST(request: Request) {
     const sql = createSqlClient();
     let writtenEmbeddings = 0;
     let writtenEvidence = 0;
+    let writtenTranscripts = 0;
 
     try {
       writtenEvidence = await upsertEvidenceItems(sql, result.evidence);
       writtenEmbeddings = await upsertEvidenceEmbeddings(sql, result.embeddings);
+      writtenTranscripts = await upsertAiChatSessions(sql, result.transcripts);
       await insertIngestionRun(sql, {
         source: `local_session:${sourcePath}`,
         status: "success",
-        summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), and ${writtenEmbeddings} embedding(s).`,
+        summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), ${writtenEmbeddings} embedding(s), and ${writtenTranscripts} transcript(s).`,
       });
     } finally {
       await closeSqlClient(sql);
@@ -95,6 +98,7 @@ export async function POST(request: Request) {
       embeddingCount: result.embeddings.length,
       writtenEvidence,
       writtenEmbeddings,
+      writtenTranscripts,
       redactionCount: result.redactionCount,
       privacy: result.privacy,
       evidence: result.evidence,

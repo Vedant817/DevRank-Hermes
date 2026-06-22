@@ -14,6 +14,7 @@ import {
   insertScoreSnapshot,
   listEvidenceItems,
   runDbMigrations,
+  upsertAiChatSessions,
   upsertGithubBackfill,
   upsertEvidenceEmbeddings,
   upsertEvidenceItems,
@@ -1064,16 +1065,20 @@ async function persistIngestionResult(context: CommandContext, result: unknown, 
     const writtenEmbeddings = Array.isArray(result.embeddings)
       ? await upsertEvidenceEmbeddings(sql, result.embeddings)
       : 0;
+    const writtenTranscripts = Array.isArray(result.transcripts)
+      ? await upsertAiChatSessions(sql, result.transcripts)
+      : 0;
     await insertIngestionRun(sql, {
       source,
       status: "success",
-      summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), and ${writtenEmbeddings} embedding(s).`,
+      summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), ${writtenEmbeddings} embedding(s), and ${writtenTranscripts} transcript(s).`,
     });
 
     return {
       ...result,
       writtenEmbeddings,
       writtenEvidence,
+      writtenTranscripts,
     };
   } catch (error) {
     await insertIngestionRun(sql, {
@@ -1091,6 +1096,7 @@ function isIngestionLike(value: unknown): value is {
   evidence: Parameters<typeof upsertEvidenceItems>[1];
   embeddings?: Parameters<typeof upsertEvidenceEmbeddings>[1];
   sessions: unknown[];
+  transcripts?: Parameters<typeof upsertAiChatSessions>[1];
 } {
   if (typeof value !== "object" || value === null) {
     return false;

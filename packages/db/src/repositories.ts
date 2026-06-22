@@ -62,6 +62,23 @@ export interface PersistableEvidenceEmbedding {
   sourceId: string;
 }
 
+export interface PersistableAiChatSession {
+  agentName: string;
+  messages: Array<{
+    content: string;
+    createdAt?: string;
+    role: string;
+  }>;
+  rawStored: boolean;
+  skillTags: string[];
+  source: EvidenceSource;
+  sourceId: string;
+  sourcePath?: string;
+  startedAt?: string;
+  summary: string;
+  title: string;
+}
+
 type MemoryItemRow = {
   id: string;
   source: string;
@@ -395,6 +412,88 @@ export async function upsertEvidenceEmbeddings(
     `;
 
     written += rows.length;
+  }
+
+  return written;
+}
+
+export async function upsertAiChatSessions(
+  sql: SqlClient,
+  sessions: PersistableAiChatSession[],
+): Promise<number> {
+  let written = 0;
+
+  for (const session of sessions) {
+    const agentRows = await sql<{ id: string }[]>`
+      insert into ai_agents (name, source)
+      values (${session.agentName}, ${session.source})
+      on conflict (name) do update set
+        source = excluded.source
+      returning id
+    `;
+    const agentId = agentRows[0]?.id;
+
+    if (!agentId) {
+      continue;
+    }
+
+    const sessionRows = await sql<{ id: string }[]>`
+      insert into ai_sessions (
+        agent_id,
+        source_type,
+        source_id,
+        source_path,
+        title,
+        started_at,
+        raw_stored
+      )
+      values (
+        ${agentId},
+        ${session.source},
+        ${session.sourceId},
+        ${session.sourcePath ?? null},
+        ${session.title},
+        ${session.startedAt ?? null},
+        ${session.rawStored}
+      )
+      on conflict (source_type, source_id)
+        where source_id is not null
+      do update set
+        agent_id = excluded.agent_id,
+        source_path = excluded.source_path,
+        title = excluded.title,
+        started_at = excluded.started_at,
+        raw_stored = excluded.raw_stored
+      returning id
+    `;
+    const sessionId = sessionRows[0]?.id;
+
+    if (!sessionId) {
+      continue;
+    }
+
+    await sql`delete from ai_messages where session_id = ${sessionId}`;
+
+    for (const message of session.messages) {
+      if (message.createdAt) {
+        await sql`
+          insert into ai_messages (session_id, role, content, created_at)
+          values (${sessionId}, ${message.role}, ${message.content}, ${message.createdAt})
+        `;
+      } else {
+        await sql`
+          insert into ai_messages (session_id, role, content)
+          values (${sessionId}, ${message.role}, ${message.content})
+        `;
+      }
+    }
+
+    await sql`delete from ai_session_summaries where session_id = ${sessionId}`;
+    await sql`
+      insert into ai_session_summaries (session_id, summary, redaction_status, skill_tags)
+      values (${sessionId}, ${session.summary}, 'passed', ${session.skillTags})
+    `;
+    written += 1;
   }
 
   return written;

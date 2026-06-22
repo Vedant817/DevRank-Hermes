@@ -9,7 +9,8 @@ and sends Slack targets.
 
 - `/`: database-backed dashboard for scores, evidence sources, daily plans, and
   ingestion runs.
-- `/api/ingest/local-ai`: local-agent upload path for redacted session evidence.
+- `/api/ingest/local-ai`: local-agent upload path for redacted session evidence,
+  optional redacted transcripts, and optional summary embeddings.
 - `/api/github/webhook`: GitHub webhook endpoint with signature verification.
 - `/api/linear/webhook`: Linear webhook endpoint with signature verification.
 - `/api/scores/recompute`: recompute and persist score snapshots.

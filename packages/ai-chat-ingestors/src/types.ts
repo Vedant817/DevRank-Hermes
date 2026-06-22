@@ -28,13 +28,14 @@ export interface IngestionResult {
   sessions: ParsedSession[];
   evidence: EvidenceItem[];
   embeddings: EvidenceEmbedding[];
+  transcripts: AiChatTranscriptRecord[];
   redactionCount: number;
   adapterCounts: Record<string, number>;
   privacy: {
     embeddingStatus: "disabled" | "generated";
-    rawStorageStatus: "local_only";
+    rawStorageStatus: "local_only" | "redacted_cloud";
     redactionStatus: "passed";
-    uploadRawChats: false;
+    uploadRawChats: boolean;
     storeEmbeddings: boolean;
   };
 }
@@ -50,6 +51,19 @@ export type LocalAiEmbeddingGenerator = (texts: string[]) => Promise<{
   embeddings: number[][];
   model: string;
 }>;
+
+export interface AiChatTranscriptRecord {
+  agentName: string;
+  messages: ChatMessage[];
+  rawStored: boolean;
+  skillTags: string[];
+  source: EvidenceSource;
+  sourceId: string;
+  sourcePath?: string;
+  startedAt?: string;
+  summary: string;
+  title: string;
+}
 
 export interface LocalAiIngestionOptions {
   codexSessionsDir?: string;

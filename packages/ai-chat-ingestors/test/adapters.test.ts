@@ -121,6 +121,7 @@ test("ingests through the adapter registry", async () => {
   assert.equal(result.adapterCounts.codex, 1);
   assert.equal(result.evidence.length, 1);
   assert.deepEqual(result.embeddings, []);
+  assert.deepEqual(result.transcripts, []);
   assert.deepEqual(result.privacy, {
     embeddingStatus: "disabled",
     rawStorageStatus: "local_only",
@@ -130,11 +131,7 @@ test("ingests through the adapter registry", async () => {
   });
 });
 
-test("rejects unsupported production privacy modes instead of ignoring flags", async () => {
-  await assert.rejects(
-    ingestLocalAiChats({ enabledAdapters: [], rawStorageEnabled: true }),
-    /Raw chat cloud storage is not implemented/,
-  );
+test("rejects unsafe privacy modes instead of ignoring flags", async () => {
   await assert.rejects(
     ingestLocalAiChats({ enabledAdapters: [], redactSecrets: false }),
     /requires secret redaction/,
@@ -202,4 +199,27 @@ test("generates embeddings from redacted evidence summaries when enabled", async
   assert.equal(result.embeddings[0]?.sourceId, result.evidence[0]?.id);
   assert.match(generatedInputs[0]?.[0] ?? "", /\[REDACTED_SECRET\]/);
   assert.doesNotMatch(generatedInputs[0]?.[0] ?? "", /secret-value/);
+});
+
+test("prepares redacted transcript records only when raw cloud storage is explicitly enabled", async () => {
+  const root = await mkdtemp(join(tmpdir(), "devrank-transcript-storage-"));
+  const file = join(root, "session.jsonl");
+
+  await writeFile(file, JSON.stringify({
+    role: "user",
+    message: "Review this with api_key=secret-value",
+  }));
+
+  const result = await ingestLocalAiChats({
+    enabledAdapters: ["codex"],
+    rawStorageEnabled: true,
+    sourceRoots: [root],
+  });
+
+  assert.equal(result.privacy.rawStorageStatus, "redacted_cloud");
+  assert.equal(result.privacy.uploadRawChats, true);
+  assert.equal(result.transcripts.length, 1);
+  assert.equal(result.transcripts[0]?.rawStored, true);
+  assert.match(result.transcripts[0]?.messages[0]?.content ?? "", /\[REDACTED_SECRET\]/);
+  assert.doesNotMatch(result.transcripts[0]?.messages[0]?.content ?? "", /secret-value/);
 });

@@ -7,6 +7,7 @@ import {
   closeSqlClient,
   createSqlClient,
   insertIngestionRun,
+  upsertAiChatSessions,
   upsertEvidenceEmbeddings,
   upsertEvidenceItems,
 } from "@repo/db";
@@ -108,10 +109,11 @@ async function ingestAndMaybePersist(input: {
   try {
     await upsertEvidenceItems(sql, result.evidence);
     const writtenEmbeddings = await upsertEvidenceEmbeddings(sql, result.embeddings);
+    const writtenTranscripts = await upsertAiChatSessions(sql, result.transcripts);
     await insertIngestionRun(sql, {
       source: `local_session:${input.codexSessionsDir}`,
       status: "success",
-      summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), and ${writtenEmbeddings} embedding(s).`,
+      summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), ${writtenEmbeddings} embedding(s), and ${writtenTranscripts} transcript(s).`,
     });
   } catch (error) {
     await insertIngestionRun(sql, {

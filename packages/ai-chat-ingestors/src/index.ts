@@ -27,11 +27,13 @@ export async function ingestLocalAiChats(options: LocalAiIngestionOptions = {}):
   const embeddings = privacy.storeEmbeddings
     ? await buildEmbeddings(evidence, options.embeddingGenerator ?? ((texts) => embedTexts(texts)))
     : [];
+  const transcripts = privacy.uploadRawChats ? buildTranscriptRecords(sessions, evidence) : [];
 
   return {
     sessions,
     evidence,
     embeddings,
+    transcripts,
     redactionCount: sessions.reduce((total, session) => total + session.redactions.length, 0),
     adapterCounts,
     privacy,
@@ -43,17 +45,37 @@ function resolvePrivacy(options: LocalAiIngestionOptions): IngestionResult["priv
     throw new Error("Local AI ingestion requires secret redaction for production-safe evidence.");
   }
 
-  if (options.rawStorageEnabled === true) {
-    throw new Error("Raw chat cloud storage is not implemented; keep raw transcripts local.");
-  }
-
   return {
     embeddingStatus: options.storeEmbeddings === true ? "generated" : "disabled",
-    rawStorageStatus: "local_only",
+    rawStorageStatus: options.rawStorageEnabled === true ? "redacted_cloud" : "local_only",
     redactionStatus: "passed",
-    uploadRawChats: false,
+    uploadRawChats: options.rawStorageEnabled === true,
     storeEmbeddings: options.storeEmbeddings === true,
   };
+}
+
+function buildTranscriptRecords(
+  sessions: IngestionResult["sessions"],
+  evidence: IngestionResult["evidence"],
+): IngestionResult["transcripts"] {
+  const evidenceById = new Map(evidence.map((item) => [item.id, item]));
+
+  return sessions.map((session) => {
+    const item = evidenceById.get(session.id);
+
+    return {
+      agentName: session.agentName,
+      messages: session.messages,
+      rawStored: true,
+      skillTags: session.skillTags,
+      source: session.source,
+      sourceId: session.id,
+      sourcePath: session.sourcePath,
+      startedAt: session.startedAt,
+      summary: item?.summary ?? session.title,
+      title: session.title,
+    };
+  });
 }
 
 async function buildEmbeddings(
