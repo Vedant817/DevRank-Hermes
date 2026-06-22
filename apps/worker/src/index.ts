@@ -51,12 +51,9 @@ export async function runDailyPlanJob(evidence?: EvidenceItem[]) {
     });
     await insertDailyPlan(sql, plan);
     const slackText = formatDailyPlanForSlack(plan);
+    const slack = await sendSlackMessage(slackText);
 
-    if (process.env.SLACK_WEBHOOK_URL) {
-      await sendSlackMessage(slackText);
-    }
-
-    return { snapshot, plan, linearIssue, slackText, stored: true };
+    return { snapshot, plan, linearIssue, slack, slackText, stored: true };
   } finally {
     await closeSqlClient(sql);
   }
@@ -66,12 +63,9 @@ async function createDailyPlanFromEvidence(evidence: EvidenceItem[], stored: boo
   const snapshot = computeSdeReadinessSnapshot(evidence);
   const plan = generateDailyPlan(snapshot);
   const slackText = formatDailyPlanForSlack(plan);
+  const slack = await sendSlackMessage(slackText);
 
-  if (process.env.SLACK_WEBHOOK_URL) {
-    await sendSlackMessage(slackText);
-  }
-
-  return { snapshot, plan, slackText, stored };
+  return { snapshot, plan, slack, slackText, stored };
 }
 
 export async function runWeeklyReviewJob(input?: {

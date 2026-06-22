@@ -11,6 +11,7 @@ import { computeSdeReadinessSnapshot } from "@repo/scoring";
 import { sendSlackMessage } from "@repo/slack";
 import {
   getOptionalString,
+  getRequiredEnv,
   isJsonObject,
   jsonError,
   jsonOk,
@@ -62,15 +63,20 @@ export async function GET(request: Request) {
       });
       await insertDailyPlan(sql, plan);
       const slackText = formatDailyPlanForSlack(plan);
-      const slack = process.env.SLACK_WEBHOOK_URL
-        ? await sendSlackMessage(slackText)
-        : undefined;
+      const slackEnv = getRequiredEnv("SLACK_WEBHOOK_URL");
+
+      if (!slackEnv.ok) {
+        return slackEnv.response;
+      }
+
+      const slack = await sendSlackMessage(slackText);
 
       return jsonOk({
         plan,
         linearIssue,
         slackText,
-        slackDelivered: slack !== undefined,
+        slackDelivered: true,
+        slack,
       });
     } finally {
       await closeSqlClient(sql);

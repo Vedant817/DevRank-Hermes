@@ -551,6 +551,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Include AI-agent skill target:
   - [x] Use Hermes/Codex/Claude to generate tests.
   - [x] Manually verify and document what changed.
+- [x] Missing Slack webhook fails clearly for scheduled daily delivery.
 - [ ] Test Slack delivery manually.
 - [ ] Test Slack delivery through cron.
 
