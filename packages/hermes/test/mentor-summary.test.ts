@@ -5,7 +5,21 @@ import {
   runHermesMentorSummary,
 } from "../src/index.js";
 
-test("resolves Hermes runtime config from env with OpenRouter defaults", () => {
+test("resolves Hermes runtime config from provider-neutral env", () => {
+  assert.deepEqual(resolveHermesRuntimeConfig({
+    AI_BASE_URL: "https://llm.example/v1",
+    AI_HTTP_REFERER: "https://app.example",
+    AI_MODEL: "provider/model",
+    AI_TITLE: "DevRank",
+  }), {
+    baseUrl: "https://llm.example/v1",
+    httpReferer: "https://app.example",
+    model: "provider/model",
+    title: "DevRank",
+  });
+});
+
+test("falls back to OpenRouter-compatible Hermes defaults", () => {
   assert.deepEqual(resolveHermesRuntimeConfig({ HERMES_MODEL: "anthropic/claude-3.5-haiku" }), {
     baseUrl: "https://openrouter.ai/api/v1",
     httpReferer: "https://devrank-os.local",
@@ -34,24 +48,25 @@ test("sends mentor summary request with configured model and endpoint", async ()
       weakestLanes: ["Backend/API/System Design"],
     },
     {
-      OPENROUTER_API_KEY: "test-key",
-      OPENROUTER_BASE_URL: "https://openrouter.example/api/v1/",
-      HERMES_MODEL: "google/gemini-flash-1.5",
-      HERMES_HTTP_REFERER: "https://devrank.example",
-      HERMES_TITLE: "DevRank Production",
+      AI_API_KEY: "test-key",
+      AI_BASE_URL: "https://provider.example/api/v1/",
+      AI_MODEL: "google/gemini-flash-1.5",
+      AI_HTTP_REFERER: "https://devrank.example",
+      AI_TITLE: "DevRank Production",
     },
     { fetch: fetchMock },
   );
 
   assert.equal(result.model, "google/gemini-flash-1.5");
   assert.equal(result.summary, "Focus on backend tests next.");
-  assert.equal(requests[0]?.url, "https://openrouter.example/api/v1/chat/completions");
+  assert.equal(requests[0]?.url, "https://provider.example/api/v1/chat/completions");
+  assert.equal(requests[0]?.headers.get("Authorization"), "Bearer test-key");
   assert.equal(requests[0]?.headers.get("HTTP-Referer"), "https://devrank.example");
   assert.equal(requests[0]?.headers.get("X-Title"), "DevRank Production");
   assert.equal((requests[0]?.body as { model?: string }).model, "google/gemini-flash-1.5");
 });
 
-test("rejects empty evidence before calling OpenRouter", async () => {
+test("rejects empty evidence before calling AI provider", async () => {
   await assert.rejects(
     runHermesMentorSummary(
       { evidenceSummary: " ", weakestLanes: ["DSA"] },

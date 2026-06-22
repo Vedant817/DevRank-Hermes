@@ -31,10 +31,10 @@ export interface HermesMentorOptions {
 
 export function resolveHermesRuntimeConfig(env: RuntimeEnv): HermesRuntimeConfig {
   return {
-    baseUrl: env.OPENROUTER_BASE_URL ?? DEFAULT_OPENROUTER_BASE_URL,
-    httpReferer: env.HERMES_HTTP_REFERER ?? DEFAULT_HTTP_REFERER,
-    model: env.HERMES_MODEL ?? DEFAULT_HERMES_MODEL,
-    title: env.HERMES_TITLE ?? DEFAULT_TITLE,
+    baseUrl: env.AI_BASE_URL ?? env.OPENROUTER_BASE_URL ?? DEFAULT_OPENROUTER_BASE_URL,
+    httpReferer: env.AI_HTTP_REFERER ?? env.HERMES_HTTP_REFERER ?? DEFAULT_HTTP_REFERER,
+    model: env.AI_MODEL ?? env.HERMES_MODEL ?? DEFAULT_HERMES_MODEL,
+    title: env.AI_TITLE ?? env.HERMES_TITLE ?? DEFAULT_TITLE,
   };
 }
 
@@ -43,11 +43,7 @@ export async function runHermesMentorSummary(
   env: RuntimeEnv = readRuntimeEnv(),
   options: HermesMentorOptions = {},
 ): Promise<HermesMentorOutput> {
-  const { OPENROUTER_API_KEY } = requireEnv(
-    env,
-    ["OPENROUTER_API_KEY"],
-    "Hermes/OpenRouter mentor summary",
-  );
+  const apiKey = hermesApiKey(env);
   const evidenceSummary = input.evidenceSummary.trim();
   const weakestLanes = input.weakestLanes.map((lane) => lane.trim()).filter(Boolean);
 
@@ -64,7 +60,7 @@ export async function runHermesMentorSummary(
   const response = await fetchImpl(`${config.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
       "HTTP-Referer": config.httpReferer,
       "X-Title": config.title,
@@ -89,7 +85,7 @@ export async function runHermesMentorSummary(
     const errorText = await response.text().catch(() => "");
     const detail = errorText.length > 0 ? `: ${errorText.slice(0, 240)}` : "";
 
-    throw new Error(`OpenRouter request failed with ${response.status}${detail}.`);
+    throw new Error(`AI provider request failed with ${response.status}${detail}.`);
   }
 
   const json = await response.json() as {
@@ -98,11 +94,23 @@ export async function runHermesMentorSummary(
   const summary = json.choices?.[0]?.message?.content;
 
   if (!summary) {
-    throw new Error("OpenRouter response did not include mentor summary text.");
+    throw new Error("AI provider response did not include mentor summary text.");
   }
 
   return {
     model: config.model,
     summary,
   };
+}
+
+function hermesApiKey(env: RuntimeEnv): string {
+  if (env.AI_API_KEY) {
+    return env.AI_API_KEY;
+  }
+
+  if (env.OPENROUTER_API_KEY) {
+    return env.OPENROUTER_API_KEY;
+  }
+
+  return requireEnv(env, ["AI_API_KEY"], "Hermes mentor summary").AI_API_KEY;
 }

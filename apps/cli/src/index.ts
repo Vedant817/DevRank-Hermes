@@ -128,8 +128,8 @@ const cronRequirement: EnvRequirement = {
 };
 
 const hermesRequirement: EnvRequirement = {
-  label: "Hermes/OpenRouter auth",
-  oneOf: [["OPENROUTER_API_KEY"]],
+  label: "Hermes AI provider auth",
+  oneOf: [["AI_API_KEY"], ["OPENROUTER_API_KEY"]],
 };
 
 const embeddingsRequirement: EnvRequirement = {
