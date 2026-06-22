@@ -1,6 +1,7 @@
 import {
   closeSqlClient,
   createSqlClient,
+  getHighestPriorityLinearPlanningIssue,
   getLatestScoreSnapshot,
   insertDailyPlan,
 } from "@repo/db";
@@ -43,7 +44,12 @@ export async function GET(request: Request) {
         return jsonError(422, "snapshot_required", "No persisted score snapshot exists yet. Run /api/scores/recompute first.");
       }
 
-      const plan = generateDailyPlan(snapshot);
+      const linearIssue = await getHighestPriorityLinearPlanningIssue(sql);
+      const plan = generateDailyPlan(snapshot, {
+        urgentLinearTask: linearIssue
+          ? `Linear ${linearIssue.identifier}: ${linearIssue.title}`
+          : undefined,
+      });
       await insertDailyPlan(sql, plan);
       const slackText = formatDailyPlanForSlack(plan);
       const slack = process.env.SLACK_WEBHOOK_URL
@@ -52,6 +58,7 @@ export async function GET(request: Request) {
 
       return jsonOk({
         plan,
+        linearIssue,
         slackText,
         slackDelivered: slack !== undefined,
       });

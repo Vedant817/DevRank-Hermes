@@ -139,6 +139,14 @@ type LinearIssueEvidenceRow = {
   synced_at: Date | string;
 };
 
+type LinearPlanningIssueRow = {
+  identifier: string;
+  title: string;
+  state: string | null;
+  priority: number | null;
+  url: string | null;
+};
+
 export type ScoringEvidenceScope = "all" | "user" | "repo" | "pull_request";
 
 export interface DashboardSummary {
@@ -263,6 +271,35 @@ export async function getDashboardSummary(sql: SqlClient): Promise<DashboardSumm
     })),
     latestScoreSnapshot: scoreSnapshot,
   };
+}
+
+export async function getHighestPriorityLinearPlanningIssue(
+  sql: SqlClient,
+): Promise<{
+  identifier: string;
+  priority: number | null;
+  state: string | null;
+  title: string;
+  url: string | null;
+} | undefined> {
+  const rows = await sql<LinearPlanningIssueRow[]>`
+    select identifier, title, state, priority, url
+    from linear_issues
+    where coalesce(state, '') !~* '^(done|completed|canceled|cancelled)$'
+    order by
+      case when coalesce(state, '') ilike '%block%' then 0 else 1 end,
+      case priority
+        when 1 then 0
+        when 2 then 1
+        when 3 then 2
+        when 4 then 3
+        else 4
+      end,
+      synced_at desc
+    limit 1
+  `;
+
+  return rows[0];
 }
 
 export async function insertDailyPlan(

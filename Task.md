@@ -469,11 +469,11 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Connect Linear project work to daily and weekly plans.
   - [ ] Connect completed issues to skill evidence and resume-worthy proof.
   - [ ] Keep GitHub PR evidence as the stronger engineering proof when both exist.
-- [ ] Use Linear data in planning:
-  - [ ] Pull highest-priority open project tasks into daily plans.
+- [x] Use Linear data in planning:
+  - [x] Pull highest-priority open project tasks into daily plans.
   - [ ] Detect stalled project work.
   - [ ] Recommend one small project task for non-zero progress days.
-  - [ ] Avoid creating daily plans that ignore urgent Linear project work.
+  - [x] Avoid creating daily plans that ignore urgent Linear project work.
 - [ ] Verify Linear sync:
   - [ ] Backfill imports projects and issues.
   - [ ] Webhook updates project dashboard after issue changes.

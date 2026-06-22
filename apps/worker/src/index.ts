@@ -4,6 +4,7 @@ import "dotenv/config";
 import {
   closeSqlClient,
   createSqlClient,
+  getHighestPriorityLinearPlanningIssue,
   getLatestScoreSnapshot,
   insertDailyPlan,
   insertScoreSnapshot,
@@ -42,7 +43,12 @@ export async function runDailyPlanJob(evidence?: EvidenceItem[]) {
       await insertScoreSnapshot(sql, snapshot);
     }
 
-    const plan = generateDailyPlan(snapshot);
+    const linearIssue = await getHighestPriorityLinearPlanningIssue(sql);
+    const plan = generateDailyPlan(snapshot, {
+      urgentLinearTask: linearIssue
+        ? `Linear ${linearIssue.identifier}: ${linearIssue.title}`
+        : undefined,
+    });
     await insertDailyPlan(sql, plan);
     const slackText = formatDailyPlanForSlack(plan);
 
@@ -50,7 +56,7 @@ export async function runDailyPlanJob(evidence?: EvidenceItem[]) {
       await sendSlackMessage(slackText);
     }
 
-    return { snapshot, plan, slackText, stored: true };
+    return { snapshot, plan, linearIssue, slackText, stored: true };
   } finally {
     await closeSqlClient(sql);
   }
