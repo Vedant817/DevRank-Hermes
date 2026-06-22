@@ -6,7 +6,7 @@
     "dev": "turbo run dev",
     "devrank": "pnpm --filter @repo/cli devrank",
     "lint": "turbo run lint",
-    "test": "turbo run check-types && pnpm --filter @repo/hermes build && pnpm --filter @repo/ai-chat-ingestors test:unit && pnpm --filter @repo/hermes test:unit && pnpm --filter @repo/local-agent test:unit",
+    "test": "turbo run check-types && pnpm --filter @repo/hermes build && pnpm --filter @repo/ai-chat-ingestors test:unit && pnpm --filter @repo/hermes test:unit && pnpm --filter @repo/local-agent test:unit && pnpm --filter @repo/github test:unit",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"
   },

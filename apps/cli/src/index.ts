@@ -14,6 +14,7 @@ import {
   insertScoreSnapshot,
   listEvidenceItems,
   runDbMigrations,
+  upsertGithubBackfill,
   upsertEvidenceItems,
 } from "@repo/db";
 import { buildReusableSkillArtifacts, writeReusableSkillArtifacts } from "@repo/hermes";
@@ -833,11 +834,11 @@ async function invokeLocalAiIngest(moduleExports: ModuleExports, context: Comman
   return handler(context);
 }
 
-function invokeGithubBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+async function invokeGithubBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
   const directHandler = optionalFunction(moduleExports, ["backfillGitHub", "backfillGithub", "githubBackfill", "run"]);
 
   if (directHandler) {
-    return directHandler(context);
+    return persistGithubBackfillResult(context, await directHandler(context));
   }
 
   const token = envValue(context.env, "GITHUB_PERSONAL_ACCESS_TOKEN") ?? envValue(context.env, "GITHUB_TOKEN");
@@ -859,7 +860,38 @@ function invokeGithubBackfill(moduleExports: ModuleExports, context: CommandCont
     GITHUB_PERSONAL_ACCESS_TOKEN: token,
   });
 
-  return backfillGithubUser(client, configString(context, "user"));
+  return persistGithubBackfillResult(context, await backfillGithubUser(client, configString(context, "user")));
+}
+
+async function persistGithubBackfillResult(context: CommandContext, result: unknown) {
+  if (configBoolean(context, "dryRun") || !isGithubBackfillLike(result)) {
+    return result;
+  }
+
+  const sql = createSqlClient();
+
+  try {
+    const written = await upsertGithubBackfill(sql, result);
+    await insertIngestionRun(sql, {
+      source: "github_backfill",
+      status: "success",
+      summary: `Imported ${written.repos} GitHub repo(s) and ${written.pullRequests} pull request(s).`,
+    });
+
+    return {
+      ...result,
+      written,
+    };
+  } catch (error) {
+    await insertIngestionRun(sql, {
+      source: "github_backfill",
+      status: "failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  } finally {
+    await closeSqlClient(sql);
+  }
 }
 
 function invokeLinearBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
@@ -1023,6 +1055,15 @@ function isIngestionLike(value: unknown): value is {
 
   const record = value as Record<string, unknown>;
   return Array.isArray(record.evidence) && Array.isArray(record.sessions);
+}
+
+function isGithubBackfillLike(value: unknown): value is Parameters<typeof upsertGithubBackfill>[1] {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return Array.isArray(record.repos) && Array.isArray(record.pullRequests);
 }
 
 function codexSessionsDir(context: CommandContext) {

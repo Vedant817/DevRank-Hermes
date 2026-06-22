@@ -1,6 +1,35 @@
 import type { DailyPlan, EvidenceItem, EvidenceSource, ScoreBreakdown, ScoreSnapshot } from "@repo/shared";
 import type { SqlClient } from "./client.js";
 
+export interface PersistableGithubRepo {
+  id: number;
+  owner: string;
+  name: string;
+  fullName: string;
+  private: boolean;
+  defaultBranch: string | null;
+  htmlUrl: string | null;
+  language: string | null;
+  pushedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface PersistableGithubPullRequest {
+  id: number;
+  repoFullName: string;
+  number: number;
+  title: string;
+  state: string;
+  htmlUrl: string | null;
+  mergedAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface PersistableGithubBackfill {
+  repos: PersistableGithubRepo[];
+  pullRequests: PersistableGithubPullRequest[];
+}
+
 type MemoryItemRow = {
   id: string;
   source: string;
@@ -120,6 +149,111 @@ export async function upsertEvidenceItems(
   }
 
   return written;
+}
+
+export async function upsertGithubBackfill(
+  sql: SqlClient,
+  input: PersistableGithubBackfill,
+): Promise<{
+  pullRequests: number;
+  repos: number;
+}> {
+  const repoIdsByFullName = new Map<string, number>();
+  let repos = 0;
+  let pullRequests = 0;
+
+  for (const repo of input.repos) {
+    repoIdsByFullName.set(repo.fullName, repo.id);
+
+    await sql`
+      insert into github_repos (
+        id,
+        owner,
+        name,
+        full_name,
+        private,
+        default_branch,
+        html_url,
+        language,
+        pushed_at,
+        updated_at,
+        synced_at
+      )
+      values (
+        ${repo.id},
+        ${repo.owner},
+        ${repo.name},
+        ${repo.fullName},
+        ${repo.private},
+        ${repo.defaultBranch},
+        ${repo.htmlUrl},
+        ${repo.language},
+        ${repo.pushedAt},
+        ${repo.updatedAt},
+        now()
+      )
+      on conflict (id) do update set
+        owner = excluded.owner,
+        name = excluded.name,
+        full_name = excluded.full_name,
+        private = excluded.private,
+        default_branch = excluded.default_branch,
+        html_url = excluded.html_url,
+        language = excluded.language,
+        pushed_at = excluded.pushed_at,
+        updated_at = excluded.updated_at,
+        synced_at = now()
+    `;
+    repos += 1;
+  }
+
+  for (const pullRequest of input.pullRequests) {
+    const repoId = repoIdsByFullName.get(pullRequest.repoFullName);
+
+    if (repoId === undefined) {
+      continue;
+    }
+
+    await sql`
+      insert into github_pull_requests (
+        id,
+        repo_id,
+        number,
+        title,
+        state,
+        html_url,
+        merged_at,
+        updated_at,
+        synced_at
+      )
+      values (
+        ${pullRequest.id},
+        ${repoId},
+        ${pullRequest.number},
+        ${pullRequest.title},
+        ${pullRequest.state},
+        ${pullRequest.htmlUrl},
+        ${pullRequest.mergedAt},
+        ${pullRequest.updatedAt},
+        now()
+      )
+      on conflict (id) do update set
+        repo_id = excluded.repo_id,
+        number = excluded.number,
+        title = excluded.title,
+        state = excluded.state,
+        html_url = excluded.html_url,
+        merged_at = excluded.merged_at,
+        updated_at = excluded.updated_at,
+        synced_at = now()
+    `;
+    pullRequests += 1;
+  }
+
+  return {
+    pullRequests,
+    repos,
+  };
 }
 
 export async function listEvidenceItems(

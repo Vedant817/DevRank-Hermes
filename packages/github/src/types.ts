@@ -34,3 +34,8 @@ export interface GithubWebhookResult {
   repository?: string;
   pullRequestNumber?: number;
 }
+
+export interface GithubWebhookIngestion {
+  backfill: GithubBackfillResult;
+  summary: GithubWebhookResult;
+}

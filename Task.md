@@ -343,7 +343,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Configure clean GitHub App permissions.
 - [ ] Enable webhooks.
 - [ ] Track new repo installation events.
-- [ ] Receive PR events.
+- [x] Receive PR events.
 - [ ] Configure minimal permissions for private repos:
   - [ ] Repository metadata: read.
   - [ ] Contents: read.
@@ -354,12 +354,12 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Webhooks: enabled.
 - [ ] Track GitHub events:
   - [ ] `repository.created`
-  - [ ] `push`
-  - [ ] `pull_request.opened`
-  - [ ] `pull_request.synchronize`
-  - [ ] `pull_request.closed`
-  - [ ] `pull_request_review.submitted`
-  - [ ] `pull_request_review_comment.created`
+  - [x] `push`
+  - [x] `pull_request.opened`
+  - [x] `pull_request.synchronize`
+  - [x] `pull_request.closed`
+  - [x] `pull_request_review.submitted`
+  - [x] `pull_request_review_comment.created`
   - [ ] `issues.opened`
   - [ ] `release.published`
   - [ ] `workflow_run.completed`
@@ -395,7 +395,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 - [x] Add endpoint `/api/github/webhook`.
 - [x] Verify webhook signatures.
-- [ ] Store PR metadata.
+- [x] Store PR metadata.
 - [ ] Fetch changed files.
 - [ ] Fetch commits.
 - [ ] Fetch reviews.
@@ -414,12 +414,12 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Update PR dashboard.
 - [ ] Update skill evidence.
 - [ ] Recompute SDE readiness score.
-- [ ] Handle `pull_request.opened`.
-- [ ] Handle `pull_request.synchronize`.
-- [ ] Handle `pull_request.closed`.
-- [ ] Handle `pull_request_review.submitted`.
-- [ ] Handle `pull_request_review_comment.created`.
-- [ ] Handle `push`.
+- [x] Handle `pull_request.opened`.
+- [x] Handle `pull_request.synchronize`.
+- [x] Handle `pull_request.closed`.
+- [x] Handle `pull_request_review.submitted`.
+- [x] Handle `pull_request_review_comment.created`.
+- [x] Handle `push`.
 
 ## 11. Linear Project Intelligence
 

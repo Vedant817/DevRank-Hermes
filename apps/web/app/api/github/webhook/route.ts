@@ -3,11 +3,17 @@ import {
   jsonError,
   jsonOk,
   methodNotAllowed,
-  packageUnavailable,
   parseWebhookJson,
   readRawBody,
 } from "../../_lib/route-utils";
-import { summarizeGithubWebhook, verifyGithubWebhook } from "@repo/github";
+import {
+  closeSqlClient,
+  createSqlClient,
+  insertIngestionRun,
+  upsertEvidenceItems,
+  upsertGithubBackfill,
+} from "@repo/db";
+import { githubWebhookIngestion, verifyGithubWebhook } from "@repo/github";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -73,11 +79,60 @@ export async function POST(request: Request) {
     );
   }
 
-  return packageUnavailable("@repo/github", "GitHub webhook ingestion", {
-    event,
-    deliveryId,
-    action,
-    summary: summarizeGithubWebhook(event, deliveryId ?? "unknown", payload.value),
-    secretConfigured: secret.value.length > 0,
-  });
+  const ingestion = githubWebhookIngestion(event, deliveryId ?? "unknown", payload.value);
+  let sql: ReturnType<typeof createSqlClient> | undefined;
+
+  try {
+    sql = createSqlClient();
+    const written = await upsertGithubBackfill(sql, ingestion.backfill);
+    const writtenEvidence = await upsertEvidenceItems(sql, [{
+      id: `github:webhook:${event}:${deliveryId ?? "unknown"}`,
+      source: "github",
+      title: `GitHub ${event}${action ? ` ${action}` : ""}`,
+      summary: [
+        `GitHub webhook ${event} was received.`,
+        ingestion.summary.repository ? `Repository: ${ingestion.summary.repository}.` : "",
+        ingestion.summary.pullRequestNumber ? `Pull request: #${ingestion.summary.pullRequestNumber}.` : "",
+        action ? `Action: ${action}.` : "",
+      ].filter(Boolean).join(" "),
+      occurredAt: new Date().toISOString(),
+      metadata: {
+        action,
+        deliveryId,
+        event,
+        repository: ingestion.summary.repository,
+        pullRequestNumber: ingestion.summary.pullRequestNumber,
+      },
+    }]);
+
+    await insertIngestionRun(sql, {
+      source: "github_webhook",
+      status: "success",
+      summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${written.pullRequests} pull request(s), and ${writtenEvidence} evidence item(s).`,
+    });
+
+    return jsonOk({
+      received: true,
+      event,
+      deliveryId,
+      action,
+      summary: ingestion.summary,
+      written,
+      writtenEvidence,
+    });
+  } catch (error) {
+    if (sql) {
+      await insertIngestionRun(sql, {
+        source: "github_webhook",
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+      }).catch(() => undefined);
+    }
+
+    return jsonError(503, "github_webhook_ingestion_failed", error instanceof Error ? error.message : "GitHub webhook ingestion failed.");
+  } finally {
+    if (sql) {
+      await closeSqlClient(sql);
+    }
+  }
 }
