@@ -731,6 +731,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Add a Market Skill Benchmark Agent.
 - [x] Do not let Hermes guess market demand from memory.
 - [x] Configure Hermes Tool Gateway/Nous Portal or bring a search provider.
+- [x] Fail clearly when unsupported search provider keys are configured without `TAVILY_API_KEY`.
 - [x] Run weekly searches for:
   - [x] SDE fresher/backend roles India.
   - [x] Java Spring Boot backend roles.

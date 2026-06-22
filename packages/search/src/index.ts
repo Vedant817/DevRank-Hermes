@@ -1,4 +1,4 @@
-import { readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
+import { ConfigurationError, readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
 
 export interface SearchResult {
   title: string;
@@ -11,6 +11,28 @@ export interface MarketBenchmark {
   queries: string[];
   repeatedSkills: string[];
   results: SearchResult[];
+}
+
+export type MarketSearchProvider = "tavily";
+
+const unsupportedMarketProviderKeys = ["EXA_API_KEY", "FIRECRAWL_API_KEY"] as const;
+
+export function resolveMarketSearchProvider(env: RuntimeEnv): MarketSearchProvider {
+  if (env.TAVILY_API_KEY) {
+    return "tavily";
+  }
+
+  const configuredUnsupportedKeys = unsupportedMarketProviderKeys.filter((key) => env[key]);
+
+  if (configuredUnsupportedKeys.length > 0) {
+    throw new ConfigurationError(
+      `Market benchmark search currently supports TAVILY_API_KEY only. Configured unsupported provider credentials: ${configuredUnsupportedKeys.join(", ")}.`,
+    );
+  }
+
+  requireEnv(env, ["TAVILY_API_KEY"], "Market benchmark search");
+
+  return "tavily";
 }
 
 async function tavilySearch(
@@ -51,9 +73,7 @@ export async function runMarketBenchmark(
   queries: string[],
   env: RuntimeEnv = readRuntimeEnv(),
 ): Promise<MarketBenchmark> {
-  if (!env.TAVILY_API_KEY) {
-    requireEnv(env, ["TAVILY_API_KEY"], "Market benchmark search");
-  }
+  resolveMarketSearchProvider(env);
 
   const results = [];
 

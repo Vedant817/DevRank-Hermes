@@ -43,6 +43,7 @@ OPENROUTER_API_KEY=...
 HERMES_MODEL=openrouter/auto
 EMBEDDING_MODEL=openai/text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
+TAVILY_API_KEY=...
 ```
 
 `EMBEDDING_DIMENSIONS` must stay at `1536` for the current pgvector schema.

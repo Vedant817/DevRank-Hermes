@@ -73,6 +73,15 @@ The current Postgres schema stores embeddings as `memory_embeddings.embedding
 vector(1536)`. Keep `EMBEDDING_DIMENSIONS=1536` unless a matching schema
 migration is applied first.
 
+Market benchmarking currently uses Tavily:
+
+```text
+TAVILY_API_KEY=...
+```
+
+`EXA_API_KEY` and `FIRECRAWL_API_KEY` are parsed for future adapters, but the
+benchmark fails clearly if they are configured without `TAVILY_API_KEY`.
+
 `--upload-raw-chats` stores the full redacted transcript in Postgres. The local
 collector still refuses to run if secret redaction is disabled.
 
