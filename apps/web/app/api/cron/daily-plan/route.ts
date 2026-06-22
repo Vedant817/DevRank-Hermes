@@ -4,7 +4,10 @@ import {
   getHighestPriorityLinearPlanningIssue,
   getLatestScoreSnapshot,
   insertDailyPlan,
+  insertScoreSnapshot,
+  listScoringEvidence,
 } from "@repo/db";
+import { computeSdeReadinessSnapshot } from "@repo/scoring";
 import { sendSlackMessage } from "@repo/slack";
 import {
   getOptionalString,
@@ -38,10 +41,17 @@ export async function GET(request: Request) {
     const sql = createSqlClient();
 
     try {
-      const snapshot = await getLatestScoreSnapshot(sql);
+      let snapshot = await getLatestScoreSnapshot(sql);
 
       if (!snapshot) {
-        return jsonError(422, "snapshot_required", "No persisted score snapshot exists yet. Run /api/scores/recompute first.");
+        const evidence = await listScoringEvidence(sql);
+
+        if (evidence.length === 0) {
+          return jsonError(422, "evidence_required", "No persisted evidence exists yet. Run ingestion first.");
+        }
+
+        snapshot = computeSdeReadinessSnapshot(evidence);
+        await insertScoreSnapshot(sql, snapshot);
       }
 
       const linearIssue = await getHighestPriorityLinearPlanningIssue(sql);
