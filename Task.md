@@ -245,6 +245,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Strong patterns.
   - [x] Summaries.
   - [x] Embeddings.
+- [x] Reject embedding dimensions that do not match `memory_embeddings.embedding vector(1536)`.
 - [x] Redact secrets before sending anything to OpenRouter, Hermes, search, or cloud APIs.
 - [ ] Redact:
   - [x] API keys.

@@ -25,6 +25,16 @@ test("uses OPENROUTER_API_KEY when embedding key is not separate", () => {
   assert.equal(config.apiKey, "openrouter-key");
 });
 
+test("rejects embedding dimensions that do not match the pgvector schema", () => {
+  assert.throws(
+    () => resolveEmbeddingRuntimeConfig({
+      EMBEDDING_API_KEY: "embedding-key",
+      EMBEDDING_DIMENSIONS: "768",
+    }),
+    /memory_embeddings\.embedding is stored as vector\(1536\)/,
+  );
+});
+
 test("posts text batches to the embeddings endpoint", async () => {
   const vector = Array.from({ length: DEFAULT_EMBEDDING_DIMENSIONS }, (_, index) => index / 10);
   const calls: Array<{

@@ -1,0 +1,1 @@
+export const MEMORY_EMBEDDING_DIMENSIONS = 1536;

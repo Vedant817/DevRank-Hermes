@@ -1,7 +1,12 @@
-import { ConfigurationError, readRuntimeEnv, type RuntimeEnv } from "@repo/shared";
+import {
+  ConfigurationError,
+  MEMORY_EMBEDDING_DIMENSIONS,
+  readRuntimeEnv,
+  type RuntimeEnv,
+} from "@repo/shared";
 
 export const DEFAULT_EMBEDDING_BASE_URL = "https://openrouter.ai/api/v1";
-export const DEFAULT_EMBEDDING_DIMENSIONS = 1536;
+export const DEFAULT_EMBEDDING_DIMENSIONS = MEMORY_EMBEDDING_DIMENSIONS;
 export const DEFAULT_EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const DEFAULT_HTTP_REFERER = "https://devrank-os.local";
 const DEFAULT_TITLE = "DevRank OS";
@@ -129,6 +134,12 @@ function parseDimensions(value: string | undefined) {
 
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new ConfigurationError("EMBEDDING_DIMENSIONS must be a positive integer.");
+  }
+
+  if (parsed !== MEMORY_EMBEDDING_DIMENSIONS) {
+    throw new ConfigurationError(
+      `EMBEDDING_DIMENSIONS must be ${MEMORY_EMBEDDING_DIMENSIONS} because memory_embeddings.embedding is stored as vector(${MEMORY_EMBEDDING_DIMENSIONS}). Update the database schema before using another dimension.`,
+    );
   }
 
   return parsed;

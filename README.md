@@ -69,6 +69,10 @@ EMBEDDING_MODEL=openai/text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
 ```
 
+The current Postgres schema stores embeddings as `memory_embeddings.embedding
+vector(1536)`. Keep `EMBEDDING_DIMENSIONS=1536` unless a matching schema
+migration is applied first.
+
 `--upload-raw-chats` stores the full redacted transcript in Postgres. The local
 collector still refuses to run if secret redaction is disabled.
 

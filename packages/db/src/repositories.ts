@@ -1,4 +1,12 @@
-import type { DailyPlan, EvidenceItem, EvidenceSource, ScoreBreakdown, ScoreSnapshot } from "@repo/shared";
+import {
+  ConfigurationError,
+  MEMORY_EMBEDDING_DIMENSIONS,
+  type DailyPlan,
+  type EvidenceItem,
+  type EvidenceSource,
+  type ScoreBreakdown,
+  type ScoreSnapshot,
+} from "@repo/shared";
 import type { SqlClient } from "./client.js";
 
 export interface PersistableGithubRepo {
@@ -1058,8 +1066,10 @@ function toIso(value: Date | string): string {
 }
 
 function vectorLiteral(values: number[]) {
-  if (values.length === 0) {
-    throw new Error("Embedding vector cannot be empty.");
+  if (values.length !== MEMORY_EMBEDDING_DIMENSIONS) {
+    throw new ConfigurationError(
+      `Embedding vector must contain exactly ${MEMORY_EMBEDDING_DIMENSIONS} dimensions before it can be stored in memory_embeddings.`,
+    );
   }
 
   for (const value of values) {

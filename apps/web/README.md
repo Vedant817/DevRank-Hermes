@@ -45,6 +45,8 @@ EMBEDDING_MODEL=openai/text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
 ```
 
+`EMBEDDING_DIMENSIONS` must stay at `1536` for the current pgvector schema.
+
 ## Local Development
 
 ```bash
