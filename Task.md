@@ -264,7 +264,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Build the local daemon in `apps/local-agent`.
 - [x] Add command:
   - [x] `pnpm devrank local-daemon`
-- [ ] Run the daemon using macOS `launchd`.
+- [x] Run the daemon using macOS `launchd`.
 - [x] Watch known AI-agent folders.
 - [x] Detect new transcript files.
 - [x] Detect changed transcript files.
@@ -274,16 +274,16 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Push summary and metadata to Supabase Postgres.
 - [x] Keep raw transcripts local by default.
 - [ ] Trigger Hermes skill extraction weekly.
-- [ ] Create local config with watchers:
+- [x] Create local config with watchers:
   - [x] Claude watcher for `~/.claude`.
   - [x] Codex watcher for `~/.codex/sessions`.
   - [x] OpenCode watcher for `~/.local/share/opencode`.
   - [x] Antigravity watcher for `~/.gemini/antigravity`.
   - [x] Antigravity watcher for `~/Library/Application Support/Antigravity`.
-- [ ] Create local config with privacy settings:
-  - [ ] `uploadRawChats=false`.
-  - [ ] `redactSecrets=true`.
-  - [ ] `storeEmbeddings=true`.
+- [x] Create local config with privacy settings:
+  - [x] `uploadRawChats=false`.
+  - [x] `redactSecrets=true`.
+  - [x] `storeEmbeddings=true`.
 - [ ] Verify daemon starts after login.
 - [x] Verify daemon handles missing folders without crashing.
 - [ ] Verify daemon resumes after restart.

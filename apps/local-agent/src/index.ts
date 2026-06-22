@@ -2,37 +2,40 @@
 import "dotenv/config";
 
 import chokidar from "chokidar";
-import { homedir } from "node:os";
-import { join } from "node:path";
-import {
-  defaultLocalSourceRoots,
-  ingestLocalAiChats,
-} from "@repo/ai-chat-ingestors";
+import { codexDefaultRoot, ingestLocalAiChats } from "@repo/ai-chat-ingestors";
 import {
   closeSqlClient,
   createSqlClient,
   insertIngestionRun,
   upsertEvidenceItems,
 } from "@repo/db";
+import { loadLocalAgentConfig, type LocalAgentPrivacyConfig } from "./config.js";
 
 export interface LocalAgentOptions {
   codexSessionsDir?: string;
+  configPath?: string;
   persist?: boolean;
+  privacy?: Partial<LocalAgentPrivacyConfig>;
   sources?: string[];
   watch?: boolean;
 }
 
 export async function runLocalAgent(options: LocalAgentOptions = {}) {
-  const codexSessionsDir =
-    options.codexSessionsDir ?? join(homedir(), ".codex", "sessions");
-  const sourceRoots = options.sources ?? [
-    codexSessionsDir,
-    ...defaultLocalSourceRoots.filter((root) => root !== codexSessionsDir),
-  ];
+  const config = await loadLocalAgentConfig({
+    codexSessionsDir: options.codexSessionsDir,
+    configPath: options.configPath,
+    privacy: options.privacy,
+    sources: options.sources,
+  });
+  const codexSessionsDir = options.codexSessionsDir
+    ?? config.sources.find((source) => source.includes(".codex"))
+    ?? codexDefaultRoot;
+  const sourceRoots = config.sources;
+  const persist = options.persist ?? true;
 
   const result = await ingestAndMaybePersist({
     codexSessionsDir,
-    persist: options.persist ?? true,
+    persist,
     sourceRoots,
   });
 
@@ -49,7 +52,7 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
   const reingest = async () => {
     await ingestAndMaybePersist({
       codexSessionsDir,
-      persist: options.persist ?? true,
+      persist,
       sourceRoots,
     });
   };
@@ -59,6 +62,7 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
 
   return {
     ...result,
+    privacy: config.privacy,
     watching: sourceRoots,
   };
 }
@@ -103,13 +107,15 @@ async function ingestAndMaybePersist(input: {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const watch = process.argv.includes("--watch");
   const persist = !process.argv.includes("--dry-run");
+  const configIndex = process.argv.indexOf("--config");
   const dirIndex = process.argv.indexOf("--codex-sessions-dir");
+  const configPath = configIndex >= 0 ? process.argv[configIndex + 1] : undefined;
   const codexSessionsDir = dirIndex >= 0 ? process.argv[dirIndex + 1] : undefined;
   const sources = process.argv
     .map((arg, index) => arg === "--source" ? process.argv[index + 1] : undefined)
     .filter((source): source is string => typeof source === "string");
 
-  runLocalAgent({ codexSessionsDir, persist, sources: sources.length > 0 ? sources : undefined, watch })
+  runLocalAgent({ codexSessionsDir, configPath, persist, sources: sources.length > 0 ? sources : undefined, watch })
     .then((result) => {
       console.log(JSON.stringify(result, null, 2));
     })
@@ -118,3 +124,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       process.exitCode = 1;
     });
 }
+
+export * from "./config.js";
+export * from "./launchd.js";

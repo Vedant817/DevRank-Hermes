@@ -16,7 +16,8 @@
     "build": "tsc -p tsconfig.json",
     "check-types": "tsc --noEmit",
     "dev": "tsx src/index.ts",
-    "lint": "eslint src --max-warnings 0"
+    "lint": "eslint src --max-warnings 0",
+    "test:unit": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@repo/ai-chat-ingestors": "workspace:*",

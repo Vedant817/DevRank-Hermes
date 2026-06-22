@@ -17,6 +17,7 @@
     "@repo/db": "workspace:*",
     "@repo/github": "workspace:*",
     "@repo/linear": "workspace:*",
+    "@repo/local-agent": "workspace:*",
     "@repo/planner": "workspace:*",
     "@repo/scoring": "workspace:*",
     "@repo/search": "workspace:*",

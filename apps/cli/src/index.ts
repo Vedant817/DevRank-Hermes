@@ -232,11 +232,12 @@ const commands: CommandSpec[] = [
   {
     name: "local-daemon",
     description: "Start the local Mac daemon through the local-agent package.",
-    usage: "devrank local-daemon [--codex-sessions-dir <path>] [--watch] [--dry-run]",
+    usage: "devrank local-daemon [--config <path>] [--codex-sessions-dir <path>] [--source <path>] [--watch] [--dry-run]",
     moduleCandidates: ["@repo/local-agent", "local-agent"],
     exportCandidates: ["runLocalAgent", "startLocalDaemon", "startDaemon", "runDaemon", "run"],
     envRequirements: [databaseRequirement],
     buildConfig: (parsed, env) => ({
+      configPath: stringOption(parsed, "config"),
       codexSessionsDir: stringOption(parsed, "codex-sessions-dir"),
       databaseEnv: firstPresentEnv(env, databaseRequirement),
       dryRun: booleanOption(parsed, "dry-run"),
@@ -247,6 +248,41 @@ const commands: CommandSpec[] = [
       watch: booleanOption(parsed, "watch"),
     }),
     invoke: invokeLocalDaemon,
+  },
+  {
+    name: "local-daemon:config",
+    description: "Print or write the local daemon watcher and privacy config.",
+    usage: "devrank local-daemon:config [--path <path>] [--codex-sessions-dir <path>] [--source <path>] [--write]",
+    moduleCandidates: ["@repo/local-agent", "local-agent"],
+    exportCandidates: ["createDefaultLocalAgentConfig", "writeDefaultLocalAgentConfig"],
+    envRequirements: [],
+    buildConfig: (parsed) => ({
+      codexSessionsDir: stringOption(parsed, "codex-sessions-dir"),
+      configPath: stringOption(parsed, "path"),
+      sources: stringListOption(parsed, "source"),
+      write: booleanOption(parsed, "write"),
+    }),
+    invoke: invokeLocalDaemonConfig,
+  },
+  {
+    name: "local-daemon:launchd",
+    description: "Print, write, install, uninstall, or inspect the macOS launchd agent.",
+    usage: "devrank local-daemon:launchd [--print|--write|--install|--uninstall|--status] [--config <path>] [--label <label>] [--plist-path <path>] [--repo-root <path>]",
+    moduleCandidates: ["@repo/local-agent", "local-agent"],
+    exportCandidates: ["renderLaunchdPlist", "writeLaunchdPlist", "installLaunchdAgent", "uninstallLaunchdAgent", "getLaunchdAgentStatus"],
+    envRequirements: [],
+    buildConfig: (parsed) => ({
+      configPath: stringOption(parsed, "config"),
+      install: booleanOption(parsed, "install"),
+      label: stringOption(parsed, "label"),
+      plistPath: stringOption(parsed, "plist-path"),
+      print: booleanOption(parsed, "print"),
+      repoRoot: stringOption(parsed, "repo-root"),
+      status: booleanOption(parsed, "status"),
+      uninstall: booleanOption(parsed, "uninstall"),
+      write: booleanOption(parsed, "write"),
+    }),
+    invoke: invokeLocalDaemonLaunchd,
   },
   {
     name: "planner:daily",
@@ -691,7 +727,7 @@ async function invokeLocalAiIngest(moduleExports: ModuleExports, context: Comman
     const codexDir = codexSessionsDir(context);
     const result = await packageHandler({
       codexSessionsDir: codexDir,
-      sourceRoots: configStringList(context, "sources"),
+      sourceRoots: configOptionalStringList(context, "sources"),
     });
 
     return persistIngestionResult(context, result, `local_session:${codexDir}`);
@@ -757,10 +793,79 @@ function invokeLocalDaemon(moduleExports: ModuleExports, context: CommandContext
 
   return directHandler({
     codexSessionsDir: codexSessionsDir(context),
+    configPath: configString(context, "configPath"),
     persist: !configBoolean(context, "dryRun"),
-    sources: configStringList(context, "sources"),
+    sources: configOptionalStringList(context, "sources"),
     watch: configBoolean(context, "watch"),
   });
+}
+
+function invokeLocalDaemonConfig(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+  const options = {
+    codexSessionsDir: configString(context, "codexSessionsDir"),
+    configPath: configString(context, "configPath"),
+    sources: configOptionalStringList(context, "sources"),
+  };
+
+  if (configBoolean(context, "write")) {
+    const writeDefaultLocalAgentConfig = requiredFunction(
+      moduleExports,
+      ["writeDefaultLocalAgentConfig"],
+      moduleName,
+      context.command,
+    );
+
+    return writeDefaultLocalAgentConfig(options);
+  }
+
+  const createDefaultLocalAgentConfig = requiredFunction(
+    moduleExports,
+    ["createDefaultLocalAgentConfig"],
+    moduleName,
+    context.command,
+  );
+
+  return {
+    configPath: configString(context, "configPath") ?? moduleStringExport(moduleExports, "defaultLocalAgentConfigPath"),
+    config: createDefaultLocalAgentConfig(options),
+  };
+}
+
+function invokeLocalDaemonLaunchd(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+  const launchdOptions = {
+    configPath: configString(context, "configPath"),
+    label: configString(context, "label"),
+    plistPath: configString(context, "plistPath"),
+    repoRoot: configString(context, "repoRoot"),
+  };
+  const selectedActions = [
+    configBoolean(context, "write"),
+    configBoolean(context, "install"),
+    configBoolean(context, "uninstall"),
+    configBoolean(context, "status"),
+  ].filter(Boolean);
+
+  if (selectedActions.length > 1) {
+    throw new CliError("Choose only one launchd action: --write, --install, --uninstall, or --status.", 2);
+  }
+
+  if (configBoolean(context, "write")) {
+    return requiredFunction(moduleExports, ["writeLaunchdPlist"], moduleName, context.command)(launchdOptions);
+  }
+
+  if (configBoolean(context, "install")) {
+    return requiredFunction(moduleExports, ["installLaunchdAgent"], moduleName, context.command)(launchdOptions);
+  }
+
+  if (configBoolean(context, "uninstall")) {
+    return requiredFunction(moduleExports, ["uninstallLaunchdAgent"], moduleName, context.command)(launchdOptions);
+  }
+
+  if (configBoolean(context, "status")) {
+    return requiredFunction(moduleExports, ["getLaunchdAgentStatus"], moduleName, context.command)(launchdOptions);
+  }
+
+  return requiredFunction(moduleExports, ["renderLaunchdPlist"], moduleName, context.command)(launchdOptions);
 }
 
 async function persistIngestionResult(context: CommandContext, result: unknown, source: string) {
@@ -844,6 +949,18 @@ function configStringList(context: CommandContext, key: string) {
   }
 
   return [];
+}
+
+function configOptionalStringList(context: CommandContext, key: string) {
+  const value = configStringList(context, key);
+
+  return value.length > 0 ? value : undefined;
+}
+
+function moduleStringExport(moduleExports: ModuleExports, key: string) {
+  const value = moduleExports[key];
+
+  return typeof value === "string" ? value : undefined;
 }
 
 function optionalFunction(moduleExports: ModuleExports, candidates: string[]) {

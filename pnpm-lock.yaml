@@ -69,6 +69,9 @@ importers:
       '@repo/linear':
         specifier: workspace:*
         version: link:../../packages/linear
+      '@repo/local-agent':
+        specifier: workspace:*
+        version: link:../local-agent
       '@repo/planner':
         specifier: workspace:*
         version: link:../../packages/planner
