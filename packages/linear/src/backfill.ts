@@ -9,7 +9,7 @@ interface LinearBackfillQuery {
       state?: string | null;
       progress?: number | null;
       url?: string | null;
-      team?: { name?: string | null } | null;
+      team?: { id?: string | null; name?: string | null } | null;
     }>;
   };
   issues: {
@@ -22,6 +22,7 @@ interface LinearBackfillQuery {
       state?: { name?: string | null } | null;
       assignee?: { name?: string | null } | null;
       project?: { id?: string | null } | null;
+      team?: { id?: string | null; name?: string | null } | null;
     }>;
   };
 }
@@ -35,7 +36,7 @@ const backfillQuery = `
         state
         progress
         url
-        team { name }
+        team { id name }
       }
     }
     issues(first: $first, orderBy: updatedAt) {
@@ -48,6 +49,7 @@ const backfillQuery = `
         state { name }
         assignee { name }
         project { id }
+        team { id name }
       }
     }
   }
@@ -63,6 +65,7 @@ export async function backfillLinear(first = 100): Promise<LinearBackfillResult>
       state: project.state ?? null,
       progress: project.progress ?? null,
       url: project.url ?? null,
+      teamId: project.team?.id ?? null,
       teamName: project.team?.name ?? null,
     })),
     issues: data.issues.nodes.map((issue) => ({
@@ -74,6 +77,8 @@ export async function backfillLinear(first = 100): Promise<LinearBackfillResult>
       state: issue.state?.name ?? null,
       assignee: issue.assignee?.name ?? null,
       projectId: issue.project?.id ?? null,
+      teamId: issue.team?.id ?? null,
+      teamName: issue.team?.name ?? null,
     })),
   };
 }

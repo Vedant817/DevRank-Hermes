@@ -23,6 +23,7 @@ export interface PersistableLinearProject {
   state: string | null;
   progress: number | null;
   url: string | null;
+  teamId?: string | null;
   teamName: string | null;
 }
 
@@ -35,6 +36,8 @@ export interface PersistableLinearIssue {
   state: string | null;
   assignee: string | null;
   projectId: string | null;
+  teamId?: string | null;
+  teamName?: string | null;
 }
 
 export interface PersistableLinearBackfill {
@@ -835,8 +838,37 @@ export async function upsertLinearBackfill(
   projects: number;
 }> {
   const projectIds = new Set(input.projects.map((project) => project.id));
+  const projectTeamIds = new Map(
+    input.projects
+      .filter((project) => project.teamId)
+      .map((project) => [project.id, project.teamId as string]),
+  );
+  const teams = new Map<string, string>();
+
+  for (const project of input.projects) {
+    if (project.teamId && project.teamName) {
+      teams.set(project.teamId, project.teamName);
+    }
+  }
+
+  for (const issue of input.issues) {
+    if (issue.teamId && issue.teamName) {
+      teams.set(issue.teamId, issue.teamName);
+    }
+  }
+
   let projects = 0;
   let issues = 0;
+
+  for (const [id, name] of teams) {
+    await sql`
+      insert into linear_teams (id, name, synced_at)
+      values (${id}, ${name}, now())
+      on conflict (id) do update set
+        name = excluded.name,
+        synced_at = now()
+    `;
+  }
 
   for (const project of input.projects) {
     await sql`
@@ -851,7 +883,7 @@ export async function upsertLinearBackfill(
       )
       values (
         ${project.id},
-        ${null},
+        ${project.teamId && teams.has(project.teamId) ? project.teamId : null},
         ${project.name},
         ${project.state},
         ${project.progress},
@@ -869,6 +901,8 @@ export async function upsertLinearBackfill(
   }
 
   for (const issue of input.issues) {
+    const teamId = issue.teamId ?? (issue.projectId ? projectTeamIds.get(issue.projectId) : undefined) ?? null;
+
     await sql`
       insert into linear_issues (
         id,
@@ -885,7 +919,7 @@ export async function upsertLinearBackfill(
       values (
         ${issue.id},
         ${issue.projectId && projectIds.has(issue.projectId) ? issue.projectId : null},
-        ${null},
+        ${teamId && teams.has(teamId) ? teamId : null},
         ${issue.identifier},
         ${issue.title},
         ${issue.state},
@@ -901,6 +935,7 @@ export async function upsertLinearBackfill(
         state = excluded.state,
         priority = excluded.priority,
         assignee = excluded.assignee,
+        team_id = excluded.team_id,
         url = excluded.url,
         synced_at = now()
     `;

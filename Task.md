@@ -65,7 +65,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] PRs.
   - [ ] Reviews.
   - [ ] Linear workspaces.
-  - [ ] Linear teams.
+  - [x] Linear teams.
   - [ ] Linear projects.
   - [ ] Linear issues.
   - [ ] Linear cycles.
@@ -434,7 +434,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 ## 11. Linear Project Intelligence
 
-- [ ] Add Linear as a project-wise planning and execution source.
+- [x] Add Linear as a project-wise planning and execution source.
 - [x] Choose Linear integration path:
   - [x] Use Linear GraphQL API or TypeScript SDK for production sync.
   - [x] Use Linear webhooks for near-realtime project and issue changes.
@@ -449,7 +449,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `devrank linear:backfill`.
 - [ ] Sync Linear data:
   - [ ] Workspaces.
-  - [ ] Teams.
+  - [x] Teams.
   - [x] Projects.
   - [x] Issues.
   - [ ] Cycles.
@@ -458,26 +458,26 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Labels and priorities.
   - [x] Assignees.
   - [x] Status/workflow states.
-- [ ] Build project-wise Linear dashboard data:
-  - [ ] Open issues per project.
-  - [ ] Done issues per project.
-  - [ ] Blocked issues.
-  - [ ] Stale issues.
-  - [ ] High-priority issues.
-  - [ ] Issues without owners.
-  - [ ] Issues without GitHub PR links.
-  - [ ] Project progress by status.
-  - [ ] Cycle progress.
+- [x] Build project-wise Linear dashboard data:
+  - [x] Open issues per project.
+  - [x] Done issues per project.
+  - [x] Blocked issues.
+  - [x] Stale issues.
+  - [x] High-priority issues.
+  - [x] Issues without owners.
+  - [x] Issues without GitHub PR links.
+  - [x] Project progress by status.
+  - [x] Cycle progress.
   - [ ] Recent project updates.
 - [ ] Link Linear work to engineering evidence:
-  - [ ] Connect Linear issues to GitHub branches, commits, and PRs where possible.
+  - [x] Connect Linear issues to GitHub branches, commits, and PRs where possible.
   - [ ] Connect Linear project work to daily and weekly plans.
-  - [ ] Connect completed issues to skill evidence and resume-worthy proof.
-  - [ ] Keep GitHub PR evidence as the stronger engineering proof when both exist.
+  - [x] Connect completed issues to skill evidence and resume-worthy proof.
+  - [x] Keep GitHub PR evidence as the stronger engineering proof when both exist.
 - [x] Use Linear data in planning:
   - [x] Pull highest-priority open project tasks into daily plans.
-  - [ ] Detect stalled project work.
-  - [ ] Recommend one small project task for non-zero progress days.
+  - [x] Detect stalled project work.
+  - [x] Recommend one small project task for non-zero progress days.
   - [x] Avoid creating daily plans that ignore urgent Linear project work.
 - [ ] Verify Linear sync:
   - [ ] Backfill imports projects and issues.
@@ -651,16 +651,16 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Portfolio project descriptions.
   - [x] Interview talking points.
   - [x] Weekly progress summary.
-- [ ] Create Dashboard G: Linear Project Dashboard.
-- [ ] Linear Project Dashboard shows:
-  - [ ] Projects by workspace/team.
-  - [ ] Open, done, blocked, and stale issues per project.
-  - [ ] Priority distribution.
-  - [ ] Cycle progress.
-  - [ ] Issues linked to GitHub PRs.
-  - [ ] Issues missing GitHub proof.
-  - [ ] Project work that should become today's plan.
-  - [ ] Resume-worthy completed project evidence.
+- [x] Create Dashboard G: Linear Project Dashboard.
+- [x] Linear Project Dashboard shows:
+  - [x] Projects by workspace/team.
+  - [x] Open, done, blocked, and stale issues per project.
+  - [x] Priority distribution.
+  - [x] Cycle progress.
+  - [x] Issues linked to GitHub PRs.
+  - [x] Issues missing GitHub proof.
+  - [x] Project work that should become today's plan.
+  - [x] Resume-worthy completed project evidence.
 
 ## 15. Scoring System
 
@@ -719,7 +719,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] This repo does not prove SDE skill yet.
 - [ ] Link repo scores to dashboard recommendations.
 - [ ] Link repo improvements to daily/weekly learning plans.
-- [ ] Link Linear completed issues to portfolio evidence only when they map to real code, PRs, docs, or deployed work.
+- [x] Link Linear completed issues to portfolio evidence only when they map to real code, PRs, docs, or deployed work.
 - [x] Link strong repos to resume and LinkedIn content generation.
 
 ## 17. Daily and Weekly Learning Planner
@@ -892,7 +892,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Set up Linear API access if Linear is in MVP.
 - [ ] Backfill Linear projects and issues if Linear is in MVP.
 - [ ] Handle Linear issue/project webhook if Linear is in MVP.
-- [ ] Build Linear Project Dashboard if Linear is in MVP.
+- [x] Build Linear Project Dashboard if Linear is in MVP.
 
 ### Week 5: Planning and Slack
 
@@ -979,7 +979,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Daily planner uses scores, weak areas, and market gaps.
 - [ ] Career/content dashboard generates evidence-backed output.
 - [ ] Portfolio dashboard identifies resume-ready and weak repos.
-- [ ] Linear dashboard identifies blocked, stale, and high-priority project work if Linear is enabled.
+- [x] Linear dashboard identifies blocked, stale, and high-priority project work if Linear is enabled.
 - [x] README and docs explain setup and architecture.
 - [ ] The project can be described clearly as a resume-worthy system.
 
@@ -991,7 +991,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] DevRank OS can ingest local AI-agent chats when the Mac daemon is running.
 - [ ] DevRank OS can optionally import Codex Cloud/Web history from supported exports without relying on unsupported scraping.
 - [ ] DevRank OS can analyze GitHub repos and PRs.
-- [ ] DevRank OS can show project-wise Linear dashboards when Linear integration is enabled.
+- [x] DevRank OS can show project-wise Linear dashboards when Linear integration is enabled.
 - [ ] DevRank OS can produce transparent SDE readiness, PR quality, AI-agent maturity, and portfolio scores.
 - [x] DevRank OS can create daily and weekly learning plans.
 - [ ] DevRank OS can send Slack targets.

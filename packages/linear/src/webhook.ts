@@ -87,6 +87,7 @@ function projectFromRecord(record: Record<string, unknown>): LinearProjectSummar
     state: stringValue(record.state) ?? stringValue(asRecord(record.status).name) ?? null,
     progress: numberValue(record.progress) ?? null,
     url: stringValue(record.url) ?? null,
+    teamId: stringValue(asRecord(record.team).id) ?? null,
     teamName: stringValue(asRecord(record.team).name) ?? null,
   };
 }
@@ -110,6 +111,8 @@ function issueFromRecord(record: Record<string, unknown>): LinearIssueSummary | 
     state: stringValue(asRecord(record.state).name) ?? stringValue(record.state) ?? null,
     assignee: stringValue(asRecord(record.assignee).name) ?? null,
     projectId: stringValue(asRecord(record.project).id) ?? null,
+    teamId: stringValue(asRecord(record.team).id) ?? stringValue(asRecord(asRecord(record.project).team).id) ?? null,
+    teamName: stringValue(asRecord(record.team).name) ?? stringValue(asRecord(asRecord(record.project).team).name) ?? null,
   };
 }
 

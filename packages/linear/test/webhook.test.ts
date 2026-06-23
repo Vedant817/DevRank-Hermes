@@ -21,7 +21,7 @@ test("extracts issue and project rows from Linear issue webhook payload", () => 
         state: "started",
         progress: 42,
         url: "https://linear.app/devrank/project/devrank-os",
-        team: { name: "Platform" },
+        team: { id: "team-1", name: "Platform" },
       },
     },
   });
@@ -29,8 +29,10 @@ test("extracts issue and project rows from Linear issue webhook payload", () => 
   assert.equal(ingestion.summary.action, "create");
   assert.equal(ingestion.backfill.projects.length, 1);
   assert.equal(ingestion.backfill.projects[0]?.name, "DevRank OS");
+  assert.equal(ingestion.backfill.projects[0]?.teamId, "team-1");
   assert.equal(ingestion.backfill.issues.length, 1);
   assert.equal(ingestion.backfill.issues[0]?.projectId, "project-1");
+  assert.equal(ingestion.backfill.issues[0]?.teamName, "Platform");
   assert.equal(ingestion.backfill.issues[0]?.state, "In Progress");
 });
 
@@ -44,7 +46,7 @@ test("extracts project rows from Linear project webhook payload", () => {
       state: "started",
       progress: 55,
       url: "https://linear.app/devrank/project/devrank-os",
-      team: { name: "Platform" },
+      team: { id: "team-1", name: "Platform" },
     },
   });
 

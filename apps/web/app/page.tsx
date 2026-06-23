@@ -250,6 +250,12 @@ const dashboardLinks = [
     title: "Career/Content",
     description: "Resume bullets, posts, portfolio copy, talking points, and weekly summaries.",
   },
+  {
+    href: "/dashboards/linear-projects",
+    label: "Dashboard G",
+    title: "Linear Projects",
+    description: "Project health, blocked/stale issues, GitHub proof, and planning candidates.",
+  },
 ];
 
 function scoreMetadata(score: NonNullable<DashboardSummary["latestScoreSnapshot"]>["breakdown"][number]) {
