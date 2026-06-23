@@ -1,10 +1,11 @@
-import { readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
+import { MastraClient } from "@repo/mastra";
+import { readRuntimeEnv, type RuntimeEnv } from "@repo/shared";
 export * from "./chat-summary.js";
 export * from "./reusable-skills.js";
 export * from "./skill-extraction.js";
 
-const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
-const DEFAULT_HERMES_MODEL = "openrouter/auto";
+const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
+const DEFAULT_MODEL = "openrouter/auto";
 const DEFAULT_HTTP_REFERER = "https://devrank-os.local";
 const DEFAULT_TITLE = "DevRank OS";
 
@@ -31,9 +32,9 @@ export interface HermesMentorOptions {
 
 export function resolveHermesRuntimeConfig(env: RuntimeEnv): HermesRuntimeConfig {
   return {
-    baseUrl: env.AI_BASE_URL ?? env.OPENROUTER_BASE_URL ?? DEFAULT_OPENROUTER_BASE_URL,
+    baseUrl: env.AI_BASE_URL ?? env.OPENROUTER_BASE_URL ?? DEFAULT_BASE_URL,
     httpReferer: env.AI_HTTP_REFERER ?? env.HERMES_HTTP_REFERER ?? DEFAULT_HTTP_REFERER,
-    model: env.AI_MODEL ?? env.HERMES_MODEL ?? DEFAULT_HERMES_MODEL,
+    model: env.AI_MODEL ?? env.HERMES_MODEL ?? DEFAULT_MODEL,
     title: env.AI_TITLE ?? env.HERMES_TITLE ?? DEFAULT_TITLE,
   };
 }
@@ -43,7 +44,6 @@ export async function runHermesMentorSummary(
   env: RuntimeEnv = readRuntimeEnv(),
   options: HermesMentorOptions = {},
 ): Promise<HermesMentorOutput> {
-  const apiKey = hermesApiKey(env);
   const evidenceSummary = input.evidenceSummary.trim();
   const weakestLanes = input.weakestLanes.map((lane) => lane.trim()).filter(Boolean);
 
@@ -55,62 +55,23 @@ export async function runHermesMentorSummary(
     throw new Error("Hermes mentor summary requires at least one weakest lane.");
   }
 
-  const config = resolveHermesRuntimeConfig(env);
-  const fetchImpl = options.fetch ?? fetch;
-  const response = await fetchImpl(`${config.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "HTTP-Referer": config.httpReferer,
-      "X-Title": config.title,
+  const client = new MastraClient(env, options.fetch);
+  const summary = await client.chatCompletion(
+    [
+      {
+        role: "user",
+        content: `Evidence:\n${evidenceSummary}\n\nWeakest lanes:\n${weakestLanes.join(", ")}`,
+      },
+    ],
+    {
+      system: "You are the DevRank OS mentor. Use only provided evidence. Do not invent accomplishments.",
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are the DevRank OS mentor. Use only provided evidence. Do not invent accomplishments.",
-        },
-        {
-          role: "user",
-          content: `Evidence:\n${evidenceSummary}\n\nWeakest lanes:\n${weakestLanes.join(", ")}`,
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    const detail = errorText.length > 0 ? `: ${errorText.slice(0, 240)}` : "";
-
-    throw new Error(`AI provider request failed with ${response.status}${detail}.`);
-  }
-
-  const json = await response.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const summary = json.choices?.[0]?.message?.content;
-
-  if (!summary) {
-    throw new Error("AI provider response did not include mentor summary text.");
-  }
+  );
 
   return {
-    model: config.model,
+    model: client.getModel(),
     summary,
   };
 }
 
-function hermesApiKey(env: RuntimeEnv): string {
-  if (env.AI_API_KEY) {
-    return env.AI_API_KEY;
-  }
 
-  if (env.OPENROUTER_API_KEY) {
-    return env.OPENROUTER_API_KEY;
-  }
-
-  return requireEnv(env, ["AI_API_KEY"], "Hermes mentor summary").AI_API_KEY;
-}
