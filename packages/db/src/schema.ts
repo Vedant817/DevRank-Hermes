@@ -200,6 +200,43 @@ export const migrations = [
         created_at timestamptz not null default now()
       );
 
+      create table if not exists daily_tasks (
+        id uuid primary key default gen_random_uuid(),
+        plan_date date not null,
+        task_key text not null,
+        category text not null,
+        title text not null,
+        minutes integer not null,
+        evidence text,
+        status text not null default 'pending'
+          check (status in ('pending', 'completed', 'skipped')),
+        completed_at timestamptz,
+        notes text,
+        evidence_url text,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (plan_date, task_key)
+      );
+
+      create index if not exists daily_tasks_plan_date_idx
+        on daily_tasks (plan_date desc);
+
+      create index if not exists daily_tasks_status_idx
+        on daily_tasks (status);
+
+      create table if not exists weekly_plans (
+        id uuid primary key default gen_random_uuid(),
+        week_start date not null unique,
+        weekly_goal text not null,
+        tasks jsonb not null,
+        target_minutes integer not null,
+        generated_at timestamptz not null,
+        created_at timestamptz not null default now()
+      );
+
+      create index if not exists weekly_plans_week_start_idx
+        on weekly_plans (week_start desc);
+
       create table if not exists slack_notifications (
         id uuid primary key default gen_random_uuid(),
         channel text,
@@ -363,6 +400,47 @@ export const migrations = [
 
       create index if not exists github_pr_reviews_pull_request_idx
         on github_pr_reviews (pull_request_id);
+    `,
+  },
+  {
+    id: "011_learning_plan_tracking",
+    sql: `
+      create table if not exists daily_tasks (
+        id uuid primary key default gen_random_uuid(),
+        plan_date date not null,
+        task_key text not null,
+        category text not null,
+        title text not null,
+        minutes integer not null,
+        evidence text,
+        status text not null default 'pending'
+          check (status in ('pending', 'completed', 'skipped')),
+        completed_at timestamptz,
+        notes text,
+        evidence_url text,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (plan_date, task_key)
+      );
+
+      create index if not exists daily_tasks_plan_date_idx
+        on daily_tasks (plan_date desc);
+
+      create index if not exists daily_tasks_status_idx
+        on daily_tasks (status);
+
+      create table if not exists weekly_plans (
+        id uuid primary key default gen_random_uuid(),
+        week_start date not null unique,
+        weekly_goal text not null,
+        tasks jsonb not null,
+        target_minutes integer not null,
+        generated_at timestamptz not null,
+        created_at timestamptz not null default now()
+      );
+
+      create index if not exists weekly_plans_week_start_idx
+        on weekly_plans (week_start desc);
     `,
   },
 ];

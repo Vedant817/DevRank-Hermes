@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   ConfigurationError,
   MEMORY_EMBEDDING_DIMENSIONS,
@@ -6,6 +7,7 @@ import {
   type EvidenceSource,
   type ScoreBreakdown,
   type ScoreSnapshot,
+  type WeeklyPlan,
 } from "@repo/shared";
 import type { SqlClient } from "./client.js";
 import {
@@ -120,6 +122,30 @@ type DailyPlanRow = {
   created_at: Date | string;
 };
 
+export type WeeklyPlanRow = {
+  week_start: Date | string;
+  weekly_goal: string;
+  target_minutes: number;
+  tasks: WeeklyPlan["tasks"] | string;
+  generated_at: Date | string;
+  created_at: Date | string;
+};
+
+export type DailyTaskRow = {
+  plan_date: Date | string;
+  task_key: string;
+  category: DailyPlan["tasks"][number]["category"];
+  title: string;
+  minutes: number;
+  evidence: string | null;
+  status: DailyTaskStatus;
+  completed_at: Date | string | null;
+  notes: string | null;
+  evidence_url: string | null;
+  created_at: Date | string;
+  updated_at: Date | string;
+};
+
 type IngestionRunRow = {
   source: string;
   status: string;
@@ -157,6 +183,32 @@ type LinearPlanningIssueRow = {
 };
 
 export type ScoringEvidenceScope = "all" | "user" | "repo" | "pull_request";
+
+export type DailyTaskStatus = "pending" | "completed" | "skipped";
+
+export interface DailyTaskRecord {
+  planDate: string;
+  taskKey: string;
+  category: DailyPlan["tasks"][number]["category"];
+  title: string;
+  minutes: number;
+  status: DailyTaskStatus;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  evidence?: string;
+  evidenceUrl?: string;
+  notes?: string;
+}
+
+export interface DailyTaskStatusUpdate {
+  completedAt?: string;
+  date: string;
+  evidenceUrl?: string;
+  notes?: string;
+  status: DailyTaskStatus;
+  taskKey: string;
+}
 
 export interface DashboardSummary {
   counts: {
@@ -327,6 +379,99 @@ export async function insertDailyPlan(
       tasks = excluded.tasks,
       target_minutes = excluded.target_minutes
   `;
+
+  for (const task of plan.tasks) {
+    await sql`
+      insert into daily_tasks (
+        plan_date,
+        task_key,
+        category,
+        title,
+        minutes,
+        evidence,
+        status,
+        updated_at
+      )
+      values (
+        ${plan.date},
+        ${dailyTaskKey(plan.date, task)},
+        ${task.category},
+        ${task.title},
+        ${task.minutes},
+        ${task.evidence ?? null},
+        'pending',
+        now()
+      )
+      on conflict (plan_date, task_key) do update set
+        category = excluded.category,
+        title = excluded.title,
+        minutes = excluded.minutes,
+        evidence = excluded.evidence,
+        updated_at = now()
+    `;
+  }
+}
+
+export async function insertWeeklyPlan(
+  sql: SqlClient,
+  plan: WeeklyPlan,
+): Promise<void> {
+  const tasksJson = JSON.stringify(plan.tasks);
+
+  await sql`
+    insert into weekly_plans (
+      week_start,
+      weekly_goal,
+      tasks,
+      target_minutes,
+      generated_at
+    )
+    values (
+      ${plan.weekStart},
+      ${plan.weeklyGoal},
+      ${tasksJson}::jsonb,
+      ${plan.targetMinutes},
+      ${plan.generatedAt}
+    )
+    on conflict (week_start) do update set
+      weekly_goal = excluded.weekly_goal,
+      tasks = excluded.tasks,
+      target_minutes = excluded.target_minutes,
+      generated_at = excluded.generated_at
+  `;
+}
+
+export async function updateDailyTaskStatus(
+  sql: SqlClient,
+  input: DailyTaskStatusUpdate,
+): Promise<DailyTaskRecord | undefined> {
+  const completedAt = input.status === "completed" ? input.completedAt ?? new Date().toISOString() : null;
+  const rows = await sql<DailyTaskRow[]>`
+    update daily_tasks
+    set
+      status = ${input.status},
+      completed_at = ${completedAt},
+      notes = ${input.notes ?? null},
+      evidence_url = ${input.evidenceUrl ?? null},
+      updated_at = now()
+    where plan_date = ${input.date}
+      and task_key = ${input.taskKey}
+    returning
+      plan_date,
+      task_key,
+      category,
+      title,
+      minutes,
+      evidence,
+      status,
+      completed_at,
+      notes,
+      evidence_url,
+      created_at,
+      updated_at
+  `;
+
+  return rows[0] ? dailyTaskFromRow(rows[0]) : undefined;
 }
 
 export async function createSlackNotificationAttempt(
@@ -990,6 +1135,49 @@ function dailyPlanFromRow(row: DailyPlanRow): DailyPlan & { createdAt: string } 
     date: row.plan_date instanceof Date ? row.plan_date.toISOString().slice(0, 10) : String(row.plan_date),
     targetMinutes: row.target_minutes,
     tasks,
+    createdAt: toIso(row.created_at),
+  };
+}
+
+export function dailyTaskKey(
+  planDate: string,
+  task: Pick<DailyPlan["tasks"][number], "category" | "title">,
+): string {
+  return createHash("sha256")
+    .update(`${planDate}:${task.category}:${task.title}`)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+export function dailyTaskFromRow(row: DailyTaskRow): DailyTaskRecord {
+  return {
+    planDate: row.plan_date instanceof Date ? row.plan_date.toISOString().slice(0, 10) : String(row.plan_date),
+    taskKey: row.task_key,
+    category: row.category,
+    title: row.title,
+    minutes: row.minutes,
+    status: row.status,
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+    ...(row.completed_at ? { completedAt: toIso(row.completed_at) } : {}),
+    ...(row.evidence ? { evidence: row.evidence } : {}),
+    ...(row.evidence_url ? { evidenceUrl: row.evidence_url } : {}),
+    ...(row.notes ? { notes: row.notes } : {}),
+  };
+}
+
+export function weeklyPlanFromRow(row: WeeklyPlanRow): WeeklyPlan & { createdAt: string } {
+  const tasks =
+    typeof row.tasks === "string"
+      ? JSON.parse(row.tasks) as WeeklyPlan["tasks"]
+      : row.tasks;
+
+  return {
+    weekStart: row.week_start instanceof Date ? row.week_start.toISOString().slice(0, 10) : String(row.week_start),
+    weeklyGoal: row.weekly_goal,
+    targetMinutes: row.target_minutes,
+    tasks,
+    generatedAt: toIso(row.generated_at),
     createdAt: toIso(row.created_at),
   };
 }

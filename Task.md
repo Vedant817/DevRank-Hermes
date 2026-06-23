@@ -179,9 +179,9 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] `external_memory_providers`
   - [ ] `external_memory_links`
   - [x] `daily_plans`
-  - [ ] `daily_tasks`
+  - [x] `daily_tasks`
   - [ ] `dsa_questions`
-  - [ ] `weekly_plans`
+  - [x] `weekly_plans`
   - [ ] `learning_goals`
   - [x] `scores`
   - [x] `score_snapshots`
@@ -633,16 +633,16 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Security issues.
   - [x] Learning extracted.
   - [x] Resume-worthy impact.
-- [ ] Create Dashboard E: Daily/Weekly Learning Plan Dashboard.
-- [ ] Daily/Weekly Learning Plan Dashboard shows:
-  - [ ] Today's DSA questions.
-  - [ ] Today's backend task.
-  - [ ] Today's system design topic.
-  - [ ] Today's GitHub/portfolio task.
-  - [ ] Today's AI-agent/orchestration task.
-  - [ ] Weekly goal.
-  - [ ] Completion status.
-  - [ ] Streak.
+- [x] Create Dashboard E: Daily/Weekly Learning Plan Dashboard.
+- [x] Daily/Weekly Learning Plan Dashboard shows:
+  - [x] Today's DSA questions.
+  - [x] Today's backend task.
+  - [x] Today's system design topic.
+  - [x] Today's GitHub/portfolio task.
+  - [x] Today's AI-agent/orchestration task.
+  - [x] Weekly goal.
+  - [x] Completion status.
+  - [x] Streak.
 - [ ] Create Dashboard F: Career/Content Dashboard.
 - [ ] Career/Content Dashboard generates:
   - [ ] Resume bullets.
@@ -740,16 +740,16 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Map weak testing, DevOps, system design, AI-agent, GitHub, DSA, backend, and public-proof lanes to deterministic tasks.
 - [x] Worker daily-plan job uses persisted score snapshots or persisted evidence instead of empty in-memory defaults.
 - [x] Cloud daily-plan cron recomputes and persists a score snapshot from persisted evidence when no snapshot exists.
-- [ ] Generate weekly plan:
-  - [ ] Monday: Arrays/Hashing + backend API.
-  - [ ] Tuesday: Binary Search/Two Pointers + database design.
-  - [ ] Wednesday: Stack/Queue/Linked List + testing/CI.
-  - [ ] Thursday: Trees/Graphs + system design.
-  - [ ] Friday: DP basics + project feature.
-  - [ ] Saturday: Build day, one solid PR.
-  - [ ] Sunday: Review dashboard, update resume/LinkedIn/X, plan next week.
-- [ ] Track completion status.
-- [ ] Track streak.
+- [x] Generate weekly plan:
+  - [x] Monday: Arrays/Hashing + backend API.
+  - [x] Tuesday: Binary Search/Two Pointers + database design.
+  - [x] Wednesday: Stack/Queue/Linked List + testing/CI.
+  - [x] Thursday: Trees/Graphs + system design.
+  - [x] Friday: DP basics + project feature.
+  - [x] Saturday: Build day, one solid PR.
+  - [x] Sunday: Review dashboard, update resume/LinkedIn/X, plan next week.
+- [x] Track completion status.
+- [x] Track streak.
 - [ ] Recompute future plans based on weak areas, Linear project priority, and market benchmark.
 
 ## 18. Search Access and Market Benchmarking
@@ -897,7 +897,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 ### Week 5: Planning and Slack
 
 - [x] Build daily planner.
-- [ ] Build weekly planner.
+- [x] Build weekly planner.
 - [ ] Build DSA target generator.
 - [x] Integrate Slack incoming webhook.
 - [x] Configure Vercel cron.
@@ -993,7 +993,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] DevRank OS can analyze GitHub repos and PRs.
 - [ ] DevRank OS can show project-wise Linear dashboards when Linear integration is enabled.
 - [ ] DevRank OS can produce transparent SDE readiness, PR quality, AI-agent maturity, and portfolio scores.
-- [ ] DevRank OS can create daily and weekly learning plans.
+- [x] DevRank OS can create daily and weekly learning plans.
 - [ ] DevRank OS can send Slack targets.
 - [ ] DevRank OS can benchmark current market skill demand.
 - [ ] DevRank OS can use optional external context without replacing Supabase as the source of truth.

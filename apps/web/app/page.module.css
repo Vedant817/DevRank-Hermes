@@ -132,6 +132,16 @@
   background: #fbfcfe;
 }
 
+a.sourceRow {
+  color: inherit;
+  text-decoration: none;
+}
+
+a.sourceRow:focus-visible {
+  outline: 3px solid #2f80ed;
+  outline-offset: 2px;
+}
+
 .sourceRow div {
   display: grid;
   gap: 4px;

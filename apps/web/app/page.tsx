@@ -169,6 +169,24 @@ function Dashboard({ summary }: { summary: DashboardSummary }) {
         )}
       </section>
 
+      <section className={styles.panel} aria-labelledby="dashboards-heading">
+        <div className={styles.sectionHeader}>
+          <p className={styles.kicker}>Specialized dashboards</p>
+          <h2 id="dashboards-heading">Live views</h2>
+        </div>
+        <div className={styles.sourceList}>
+          {dashboardLinks.map((link) => (
+            <a className={styles.sourceRow} href={link.href} key={link.href}>
+              <div>
+                <strong>{link.title}</strong>
+                <span>{link.description}</span>
+              </div>
+              <small>{link.label}</small>
+            </a>
+          ))}
+        </div>
+      </section>
+
       <section className={styles.panel} aria-labelledby="runs-heading">
         <div className={styles.sectionHeader}>
           <p className={styles.kicker}>Operations</p>
@@ -200,6 +218,33 @@ function Dashboard({ summary }: { summary: DashboardSummary }) {
     </main>
   );
 }
+
+const dashboardLinks = [
+  {
+    href: "/dashboards/ai-agent-learning",
+    label: "Dashboard B",
+    title: "AI Agent Learning",
+    description: "Agent usage, extracted skills, repeated errors, and best prompts.",
+  },
+  {
+    href: "/dashboards/github-portfolio",
+    label: "Dashboard C",
+    title: "GitHub Portfolio",
+    description: "Repository quality, README/tests/deployment gaps, and portfolio readiness.",
+  },
+  {
+    href: "/dashboards/pr-review",
+    label: "Dashboard D",
+    title: "PR Review",
+    description: "PR files, risk, test quality, review comments, and resume-worthy impact.",
+  },
+  {
+    href: "/dashboards/learning-plan",
+    label: "Dashboard E",
+    title: "Daily/Weekly Learning Plan",
+    description: "Today focus tasks, weekly goal, completion status, and streak.",
+  },
+];
 
 function scoreMetadata(score: NonNullable<DashboardSummary["latestScoreSnapshot"]>["breakdown"][number]) {
   return `${Math.round(score.weight * 100)}% weight | ${score.evidenceCount} evidence item(s) | ${score.explanation}`;

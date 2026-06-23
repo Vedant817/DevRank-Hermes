@@ -1,4 +1,4 @@
-import type { DailyPlan, DailyPlanTask, ScoreSnapshot } from "@repo/shared";
+import type { DailyPlan, DailyPlanTask, ScoreSnapshot, WeeklyPlan, WeeklyPlanTask } from "@repo/shared";
 import { explainWeakestLanes } from "@repo/scoring";
 
 interface PlanRule {
@@ -13,6 +13,12 @@ export interface GenerateDailyPlanOptions {
   includeDailyEssentials?: boolean;
   maxWeakLaneTasks?: number;
   urgentLinearTask?: string;
+}
+
+export interface GenerateWeeklyPlanOptions {
+  generatedAt?: string;
+  maxWeakLaneTasks?: number;
+  weekStart?: string;
 }
 
 const DEFAULT_MAX_WEAK_LANE_TASKS = 3;
@@ -53,6 +59,114 @@ const DAILY_ESSENTIALS: DailyPlanTask[] = [
     category: "public_proof",
     minutes: 15,
     evidence: "Minimum non-zero day",
+  },
+];
+
+const WEEKLY_PLAN_TEMPLATE: WeeklyPlanTask[] = [
+  {
+    day: "Monday",
+    title: "Arrays/Hashing: solve two medium questions and record reusable patterns.",
+    category: "dsa",
+    minutes: 45,
+    evidence: "Monday DSA ladder",
+  },
+  {
+    day: "Monday",
+    title: "Backend API: ship or harden one endpoint with validation and tests.",
+    category: "backend",
+    minutes: 60,
+    evidence: "Monday backend API",
+  },
+  {
+    day: "Tuesday",
+    title: "Binary Search/Two Pointers: solve two focused questions and compare templates.",
+    category: "dsa",
+    minutes: 45,
+    evidence: "Tuesday DSA ladder",
+  },
+  {
+    day: "Tuesday",
+    title: "Database design: model one project table, indexes, and failure cases.",
+    category: "backend",
+    minutes: 60,
+    evidence: "Tuesday database design",
+  },
+  {
+    day: "Wednesday",
+    title: "Stack/Queue/Linked List: solve two implementation-heavy questions.",
+    category: "dsa",
+    minutes: 45,
+    evidence: "Wednesday DSA ladder",
+  },
+  {
+    day: "Wednesday",
+    title: "Testing/CI: add or harden tests for one production-critical path.",
+    category: "testing",
+    minutes: 60,
+    evidence: "Wednesday testing and CI",
+  },
+  {
+    day: "Thursday",
+    title: "Trees/Graphs: solve traversal plus shortest-path or connected-components practice.",
+    category: "dsa",
+    minutes: 60,
+    evidence: "Thursday DSA ladder",
+  },
+  {
+    day: "Thursday",
+    title: "System design: document capacity, data model, API, cache, and failure tradeoffs.",
+    category: "system_design",
+    minutes: 60,
+    evidence: "Thursday system design",
+  },
+  {
+    day: "Friday",
+    title: "DP basics: solve one memoization and one tabulation exercise.",
+    category: "dsa",
+    minutes: 60,
+    evidence: "Friday DSA ladder",
+  },
+  {
+    day: "Friday",
+    title: "Project feature: deliver one end-to-end feature slice with tests and docs.",
+    category: "github",
+    minutes: 90,
+    evidence: "Friday project feature",
+  },
+  {
+    day: "Saturday",
+    title: "Build day: open one solid PR with code, tests, validation evidence, and review notes.",
+    category: "github",
+    minutes: 120,
+    evidence: "Saturday build day",
+  },
+  {
+    day: "Saturday",
+    title: "AI-agent workflow: turn one repeated workflow into a reusable prompt, script, or skill.",
+    category: "ai_agent",
+    minutes: 30,
+    evidence: "Saturday AI-agent improvement",
+  },
+  {
+    day: "Sunday",
+    title: "Review dashboard: inspect score movement, completed tasks, and weak lanes.",
+    category: "system_design",
+    minutes: 45,
+    evidence: "Sunday dashboard review",
+  },
+  {
+    day: "Sunday",
+    title: "Update resume, LinkedIn, X, or portfolio with one evidence-backed public proof note.",
+    category: "public_proof",
+    minutes: 60,
+    evidence: "Sunday public proof",
+  },
+  {
+    day: "Sunday",
+    title: "Plan next week from weak lanes, active Linear priority, and market benchmark gaps.",
+    category: "linear",
+    minutes: 30,
+    evidence: "Sunday next-week planning",
   },
 ];
 
@@ -168,6 +282,27 @@ export function formatDailyPlanForSlack(plan: DailyPlan): string {
   ].join("\n");
 }
 
+export function generateWeeklyPlan(
+  snapshot: ScoreSnapshot,
+  options: GenerateWeeklyPlanOptions = {},
+): WeeklyPlan {
+  const generatedAt = options.generatedAt ?? new Date().toISOString();
+  const weekStart = options.weekStart ?? mondayOfDate(new Date(generatedAt));
+  const weakLanes = explainWeakestLanes(snapshot, normalizeTaskLimit(options.maxWeakLaneTasks));
+  const weeklyGoal = weakLanes.length > 0
+    ? `Improve ${weakLanes.join(", ")} with one evidence-backed ship each day.`
+    : "Maintain daily SDE growth with one evidence-backed ship each day.";
+  const tasks = WEEKLY_PLAN_TEMPLATE.map((task) => enrichWeeklyTask(task, weakLanes));
+
+  return {
+    weekStart,
+    weeklyGoal,
+    tasks,
+    targetMinutes: tasks.reduce((total, task) => total + task.minutes, 0),
+    generatedAt,
+  };
+}
+
 function normalizeOptions(
   dateOrOptions: string | GenerateDailyPlanOptions,
   urgentLinearTask?: string,
@@ -250,4 +385,32 @@ function normalizeTaskLimit(value: number | undefined): number {
   }
 
   return Math.min(MAX_WEAK_LANE_TASKS, Math.max(1, Math.trunc(value)));
+}
+
+function enrichWeeklyTask(task: WeeklyPlanTask, weakLanes: string[]): WeeklyPlanTask {
+  const matchingLane = weakLanes.find((lane) => {
+    const normalizedLane = lane.toLowerCase();
+
+    return task.category === taskForLane(lane).category ||
+      normalizedLane.includes(task.category.replace("_", " "));
+  });
+
+  if (!matchingLane) {
+    return { ...task };
+  }
+
+  return {
+    ...task,
+    evidence: task.evidence ? `${task.evidence}; weak lane: ${matchingLane}` : `Weak lane: ${matchingLane}`,
+  };
+}
+
+function mondayOfDate(date: Date): string {
+  const utcDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = utcDate.getUTCDay();
+  const offset = day === 0 ? -6 : 1 - day;
+
+  utcDate.setUTCDate(utcDate.getUTCDate() + offset);
+
+  return utcDate.toISOString().slice(0, 10);
 }
