@@ -475,6 +475,7 @@ export async function insertDailyPlan(
   plan: DailyPlan,
 ): Promise<void> {
   const tasksJson = JSON.stringify(plan.tasks);
+  const taskKeys = plan.tasks.map((task) => dailyTaskKey(plan.date, task));
 
   await sql`
     insert into daily_plans (plan_date, tasks, target_minutes)
@@ -484,7 +485,20 @@ export async function insertDailyPlan(
       target_minutes = excluded.target_minutes
   `;
 
-  for (const task of plan.tasks) {
+  if (taskKeys.length > 0) {
+    await sql`
+      delete from daily_tasks
+      where plan_date = ${plan.date}
+        and task_key <> all(${taskKeys})
+    `;
+  } else {
+    await sql`
+      delete from daily_tasks
+      where plan_date = ${plan.date}
+    `;
+  }
+
+  for (const [index, task] of plan.tasks.entries()) {
     await sql`
       insert into daily_tasks (
         plan_date,
@@ -498,7 +512,7 @@ export async function insertDailyPlan(
       )
       values (
         ${plan.date},
-        ${dailyTaskKey(plan.date, task)},
+        ${taskKeys[index] ?? dailyTaskKey(plan.date, task)},
         ${task.category},
         ${task.title},
         ${task.minutes},
@@ -684,6 +698,10 @@ export async function claimGithubWebhookDelivery(
       received_at = now(),
       processed_at = null
     where github_webhook_events.status = 'failed'
+      or (
+        github_webhook_events.status = 'processing'
+        and github_webhook_events.received_at < now() - interval '10 minutes'
+      )
     returning delivery_id
   `;
 
@@ -753,6 +771,10 @@ export async function claimLinearWebhookDelivery(
       received_at = now(),
       processed_at = null
     where linear_webhook_events.status = 'failed'
+      or (
+        linear_webhook_events.status = 'processing'
+        and linear_webhook_events.received_at < now() - interval '10 minutes'
+      )
     returning delivery_id
   `;
 

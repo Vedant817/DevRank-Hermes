@@ -1008,10 +1008,10 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Preserve Linear project and team links when sparse issue webhooks arrive.
 - [x] Import and persist Linear workspace ownership for workspace filters.
 - [x] Import and persist Linear `updatedAt` values for stale issue detection.
-- [ ] Reclaim stale webhook deliveries that remain stuck in `processing`.
+- [x] Reclaim stale webhook deliveries that remain stuck in `processing`.
 - [x] Treat missing, unreadable, or no-op local ingestion paths as explicit failures.
 - [x] Resolve local ingestion symlinks before allowed-root checks.
-- [ ] Replace stale materialized daily task rows when a plan is regenerated.
+- [x] Replace stale materialized daily task rows when a plan is regenerated.
 - [x] Make local daemon watch mode catch failures and avoid overlapping ingestion jobs.
 - [ ] Make combined context writes idempotent or status-aware across Supabase and Supermemory.
 - [ ] Return client errors for invalid short context search queries instead of `503`.
