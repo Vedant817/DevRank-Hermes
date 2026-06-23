@@ -34,6 +34,8 @@ Feature routes require their own secrets when enabled:
 
 ```text
 DEVRANK_API_TOKEN=...
+DEVRANK_DASHBOARD_TOKEN=...
+DEVRANK_DASHBOARD_USER=devrank
 
 # Optional production scoped tokens. When a scoped token is configured, that
 # route no longer accepts DEVRANK_API_TOKEN.

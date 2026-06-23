@@ -507,6 +507,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Require `DEVRANK_LOCAL_INGEST_ROOTS` before server-side local path ingestion.
   - [x] Bound context `containerTags` and keep Supabase context retrieval scoped by tags.
   - [x] Block obvious secrets in context metadata, imported evidence fields, direct scoring evidence, and Slack text.
+  - [x] Protect the dashboard page with fail-closed Basic/Bearer auth before reading database summaries.
 - [x] Create `vercel.json`.
 - [x] Add daily plan cron:
   - [x] Path: `/api/cron/daily-plan`.

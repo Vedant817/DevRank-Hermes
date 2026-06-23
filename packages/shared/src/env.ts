@@ -11,6 +11,8 @@ export const runtimeEnvSchema = z.object({
   SUPABASE_ANON_KEY: nonEmptyString.optional(),
   SUPABASE_SERVICE_ROLE_KEY: nonEmptyString.optional(),
   DEVRANK_API_TOKEN: nonEmptyString.optional(),
+  DEVRANK_DASHBOARD_TOKEN: nonEmptyString.optional(),
+  DEVRANK_DASHBOARD_USER: nonEmptyString.optional(),
   DEVRANK_CONTEXT_READ_TOKEN: nonEmptyString.optional(),
   DEVRANK_CONTEXT_WRITE_TOKEN: nonEmptyString.optional(),
   DEVRANK_SCORE_RECOMPUTE_TOKEN: nonEmptyString.optional(),
