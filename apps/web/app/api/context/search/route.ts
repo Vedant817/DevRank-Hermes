@@ -5,6 +5,7 @@ import {
   jsonError,
   jsonOk,
   methodNotAllowed,
+  rateLimit,
   readJsonObject,
   requireApiAuth,
 } from "../../_lib/route-utils";
@@ -18,13 +19,26 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const authError = requireApiAuth(request);
+  const limitError = rateLimit(request, {
+    key: "context_search",
+    limit: 60,
+    windowMs: 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
+  const authError = requireApiAuth(request, {
+    scopedEnvName: "DEVRANK_CONTEXT_READ_TOKEN",
+    label: "context read token",
+  });
 
   if (authError !== null) {
     return authError;
   }
 
-  const body = await readJsonObject(request);
+  const body = await readJsonObject(request, { maxBytes: 32 * 1024 });
 
   if (!body.ok) {
     return body.response;
@@ -56,8 +70,8 @@ export async function POST(request: Request) {
     });
 
     return jsonOk({ results });
-  } catch (error) {
-    return jsonError(503, "context_search_failed", error instanceof Error ? error.message : "Context search failed.");
+  } catch {
+    return jsonError(503, "context_search_failed", "Context search failed.");
   }
 }
 

@@ -4,7 +4,9 @@ import {
   jsonOk,
   methodNotAllowed,
   parseWebhookJson,
+  rateLimit,
   readRawBody,
+  sanitizeOperationalError,
 } from "../../_lib/route-utils";
 import {
   closeSqlClient,
@@ -25,19 +27,34 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
+  const limitError = rateLimit(request, {
+    key: "linear_webhook",
+    limit: 120,
+    windowMs: 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
   const secret = getRequiredEnv("LINEAR_WEBHOOK_SECRET");
 
   if (!secret.ok) {
     return secret.response;
   }
 
-  const rawBody = await readRawBody(request);
+  const rawBody = await readRawBody(request, { maxBytes: 1024 * 1024 });
+
+  if (!rawBody.ok) {
+    return rawBody.response;
+  }
+
   const signatureHeader = request.headers.get("linear-signature");
 
   try {
     verifyLinearWebhook(rawBody.text, signatureHeader);
-  } catch (error) {
-    return jsonError(401, "linear_signature_invalid", error instanceof Error ? error.message : "Linear signature verification failed.");
+  } catch {
+    return jsonError(401, "linear_signature_invalid", "Linear signature verification failed.");
   }
 
   const payload = parseWebhookJson(rawBody.text);
@@ -109,11 +126,11 @@ export async function POST(request: Request) {
       await insertIngestionRun(sql, {
         source: "linear_webhook",
         status: "failed",
-        error: error instanceof Error ? error.message : String(error),
+        error: sanitizeOperationalError(error, "linear_webhook_ingestion_failed"),
       }).catch(() => undefined);
     }
 
-    return jsonError(503, "linear_webhook_ingestion_failed", error instanceof Error ? error.message : "Linear webhook ingestion failed.");
+    return jsonError(503, "linear_webhook_ingestion_failed", "Linear webhook ingestion failed.");
   } finally {
     if (sql) {
       await closeSqlClient(sql);

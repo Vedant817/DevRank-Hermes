@@ -1,4 +1,5 @@
 import {
+  containsLikelySecretInJson,
   containsLikelySecret,
   getOptionalObject,
   getOptionalString,
@@ -6,6 +7,7 @@ import {
   jsonError,
   jsonOk,
   methodNotAllowed,
+  rateLimit,
   readJsonObject,
   requireApiAuth,
 } from "../../_lib/route-utils";
@@ -19,13 +21,26 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const authError = requireApiAuth(request);
+  const limitError = rateLimit(request, {
+    key: "context_write",
+    limit: 30,
+    windowMs: 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
+  const authError = requireApiAuth(request, {
+    scopedEnvName: "DEVRANK_CONTEXT_WRITE_TOKEN",
+    label: "context write token",
+  });
 
   if (authError !== null) {
     return authError;
   }
 
-  const body = await readJsonObject(request);
+  const body = await readJsonObject(request, { maxBytes: 64 * 1024 });
 
   if (!body.ok) {
     return body.response;
@@ -67,6 +82,15 @@ export async function POST(request: Request) {
     return metadata.response;
   }
 
+  if (containsLikelySecretInJson({
+    metadata: metadata.value,
+    scope: scope.value,
+    source: source.value,
+    title: getOptionalString(body.value, "title"),
+  })) {
+    return jsonError(422, "context_contains_secret", "Context fields appear to contain a secret and cannot be written.");
+  }
+
   try {
     const item = await writeContext({
       title: getOptionalString(body.value, "title") ?? source.value,
@@ -77,8 +101,8 @@ export async function POST(request: Request) {
     });
 
     return jsonOk({ item });
-  } catch (error) {
-    return jsonError(503, "context_write_failed", error instanceof Error ? error.message : "Context write failed.");
+  } catch {
+    return jsonError(503, "context_write_failed", "Context write failed.");
   }
 }
 

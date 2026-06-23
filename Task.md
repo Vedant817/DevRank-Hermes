@@ -495,6 +495,11 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `/api/scores/recompute`
   - [x] `/api/context/search`
   - [x] `/api/context/write`
+- [x] Harden backend API route envelope:
+  - [x] Enforce bounded JSON and raw webhook request body reads.
+  - [x] Add per-route in-process rate limits for backend APIs and webhooks.
+  - [x] Support scoped bearer-token environment variables with `DEVRANK_API_TOKEN` fallback.
+  - [x] Return stable public error messages instead of raw internal exception text.
 - [x] Create `vercel.json`.
 - [x] Add daily plan cron:
   - [x] Path: `/api/cron/daily-plan`.

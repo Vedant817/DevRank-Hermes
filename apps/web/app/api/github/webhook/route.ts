@@ -4,7 +4,9 @@ import {
   jsonOk,
   methodNotAllowed,
   parseWebhookJson,
+  rateLimit,
   readRawBody,
+  sanitizeOperationalError,
 } from "../../_lib/route-utils";
 import {
   closeSqlClient,
@@ -27,19 +29,34 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
+  const limitError = rateLimit(request, {
+    key: "github_webhook",
+    limit: 120,
+    windowMs: 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
   const secret = getRequiredEnv("GITHUB_WEBHOOK_SECRET");
 
   if (!secret.ok) {
     return secret.response;
   }
 
-  const rawBody = await readRawBody(request);
+  const rawBody = await readRawBody(request, { maxBytes: 1024 * 1024 });
+
+  if (!rawBody.ok) {
+    return rawBody.response;
+  }
+
   const signatureHeader = request.headers.get("x-hub-signature-256");
 
   try {
     await verifyGithubWebhook(rawBody.text, signatureHeader);
-  } catch (error) {
-    return jsonError(401, "github_signature_invalid", error instanceof Error ? error.message : "GitHub signature verification failed.");
+  } catch {
+    return jsonError(401, "github_signature_invalid", "GitHub signature verification failed.");
   }
 
   const payload = parseWebhookJson(rawBody.text);
@@ -123,11 +140,11 @@ export async function POST(request: Request) {
       await insertIngestionRun(sql, {
         source: "github_webhook",
         status: "failed",
-        error: error instanceof Error ? error.message : String(error),
+        error: sanitizeOperationalError(error, "github_webhook_ingestion_failed"),
       }).catch(() => undefined);
     }
 
-    return jsonError(503, "github_webhook_ingestion_failed", error instanceof Error ? error.message : "GitHub webhook ingestion failed.");
+    return jsonError(503, "github_webhook_ingestion_failed", "GitHub webhook ingestion failed.");
   } finally {
     if (sql) {
       await closeSqlClient(sql);

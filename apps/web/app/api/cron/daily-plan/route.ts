@@ -16,6 +16,7 @@ import {
   jsonError,
   jsonOk,
   methodNotAllowed,
+  rateLimit,
   readJsonObject,
   requireApiAuth,
   requireCronAuth,
@@ -33,6 +34,16 @@ type ScoreSnapshot = Parameters<typeof generateDailyPlan>[0];
 type ScoreBreakdown = ScoreSnapshot["breakdown"][number];
 
 export async function GET(request: Request) {
+  const limitError = rateLimit(request, {
+    key: "daily_plan_cron",
+    limit: 5,
+    windowMs: 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
   const authError = requireCronAuth(request);
 
   if (authError !== null) {
@@ -83,19 +94,32 @@ export async function GET(request: Request) {
     } finally {
       await closeSqlClient(sql);
     }
-  } catch (error) {
-    return jsonError(503, "daily_plan_failed", error instanceof Error ? error.message : "Daily plan generation failed.");
+  } catch {
+    return jsonError(503, "daily_plan_failed", "Daily plan generation failed.");
   }
 }
 
 export async function POST(request: Request) {
-  const authError = requireApiAuth(request);
+  const limitError = rateLimit(request, {
+    key: "daily_plan_preview",
+    limit: 20,
+    windowMs: 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
+  const authError = requireApiAuth(request, {
+    scopedEnvName: "DEVRANK_PLANNER_TOKEN",
+    label: "planner token",
+  });
 
   if (authError !== null) {
     return authError;
   }
 
-  const body = await readJsonObject(request);
+  const body = await readJsonObject(request, { maxBytes: 128 * 1024 });
 
   if (!body.ok) {
     return body.response;

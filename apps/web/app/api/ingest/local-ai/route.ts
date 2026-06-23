@@ -15,6 +15,7 @@ import {
   jsonError,
   jsonOk,
   methodNotAllowed,
+  rateLimit,
   readJsonObject,
   requireApiAuth,
 } from "../../_lib/route-utils";
@@ -41,13 +42,26 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const authError = requireApiAuth(request);
+  const limitError = rateLimit(request, {
+    key: "local_ai_ingest",
+    limit: 10,
+    windowMs: 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
+  const authError = requireApiAuth(request, {
+    scopedEnvName: "DEVRANK_INGEST_TOKEN",
+    label: "ingestion token",
+  });
 
   if (authError !== null) {
     return authError;
   }
 
-  const body = await readJsonObject(request);
+  const body = await readJsonObject(request, { maxBytes: 1024 * 1024 });
 
   if (!body.ok) {
     return body.response;
@@ -112,10 +126,8 @@ export async function POST(request: Request) {
       privacy: result.privacy,
       evidence: result.evidence,
     });
-  } catch (error) {
-    return jsonError(500, "local_ai_ingestion_failed", "Local AI chat ingestion failed.", {
-      message: error instanceof Error ? error.message : "Unknown ingestion error.",
-    });
+  } catch {
+    return jsonError(500, "local_ai_ingestion_failed", "Local AI chat ingestion failed.");
   }
 }
 
@@ -178,10 +190,8 @@ async function ingestEvidenceExport(
       },
       evidence,
     });
-  } catch (error) {
-    return jsonError(500, "export_ingestion_failed", "Evidence export ingestion failed.", {
-      message: error instanceof Error ? error.message : "Unknown export ingestion error.",
-    });
+  } catch {
+    return jsonError(500, "export_ingestion_failed", "Evidence export ingestion failed.");
   }
 }
 

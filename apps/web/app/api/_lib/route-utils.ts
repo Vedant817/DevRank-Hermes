@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 type JsonObject = Record<string, unknown>;
@@ -6,6 +6,34 @@ type JsonObject = Record<string, unknown>;
 type ReadJsonResult =
   | { ok: true; value: JsonObject }
   | { ok: false; response: NextResponse };
+
+type ReadRawBodyResult =
+  | { ok: true; buffer: Buffer; text: string }
+  | { ok: false; response: NextResponse };
+
+type ReadBodyOptions = {
+  maxBytes?: number;
+};
+
+type ApiAuthOptions = {
+  label?: string;
+  scopedEnvName?: string;
+};
+
+type RateLimitOptions = {
+  key: string;
+  limit: number;
+  windowMs: number;
+};
+
+type RateLimitBucket = {
+  count: number;
+  resetAt: number;
+};
+
+const DEFAULT_JSON_MAX_BYTES = 128 * 1024;
+const DEFAULT_RAW_MAX_BYTES = 512 * 1024;
+const RATE_LIMIT_BUCKETS_SYMBOL = Symbol.for("devrank.rateLimitBuckets");
 
 export function jsonOk(payload: JsonObject = {}, status = 200) {
   return NextResponse.json({ ok: true, ...payload }, { status });
@@ -61,11 +89,20 @@ export function packageUnavailable(
   );
 }
 
-export async function readJsonObject(request: Request): Promise<ReadJsonResult> {
+export async function readJsonObject(
+  request: Request,
+  options: ReadBodyOptions = {},
+): Promise<ReadJsonResult> {
+  const body = await readLimitedBody(request, options.maxBytes ?? DEFAULT_JSON_MAX_BYTES);
+
+  if (!body.ok) {
+    return body;
+  }
+
   let payload: unknown;
 
   try {
-    payload = await request.json();
+    payload = JSON.parse(body.text);
   } catch {
     return {
       ok: false,
@@ -176,12 +213,31 @@ export function getOptionalObject(
   return { ok: true as const, value };
 }
 
-export function requireApiAuth(request: Request) {
-  return requireBearerSecret(request, "DEVRANK_API_TOKEN", "API token");
+export function requireApiAuth(
+  request: Request,
+  options: ApiAuthOptions = {},
+) {
+  if (
+    options.scopedEnvName !== undefined &&
+    getEnvValue(options.scopedEnvName) !== undefined
+  ) {
+    return requireBearerSecret(request, [{
+      envName: options.scopedEnvName,
+      label: options.label ?? "scoped API token",
+    }]);
+  }
+
+  return requireBearerSecret(request, [{
+    envName: "DEVRANK_API_TOKEN",
+    label: options.label ?? "API token",
+  }]);
 }
 
 export function requireCronAuth(request: Request) {
-  return requireBearerSecret(request, "CRON_SECRET", "cron secret");
+  return requireBearerSecret(request, [{
+    envName: "CRON_SECRET",
+    label: "cron secret",
+  }]);
 }
 
 export function getRequiredEnv(name: string) {
@@ -241,13 +297,11 @@ export function verifyHmacHex(
   return { ok: true as const };
 }
 
-export async function readRawBody(request: Request) {
-  const buffer = Buffer.from(await request.arrayBuffer());
-
-  return {
-    buffer,
-    text: buffer.toString("utf8"),
-  };
+export async function readRawBody(
+  request: Request,
+  options: ReadBodyOptions = {},
+): Promise<ReadRawBodyResult> {
+  return readLimitedBody(request, options.maxBytes ?? DEFAULT_RAW_MAX_BYTES);
 }
 
 export function parseWebhookJson(rawBody: string) {
@@ -272,6 +326,40 @@ export function parseWebhookJson(rawBody: string) {
   return { ok: true as const, value: payload };
 }
 
+export function rateLimit(
+  request: Request,
+  options: RateLimitOptions,
+) {
+  const now = Date.now();
+  const buckets = getRateLimitBuckets();
+  const identity = clientIdentity(request);
+  const key = `${options.key}:${identity}`;
+  const current = buckets.get(key);
+  const bucket =
+    current === undefined || current.resetAt <= now
+      ? { count: 0, resetAt: now + options.windowMs }
+      : current;
+
+  bucket.count += 1;
+  buckets.set(key, bucket);
+
+  if (buckets.size > 5_000) {
+    pruneExpiredRateLimits(buckets, now);
+  }
+
+  if (bucket.count <= options.limit) {
+    return null;
+  }
+
+  const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1_000));
+  const response = jsonError(429, "rate_limited", "Too many requests. Retry after the current rate limit window.", {
+    retryAfterSeconds,
+  });
+  response.headers.set("Retry-After", String(retryAfterSeconds));
+
+  return response;
+}
+
 export function containsLikelySecret(value: string) {
   const secretPatterns = [
     /(?:api[_-]?key|token|secret|password)\s*[:=]\s*["']?[a-z0-9._-]{12,}/i,
@@ -283,6 +371,39 @@ export function containsLikelySecret(value: string) {
   return secretPatterns.some((pattern) => pattern.test(value));
 }
 
+export function containsLikelySecretInJson(value: unknown): boolean {
+  if (typeof value === "string") {
+    return containsLikelySecret(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => containsLikelySecretInJson(item));
+  }
+
+  if (isJsonObject(value)) {
+    return Object.entries(value).some(([key, entry]) => (
+      containsLikelySecret(key) || containsLikelySecretInJson(entry)
+    ));
+  }
+
+  return false;
+}
+
+export function publicErrorMessage(message: string) {
+  return message;
+}
+
+export function sanitizeOperationalError(error: unknown, code: string) {
+  const raw = error instanceof Error ? error.message : String(error);
+  const trimmed = truncate(raw.replace(/\s+/g, " "), 240);
+
+  if (containsLikelySecret(trimmed)) {
+    return `${code}: redacted internal error`;
+  }
+
+  return `${code}: ${trimmed}`;
+}
+
 export function truncate(value: string, maxLength: number) {
   if (value.length <= maxLength) {
     return value;
@@ -291,27 +412,106 @@ export function truncate(value: string, maxLength: number) {
   return `${value.slice(0, maxLength)}...`;
 }
 
+async function readLimitedBody(
+  request: Request,
+  maxBytes: number,
+): Promise<ReadRawBodyResult> {
+  const contentLength = request.headers.get("content-length");
+
+  if (contentLength !== null) {
+    const parsed = Number(contentLength);
+
+    if (!Number.isSafeInteger(parsed) || parsed < 0) {
+      return {
+        ok: false,
+        response: jsonError(400, "invalid_content_length", "Content-Length must be a non-negative integer."),
+      };
+    }
+
+    if (parsed > maxBytes) {
+      return {
+        ok: false,
+        response: payloadTooLarge(maxBytes),
+      };
+    }
+  }
+
+  if (request.body === null) {
+    return { ok: true, buffer: Buffer.alloc(0), text: "" };
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    total += value.byteLength;
+
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+
+      return {
+        ok: false,
+        response: payloadTooLarge(maxBytes),
+      };
+    }
+
+    chunks.push(Buffer.from(value));
+  }
+
+  const buffer = Buffer.concat(chunks, total);
+
+  return {
+    ok: true,
+    buffer,
+    text: buffer.toString("utf8"),
+  };
+}
+
+function payloadTooLarge(maxBytes: number) {
+  return jsonError(413, "request_too_large", "Request body is too large.", {
+    maxBytes,
+  });
+}
+
 function requireBearerSecret(
   request: Request,
-  envName: string,
-  label: string,
+  candidates: Array<{
+    envName: string;
+    label: string;
+  }>,
 ) {
-  const expected = getEnvValue(envName);
+  const configured = candidates
+    .map((candidate) => ({
+      ...candidate,
+      value: getEnvValue(candidate.envName),
+    }))
+    .filter((candidate): candidate is {
+      envName: string;
+      label: string;
+      value: string;
+    } => candidate.value !== undefined);
 
-  if (expected === undefined) {
-    return jsonError(503, "missing_env", `${envName} is not configured.`, {
-      env: envName,
+  if (configured.length === 0) {
+    return jsonError(503, "missing_env", `${candidates.map((candidate) => candidate.envName).join(" or ")} is not configured.`, {
+      env: candidates.map((candidate) => candidate.envName).join(","),
     });
   }
 
   const token = getBearerToken(request);
 
   if (token === undefined) {
-    return jsonError(401, "missing_authorization", `Bearer ${label} is required.`);
+    return jsonError(401, "missing_authorization", `Bearer ${configured[0]?.label ?? "token"} is required.`);
   }
 
-  if (!safeCompareUtf8(token, expected)) {
-    return jsonError(401, "invalid_authorization", `Bearer ${label} is invalid.`);
+  if (!configured.some((candidate) => safeCompareUtf8(token, candidate.value))) {
+    return jsonError(401, "invalid_authorization", `Bearer ${configured[0]?.label ?? "token"} is invalid.`);
   }
 
   return null;
@@ -338,6 +538,49 @@ function getBearerToken(request: Request) {
   }
 
   return token.trim();
+}
+
+function getRateLimitBuckets() {
+  const globalScope = globalThis as typeof globalThis & {
+    [RATE_LIMIT_BUCKETS_SYMBOL]?: Map<string, RateLimitBucket>;
+  };
+
+  globalScope[RATE_LIMIT_BUCKETS_SYMBOL] ??= new Map<string, RateLimitBucket>();
+
+  return globalScope[RATE_LIMIT_BUCKETS_SYMBOL];
+}
+
+function clientIdentity(request: Request) {
+  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+
+  if (forwardedFor) {
+    return `ip:${forwardedFor}`;
+  }
+
+  const realIp = request.headers.get("x-real-ip")?.trim();
+
+  if (realIp) {
+    return `ip:${realIp}`;
+  }
+
+  const authorization = request.headers.get("authorization");
+
+  if (authorization) {
+    return `auth:${createHash("sha256").update(authorization).digest("hex").slice(0, 24)}`;
+  }
+
+  return "anonymous";
+}
+
+function pruneExpiredRateLimits(
+  buckets: Map<string, RateLimitBucket>,
+  now: number,
+) {
+  for (const [key, bucket] of buckets) {
+    if (bucket.resetAt <= now) {
+      buckets.delete(key);
+    }
+  }
 }
 
 function normalizeHexSignature(

@@ -9,6 +9,7 @@ import {
   jsonError,
   jsonOk,
   methodNotAllowed,
+  rateLimit,
   readJsonObject,
   requireApiAuth,
   requireCronAuth,
@@ -20,6 +21,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const limitError = rateLimit(request, {
+    key: "weekly_review_cron",
+    limit: 5,
+    windowMs: 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
   const authError = requireCronAuth(request);
 
   if (authError !== null) {
@@ -56,19 +67,32 @@ export async function GET(request: Request) {
     } finally {
       await closeSqlClient(sql);
     }
-  } catch (error) {
-    return jsonError(503, "weekly_review_failed", error instanceof Error ? error.message : "Weekly review failed.");
+  } catch {
+    return jsonError(503, "weekly_review_failed", "Weekly review failed.");
   }
 }
 
 export async function POST(request: Request) {
-  const authError = requireApiAuth(request);
+  const limitError = rateLimit(request, {
+    key: "weekly_review_preview",
+    limit: 10,
+    windowMs: 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
+  const authError = requireApiAuth(request, {
+    scopedEnvName: "DEVRANK_HERMES_REVIEW_TOKEN",
+    label: "Hermes review token",
+  });
 
   if (authError !== null) {
     return authError;
   }
 
-  const body = await readJsonObject(request);
+  const body = await readJsonObject(request, { maxBytes: 128 * 1024 });
 
   if (!body.ok) {
     return body.response;
@@ -97,8 +121,8 @@ export async function POST(request: Request) {
     });
 
     return jsonOk({ review: result });
-  } catch (error) {
-    return jsonError(503, "weekly_review_failed", error instanceof Error ? error.message : "Weekly review failed.");
+  } catch {
+    return jsonError(503, "weekly_review_failed", "Weekly review failed.");
   }
 }
 

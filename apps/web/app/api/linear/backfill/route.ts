@@ -10,6 +10,7 @@ import {
   jsonError,
   jsonOk,
   methodNotAllowed,
+  rateLimit,
   readJsonObject,
   requireApiAuth,
 } from "../../_lib/route-utils";
@@ -22,13 +23,26 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const authError = requireApiAuth(request);
+  const limitError = rateLimit(request, {
+    key: "linear_backfill",
+    limit: 10,
+    windowMs: 60 * 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
+  const authError = requireApiAuth(request, {
+    scopedEnvName: "DEVRANK_LINEAR_BACKFILL_TOKEN",
+    label: "Linear backfill token",
+  });
 
   if (authError !== null) {
     return authError;
   }
 
-  const body = await readJsonObject(request);
+  const body = await readJsonObject(request, { maxBytes: 16 * 1024 });
 
   if (!body.ok) {
     return body.response;
@@ -62,7 +76,7 @@ export async function POST(request: Request) {
       written,
       result,
     });
-  } catch (error) {
-    return jsonError(503, "linear_backfill_failed", error instanceof Error ? error.message : "Linear backfill failed.");
+  } catch {
+    return jsonError(503, "linear_backfill_failed", "Linear backfill failed.");
   }
 }

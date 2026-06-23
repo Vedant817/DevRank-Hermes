@@ -11,6 +11,7 @@ import {
   jsonError,
   jsonOk,
   methodNotAllowed,
+  rateLimit,
   readJsonObject,
   requireApiAuth,
 } from "../../_lib/route-utils";
@@ -31,13 +32,26 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const authError = requireApiAuth(request);
+  const limitError = rateLimit(request, {
+    key: "score_recompute",
+    limit: 20,
+    windowMs: 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
+  const authError = requireApiAuth(request, {
+    scopedEnvName: "DEVRANK_SCORE_RECOMPUTE_TOKEN",
+    label: "score recompute token",
+  });
 
   if (authError !== null) {
     return authError;
   }
 
-  const body = await readJsonObject(request);
+  const body = await readJsonObject(request, { maxBytes: 512 * 1024 });
 
   if (!body.ok) {
     return body.response;
@@ -109,8 +123,8 @@ export async function POST(request: Request) {
     } finally {
       await closeSqlClient(sql);
     }
-  } catch (error) {
-    return jsonError(503, "score_recompute_failed", error instanceof Error ? error.message : "Score recomputation failed.");
+  } catch {
+    return jsonError(503, "score_recompute_failed", "Score recomputation failed.");
   }
 }
 

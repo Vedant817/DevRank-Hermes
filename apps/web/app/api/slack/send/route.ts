@@ -3,6 +3,7 @@ import {
   jsonError,
   jsonOk,
   methodNotAllowed,
+  rateLimit,
   readJsonObject,
   requireApiAuth,
 } from "../../_lib/route-utils";
@@ -16,7 +17,20 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const authError = requireApiAuth(request);
+  const limitError = rateLimit(request, {
+    key: "slack_send",
+    limit: 20,
+    windowMs: 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
+  const authError = requireApiAuth(request, {
+    scopedEnvName: "DEVRANK_SLACK_SEND_TOKEN",
+    label: "Slack send token",
+  });
 
   if (authError !== null) {
     return authError;
@@ -28,7 +42,7 @@ export async function POST(request: Request) {
     return webhookUrl.response;
   }
 
-  const body = await readJsonObject(request);
+  const body = await readJsonObject(request, { maxBytes: 16 * 1024 });
 
   if (!body.ok) {
     return body.response;
@@ -54,7 +68,7 @@ export async function POST(request: Request) {
       result,
       webhookConfigured: webhookUrl.value.length > 0,
     });
-  } catch (error) {
-    return jsonError(502, "slack_delivery_failed", error instanceof Error ? error.message : "Slack delivery failed.");
+  } catch {
+    return jsonError(502, "slack_delivery_failed", "Slack delivery failed.");
   }
 }
