@@ -1,0 +1,31 @@
+{
+  "name": "@repo/mastra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "lint": "eslint src --max-warnings 0",
+    "check-types": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@mastra/core": "^1.45.0",
+    "@repo/shared": "workspace:*",
+    "@repo/vector-store": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^22.15.3",
+    "eslint": "^9.39.1",
+    "tsx": "^4.22.4",
+    "typescript": "5.9.2"
+  }
+}
