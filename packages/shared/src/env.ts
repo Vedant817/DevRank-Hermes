@@ -55,8 +55,17 @@ export const runtimeEnvSchema = z.object({
   LOCAL_AGENT_UPLOAD_RAW_CHATS: z.enum(["true", "false"]).default("false"),
   LOCAL_AGENT_REDACT_SECRETS: z.enum(["true", "false"]).default("true"),
   CONTEXT_PROVIDER: z
-    .enum(["supabase", "supermemory", "combined"])
+    .enum(["supabase", "supermemory", "combined", "qdrant"])
     .default("supabase"),
+  QDRANT_URL: nonEmptyString.optional(),
+  QDRANT_API_KEY: nonEmptyString.optional(),
+  QDRANT_COLLECTION_NAME: nonEmptyString.optional(),
+  QDRANT_HTTPS: nonEmptyString.optional(),
+  GUARDRAILS_ENABLED: nonEmptyString.optional(),
+  GUARDRAILS_PII_REDACTION: nonEmptyString.optional(),
+  GUARDRAILS_PROMPT_INJECTION: nonEmptyString.optional(),
+  ENKRYPTAI_API_KEY: nonEmptyString.optional(),
+  ENKRYPTAI_ENDPOINT: nonEmptyString.optional(),
 });
 
 export type RuntimeEnv = z.infer<typeof runtimeEnvSchema>;
