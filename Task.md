@@ -1004,7 +1004,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 - [x] Protect all dashboard routes with fail-closed Basic/Bearer auth, not only `/`.
 - [x] Stop unauthenticated API rate limiting from trusting spoofable IP headers by default.
-- [ ] Redact or reject secret-like evidence before Hermes sends mentor-review prompts to the AI provider.
+- [x] Redact or reject secret-like evidence before Hermes sends mentor-review prompts to the AI provider.
 - [x] Preserve Linear project and team links when sparse issue webhooks arrive.
 - [x] Import and persist Linear workspace ownership for workspace filters.
 - [x] Import and persist Linear `updatedAt` values for stale issue detection.

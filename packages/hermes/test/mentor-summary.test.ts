@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  redactHermesPromptText,
   resolveHermesRuntimeConfig,
   runHermesMentorSummary,
 } from "../src/index.js";
@@ -64,6 +65,42 @@ test("sends mentor summary request with configured model and endpoint", async ()
   assert.equal(requests[0]?.headers.get("HTTP-Referer"), "https://devrank.example");
   assert.equal(requests[0]?.headers.get("X-Title"), "DevRank Production");
   assert.equal((requests[0]?.body as { model?: string }).model, "google/gemini-flash-1.5");
+});
+
+test("redacts secret-like evidence before calling AI provider", async () => {
+  const requests: Array<{ body: { messages?: Array<{ content?: string }> } }> = [];
+  const fetchMock: typeof fetch = async (_url, init) => {
+    requests.push({
+      body: JSON.parse(String(init?.body)),
+    });
+
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: "Use redacted evidence only." } }],
+    }));
+  };
+
+  await runHermesMentorSummary(
+    {
+      evidenceSummary: "Fixed token=secret-value and postgres://user:pass@example/db with sk-testsecretvalue123456.",
+      weakestLanes: ["api_key=secret-value"],
+    },
+    { AI_API_KEY: "test-key" },
+    { fetch: fetchMock },
+  );
+
+  const prompt = requests[0]?.body.messages?.[1]?.content ?? "";
+
+  assert.doesNotMatch(prompt, /secret-value/);
+  assert.doesNotMatch(prompt, /postgres:\/\/user:pass@example\/db/);
+  assert.doesNotMatch(prompt, /sk-testsecretvalue123456/);
+  assert.match(prompt, /\[REDACTED_SECRET\]/);
+  assert.match(prompt, /\[REDACTED_DATABASE_URL\]/);
+  assert.match(prompt, /\[REDACTED_OPENAI_KEY\]/);
+});
+
+test("redacts Hermes prompt text without changing safe text", () => {
+  assert.equal(redactHermesPromptText("Built webhook retry tests."), "Built webhook retry tests.");
+  assert.equal(redactHermesPromptText("password=hunter2value"), "password=[REDACTED_SECRET]");
 });
 
 test("rejects empty evidence before calling AI provider", async () => {

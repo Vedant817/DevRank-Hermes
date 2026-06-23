@@ -7,6 +7,13 @@ const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_HERMES_MODEL = "openrouter/auto";
 const DEFAULT_HTTP_REFERER = "https://devrank-os.local";
 const DEFAULT_TITLE = "DevRank OS";
+const PROMPT_REDACTIONS: Array<[RegExp, string]> = [
+  [/postgres(?:ql)?:\/\/\S+/gi, "[REDACTED_DATABASE_URL]"],
+  [/(?:ghp_|github_pat_)[A-Za-z0-9_]{20,}/g, "[REDACTED_GITHUB_TOKEN]"],
+  [/sk-[A-Za-z0-9_-]{16,}/g, "[REDACTED_OPENAI_KEY]"],
+  [/xox[baprs]-[A-Za-z0-9-]+/g, "[REDACTED_SLACK_TOKEN]"],
+  [/(api[_-]?key|token|secret|password)\s*[:=]\s*["']?(?!\[REDACTED_)[^"'\s)]+/gi, "$1=[REDACTED_SECRET]"],
+];
 
 export interface HermesMentorInput {
   evidenceSummary: string;
@@ -44,8 +51,10 @@ export async function runHermesMentorSummary(
   options: HermesMentorOptions = {},
 ): Promise<HermesMentorOutput> {
   const apiKey = hermesApiKey(env);
-  const evidenceSummary = input.evidenceSummary.trim();
-  const weakestLanes = input.weakestLanes.map((lane) => lane.trim()).filter(Boolean);
+  const evidenceSummary = redactHermesPromptText(input.evidenceSummary.trim());
+  const weakestLanes = input.weakestLanes
+    .map((lane) => redactHermesPromptText(lane.trim()))
+    .filter(Boolean);
 
   if (evidenceSummary.length === 0) {
     throw new Error("Hermes mentor summary requires evidenceSummary.");
@@ -101,6 +110,13 @@ export async function runHermesMentorSummary(
     model: config.model,
     summary,
   };
+}
+
+export function redactHermesPromptText(value: string) {
+  return PROMPT_REDACTIONS.reduce(
+    (current, [pattern, replacement]) => current.replace(pattern, replacement),
+    value,
+  );
 }
 
 function hermesApiKey(env: RuntimeEnv): string {
