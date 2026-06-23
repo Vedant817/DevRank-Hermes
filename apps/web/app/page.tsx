@@ -244,6 +244,12 @@ const dashboardLinks = [
     title: "Daily/Weekly Learning Plan",
     description: "Today focus tasks, weekly goal, completion status, and streak.",
   },
+  {
+    href: "/dashboards/career-content",
+    label: "Dashboard F",
+    title: "Career/Content",
+    description: "Resume bullets, posts, portfolio copy, talking points, and weekly summaries.",
+  },
 ];
 
 function scoreMetadata(score: NonNullable<DashboardSummary["latestScoreSnapshot"]>["breakdown"][number]) {

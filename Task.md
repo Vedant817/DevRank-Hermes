@@ -186,7 +186,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `scores`
   - [x] `score_snapshots`
   - [ ] `portfolio_items`
-  - [ ] `content_drafts`
+  - [x] `content_drafts`
   - [x] `slack_notifications`
   - [x] `ingestion_runs`
 - [ ] Create vector tables:
@@ -643,14 +643,14 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Weekly goal.
   - [x] Completion status.
   - [x] Streak.
-- [ ] Create Dashboard F: Career/Content Dashboard.
-- [ ] Career/Content Dashboard generates:
-  - [ ] Resume bullets.
-  - [ ] LinkedIn post ideas.
-  - [ ] X/Twitter build-in-public posts.
-  - [ ] Portfolio project descriptions.
-  - [ ] Interview talking points.
-  - [ ] Weekly progress summary.
+- [x] Create Dashboard F: Career/Content Dashboard.
+- [x] Career/Content Dashboard generates:
+  - [x] Resume bullets.
+  - [x] LinkedIn post ideas.
+  - [x] X/Twitter build-in-public posts.
+  - [x] Portfolio project descriptions.
+  - [x] Interview talking points.
+  - [x] Weekly progress summary.
 - [ ] Create Dashboard G: Linear Project Dashboard.
 - [ ] Linear Project Dashboard shows:
   - [ ] Projects by workspace/team.
@@ -720,7 +720,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Link repo scores to dashboard recommendations.
 - [ ] Link repo improvements to daily/weekly learning plans.
 - [ ] Link Linear completed issues to portfolio evidence only when they map to real code, PRs, docs, or deployed work.
-- [ ] Link strong repos to resume and LinkedIn content generation.
+- [x] Link strong repos to resume and LinkedIn content generation.
 
 ## 17. Daily and Weekly Learning Planner
 
@@ -837,17 +837,17 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 ## 20. Resume, LinkedIn, and X Output
 
-- [ ] Generate resume bullets after 4-6 weeks of real usage.
-- [ ] Generate LinkedIn post ideas.
-- [ ] Generate X/Twitter build-in-public posts.
-- [ ] Generate portfolio project descriptions.
-- [ ] Generate interview talking points.
-- [ ] Generate weekly progress summary.
+- [x] Generate resume bullets after 4-6 weeks of real usage.
+- [x] Generate LinkedIn post ideas.
+- [x] Generate X/Twitter build-in-public posts.
+- [x] Generate portfolio project descriptions.
+- [x] Generate interview talking points.
+- [x] Generate weekly progress summary.
 - [ ] Include this resume-level positioning when evidence exists:
   - [ ] Built DevRank OS, a personal engineering intelligence platform that ingests AI-agent sessions, GitHub repositories, PRs, reviews, and learning activity to generate SDE-readiness scores, skill-gap analysis, portfolio insights, and daily Slack learning plans.
   - [ ] Implemented event-driven GitHub App and Linear webhooks, Postgres + pgvector memory storage, Next.js dashboards, Hermes-based AI orchestration, local macOS transcript ingestion, and automated career planning workflows.
-- [ ] Avoid weak positioning like "Used AI tools for coding."
-- [ ] Ensure generated content is backed by actual repo, PR, dashboard, or usage evidence.
+- [x] Avoid weak positioning like "Used AI tools for coding."
+- [x] Ensure generated content is backed by actual repo, PR, dashboard, or usage evidence.
 
 ## 21. MVP Build Order
 
@@ -907,9 +907,9 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Add search access.
 - [x] Build skill-gap benchmark.
 - [x] Add optional Supermemory context provider after redaction is stable.
-- [ ] Generate resume bullets.
-- [ ] Generate LinkedIn/X content.
-- [ ] Generate weekly public-proof report.
+- [x] Generate resume bullets.
+- [x] Generate LinkedIn/X content.
+- [x] Generate weekly public-proof report.
 
 ## 22. First MVP Scope
 
@@ -997,5 +997,5 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] DevRank OS can send Slack targets.
 - [ ] DevRank OS can benchmark current market skill demand.
 - [ ] DevRank OS can use optional external context without replacing Supabase as the source of truth.
-- [ ] DevRank OS can generate resume, LinkedIn, X, and portfolio content from real evidence.
+- [x] DevRank OS can generate resume, LinkedIn, X, and portfolio content from real evidence.
 - [ ] DevRank OS supports the final story: a real, resume-worthy system that works locally, works on Vercel when the Mac is off, learns from AI-agent usage, tracks GitHub/PR/Linear project growth, and gives a measurable path for Software Engineering growth.

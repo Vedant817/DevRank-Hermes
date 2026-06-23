@@ -251,6 +251,30 @@ create table if not exists weekly_plans (
 create index if not exists weekly_plans_week_start_idx
   on weekly_plans (week_start desc);
 
+create table if not exists content_drafts (
+  id uuid primary key default gen_random_uuid(),
+  draft_key text not null unique,
+  draft_type text not null
+    check (draft_type in (
+      'resume_bullet',
+      'linkedin_post',
+      'x_post',
+      'portfolio_description',
+      'interview_talking_point',
+      'weekly_progress_summary'
+    )),
+  title text not null,
+  body text not null,
+  evidence jsonb not null,
+  metadata jsonb not null default '{}',
+  generated_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists content_drafts_type_generated_idx
+  on content_drafts (draft_type, generated_at desc);
+
 create table if not exists slack_notifications (
   id uuid primary key default gen_random_uuid(),
   channel text,
