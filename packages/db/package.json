@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@repo/shared": "workspace:*",
+    "@repo/vector-store": "workspace:*",
     "postgres": "^3.4.9"
   },
   "devDependencies": {
