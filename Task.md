@@ -1015,5 +1015,5 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Make local daemon watch mode catch failures and avoid overlapping ingestion jobs.
 - [x] Make combined context writes idempotent or status-aware across Supabase and Supermemory.
 - [x] Return client errors for invalid short context search queries instead of `503`.
-- [ ] Align `github:backfill` CLI auth validation and `--commit-limit` behavior with runtime support.
+- [x] Align `github:backfill` CLI auth validation and `--commit-limit` behavior with runtime support.
 - [x] Skip malformed Antigravity artifacts without aborting valid local ingestion.

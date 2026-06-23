@@ -56,7 +56,7 @@ type OptionRequirement = {
   label: string;
 };
 
-type CommandContext = {
+export type CommandContext = {
   command: string;
   options: Record<string, OptionValue>;
   positionals: string[];
@@ -66,7 +66,7 @@ type CommandContext = {
 
 type CommandHandler = (context: CommandContext) => Promise<unknown> | unknown;
 type UnknownFunction = (...args: unknown[]) => unknown;
-type ModuleExports = Record<string, unknown>;
+export type ModuleExports = Record<string, unknown>;
 type CommandInvoker = (
   moduleExports: ModuleExports,
   context: CommandContext,
@@ -91,13 +91,11 @@ const databaseRequirement: EnvRequirement = {
   oneOf: [["DEVRANK_DATABASE_URL"], ["DATABASE_URL"], ["SUPABASE_DATABASE_URL"]],
 };
 
-const githubAuthRequirement: EnvRequirement = {
+export const githubBackfillAuthRequirement: EnvRequirement = {
   label: "GitHub REST auth",
   oneOf: [
     ["GITHUB_PERSONAL_ACCESS_TOKEN"],
     ["GITHUB_TOKEN"],
-    ["GITHUB_APP_ID", "GITHUB_INSTALLATION_ID", "GITHUB_PRIVATE_KEY"],
-    ["GITHUB_APP_ID", "GITHUB_INSTALLATION_ID", "GITHUB_PRIVATE_KEY_PATH"],
   ],
 };
 
@@ -214,15 +212,9 @@ const commands: CommandSpec[] = [
     usage: "devrank github:backfill --user <github-user> [--commit-limit <count>] [--pr-metadata-limit <count>] [--dry-run]",
     moduleCandidates: ["@repo/github"],
     exportCandidates: ["backfillGithubUser", "backfillGitHub", "backfillGithub", "githubBackfill", "run"],
-    envRequirements: [databaseRequirement, githubAuthRequirement],
+    envRequirements: [databaseRequirement, githubBackfillAuthRequirement],
     optionRequirements: [{ name: "user", label: "GitHub username or organization to backfill" }],
-    buildConfig: (parsed, env) => ({
-      authMode: firstPresentEnv(env, githubAuthRequirement) === "GITHUB_TOKEN" ? "token" : "github-app",
-      databaseEnv: firstPresentEnv(env, databaseRequirement),
-      dryRun: booleanOption(parsed, "dry-run"),
-      prMetadataLimit: numberOption(parsed, "pr-metadata-limit", 25),
-      user: stringOption(parsed, "user"),
-    }),
+    buildConfig: buildGithubBackfillConfig,
     invoke: invokeGithubBackfill,
   },
   {
@@ -391,7 +383,19 @@ const commands: CommandSpec[] = [
 const commandMap = new Map(commands.map((command) => [command.name, command]));
 const evidenceSourceSet = new Set<EvidenceItemForCli["source"]>(evidenceSources);
 
-async function main(argv: string[]) {
+export function buildGithubBackfillConfig(parsed: ParsedArgs, env: NodeJS.ProcessEnv) {
+  return {
+    authEnv: firstPresentEnv(env, githubBackfillAuthRequirement),
+    authMode: "token",
+    commitLimit: numberOption(parsed, "commit-limit", 100),
+    databaseEnv: firstPresentEnv(env, databaseRequirement),
+    dryRun: booleanOption(parsed, "dry-run"),
+    prMetadataLimit: numberOption(parsed, "pr-metadata-limit", 25),
+    user: stringOption(parsed, "user"),
+  };
+}
+
+export async function main(argv: string[]) {
   const parsed = parseArgs(argv);
 
   if (!parsed.commandName || parsed.commandName === "help" || booleanOption(parsed, "help") || booleanOption(parsed, "h")) {
@@ -482,7 +486,7 @@ async function handleEnvCheck(context: CommandContext) {
     context: [databaseRequirement, supermemoryRequirement],
     database: [databaseRequirement],
     embeddings: [embeddingsRequirement],
-    github: [databaseRequirement, githubAuthRequirement],
+    github: [databaseRequirement, githubBackfillAuthRequirement],
     hermes: [hermesRequirement],
     linear: [databaseRequirement, linearAuthRequirement],
     market: [marketSearchRequirement],
@@ -794,7 +798,7 @@ async function invokeLocalAiIngest(moduleExports: ModuleExports, context: Comman
   return handler(context);
 }
 
-async function invokeGithubBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+export async function invokeGithubBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
   const directHandler = optionalFunction(moduleExports, ["backfillGitHub", "backfillGithub", "githubBackfill", "run"]);
 
   if (directHandler) {
@@ -823,7 +827,7 @@ async function invokeGithubBackfill(moduleExports: ModuleExports, context: Comma
   return persistGithubBackfillResult(
     context,
     await backfillGithubUser(client, configString(context, "user"), {
-      commitLimitPerRepo: configNumber(context, "commit-limit", 100),
+      commitLimitPerRepo: configNumber(context, "commitLimit", 100),
       prMetadataLimitPerRepo: configNumber(context, "prMetadataLimit", 25),
     }),
   );
@@ -1311,19 +1315,21 @@ function renderHelp(commandName?: string) {
   ].join("\n");
 }
 
-main(process.argv.slice(2)).catch((error: unknown) => {
-  if (error instanceof CliError) {
-    console.error(error.message);
-    process.exitCode = error.exitCode;
-    return;
-  }
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main(process.argv.slice(2)).catch((error: unknown) => {
+    if (error instanceof CliError) {
+      console.error(error.message);
+      process.exitCode = error.exitCode;
+      return;
+    }
 
-  if (error instanceof Error) {
-    console.error(error.message);
+    if (error instanceof Error) {
+      console.error(error.message);
+      process.exitCode = 1;
+      return;
+    }
+
+    console.error(String(error));
     process.exitCode = 1;
-    return;
-  }
-
-  console.error(String(error));
-  process.exitCode = 1;
-});
+  });
+}
