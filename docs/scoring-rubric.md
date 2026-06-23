@@ -19,6 +19,11 @@ rubric lanes and stores a score snapshot.
 Each lane records an evidence count and explanation. Weakest lanes drive daily
 planning.
 
+Stored score snapshots are checked against the current rubric before they drive
+dashboards or daily planning. When the rubric changes, the app refreshes stale
+snapshots from persisted scoring evidence instead of continuing to show legacy
+lanes.
+
 ## Current Flow
 
 1. Ingest redacted local AI sessions into evidence items.

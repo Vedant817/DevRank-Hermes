@@ -702,6 +702,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] 5% uniqueness.
 - [x] Store score snapshots over time.
 - [x] Explain every score with evidence.
+- [x] Detect stale score snapshots when the scoring rubric changes.
+- [x] Refresh stale score snapshots from persisted evidence before dashboard and daily planning use.
 - [ ] Show score changes in dashboards.
 
 ## 16. Portfolio Generation Logic

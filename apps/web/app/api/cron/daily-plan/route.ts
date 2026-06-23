@@ -5,12 +5,9 @@ import {
   getHighestPriorityLinearPlanningIssue,
   getLatestScoreSnapshot,
   insertDailyPlan,
-  insertScoreSnapshot,
-  listScoringEvidence,
   markSlackNotificationDelivered,
   markSlackNotificationFailed,
 } from "@repo/db";
-import { computeSdeReadinessSnapshot } from "@repo/scoring";
 import { sendSlackMessage } from "@repo/slack";
 import {
   getOptionalString,
@@ -28,6 +25,7 @@ import {
   formatDailyPlanForSlack,
   generateDailyPlan,
 } from "@repo/planner";
+import { ensureCurrentScoreSnapshot } from "../../../_lib/current-score";
 import { dailyPlanCronSchedule } from "../_lib/schedule";
 
 export const runtime = "nodejs";
@@ -57,21 +55,15 @@ export async function GET(request: Request) {
     const sql = createSqlClient();
 
     try {
-      let snapshot = await getLatestScoreSnapshot(sql);
+      const latestSnapshot = await getLatestScoreSnapshot(sql);
+      const currentScore = await ensureCurrentScoreSnapshot(sql, latestSnapshot);
 
-      if (!snapshot) {
-        const evidence = await listScoringEvidence(sql);
-
-        if (evidence.length === 0) {
-          return jsonError(422, "evidence_required", "No persisted evidence exists yet. Run ingestion first.");
-        }
-
-        snapshot = computeSdeReadinessSnapshot(evidence);
-        await insertScoreSnapshot(sql, snapshot);
+      if (!currentScore.snapshot) {
+        return jsonError(422, "evidence_required", "No current score snapshot or persisted evidence exists. Run ingestion first.");
       }
 
       const linearIssue = await getHighestPriorityLinearPlanningIssue(sql);
-      const plan = generateDailyPlan(snapshot, {
+      const plan = generateDailyPlan(currentScore.snapshot, {
         urgentLinearTask: linearIssue
           ? `Linear ${linearIssue.identifier}: ${linearIssue.title}`
           : undefined,
@@ -130,6 +122,7 @@ export async function GET(request: Request) {
         plan,
         cron: dailyPlanCronSchedule,
         linearIssue,
+        scoreSnapshotStatus: currentScore.status,
         slackText,
         slackDelivered: true,
         slackNotificationId: notificationId,

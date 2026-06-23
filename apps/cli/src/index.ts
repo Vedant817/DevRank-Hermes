@@ -14,6 +14,7 @@ import {
   insertIngestionRun,
   insertScoreSnapshot,
   listEvidenceItems,
+  listScoringEvidence,
   runDbMigrations,
   upsertAiChatSessions,
   upsertGithubBackfill,
@@ -26,7 +27,10 @@ import {
 } from "@repo/db";
 import { buildReusableSkillArtifacts, writeReusableSkillArtifacts } from "@repo/hermes";
 import { formatDailyPlanForSlack, generateDailyPlan } from "@repo/planner";
-import { computeSdeReadinessSnapshot } from "@repo/scoring";
+import {
+  computeSdeReadinessSnapshot,
+  isCurrentSdeReadinessSnapshot,
+} from "@repo/scoring";
 import { runMarketBenchmark } from "@repo/search";
 import { evidenceSources } from "@repo/shared";
 import { sendSlackMessage } from "@repo/slack";
@@ -532,7 +536,7 @@ async function handleScoresRecompute(context: CommandContext) {
   const sql = createSqlClient();
 
   try {
-    const evidence = await listEvidenceItems(sql, {
+    const evidence = await listScoringEvidence(sql, {
       limit: configNumber(context, "limit", 500),
     });
     const snapshot = computeSdeReadinessSnapshot(evidence);
@@ -555,10 +559,29 @@ async function handlePlannerDaily(context: CommandContext) {
   const sql = createSqlClient();
 
   try {
-    const snapshot = await getLatestScoreSnapshot(sql);
+    let snapshot = await getLatestScoreSnapshot(sql);
+    const dryRun = configBoolean(context, "dryRun");
+    let scoreSnapshotStatus = "current";
 
-    if (!snapshot) {
-      throw new CliError("No score snapshot exists yet. Run devrank scores:recompute first.", 2);
+    if (!snapshot || !isCurrentSdeReadinessSnapshot(snapshot)) {
+      const hadStaleSnapshot = snapshot !== undefined;
+      const evidence = await listScoringEvidence(sql);
+
+      if (evidence.length === 0) {
+        throw new CliError(
+          hadStaleSnapshot
+            ? "Latest score snapshot uses an old rubric and no persisted evidence exists to refresh it."
+            : "No score snapshot exists yet. Run devrank scores:recompute first.",
+          2,
+        );
+      }
+
+      snapshot = computeSdeReadinessSnapshot(evidence);
+      scoreSnapshotStatus = hadStaleSnapshot ? "refreshed" : "created";
+
+      if (!dryRun) {
+        await insertScoreSnapshot(sql, snapshot);
+      }
     }
 
     const plan = generateDailyPlan(
@@ -567,7 +590,6 @@ async function handlePlannerDaily(context: CommandContext) {
       configString(context, "urgentLinearTask"),
     );
     const slackText = formatDailyPlanForSlack(plan);
-    const dryRun = configBoolean(context, "dryRun");
     const sendSlack = configBoolean(context, "sendSlack");
     let slackDelivery:
       | Awaited<ReturnType<typeof sendAuditedCliSlack>>
@@ -584,6 +606,7 @@ async function handlePlannerDaily(context: CommandContext) {
     return {
       dryRun,
       plan,
+      scoreSnapshotStatus,
       slackDelivered: slackDelivery?.slackDelivered ?? false,
       ...(sendSlack && dryRun ? { slackSkippedReason: "dry_run" } : {}),
       ...(slackDelivery ?? {}),

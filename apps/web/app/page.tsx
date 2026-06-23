@@ -4,6 +4,7 @@ import {
   getDashboardSummary,
   type DashboardSummary,
 } from "@repo/db";
+import { ensureCurrentScoreSnapshot } from "./_lib/current-score";
 import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
@@ -58,9 +59,15 @@ async function loadDashboardState(): Promise<DashboardState> {
 
   try {
     sql = createSqlClient();
+    const summary = await getDashboardSummary(sql);
+    const currentScore = await ensureCurrentScoreSnapshot(sql, summary.latestScoreSnapshot);
+
     return {
       status: "ready",
-      summary: await getDashboardSummary(sql),
+      summary: {
+        ...summary,
+        latestScoreSnapshot: currentScore.snapshot,
+      },
     };
   } catch (error) {
     const message =
@@ -113,7 +120,7 @@ function Dashboard({ summary }: { summary: DashboardSummary }) {
           </div>
         ) : (
           <p className={styles.emptyState}>
-            Run `devrank scores:recompute` after evidence ingestion.
+            Ingest evidence first; the dashboard will create a score snapshot from persisted evidence.
           </p>
         )}
       </section>
