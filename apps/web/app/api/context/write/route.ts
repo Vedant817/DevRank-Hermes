@@ -93,6 +93,7 @@ export async function POST(request: Request) {
     metadata: metadata.value,
     scope: scope.value,
     source: source.value,
+    sourceId: getOptionalString(body.value, "sourceId"),
     title: getOptionalString(body.value, "title"),
   })) {
     return jsonError(422, "context_contains_secret", "Context fields appear to contain a secret and cannot be written.");
@@ -103,6 +104,7 @@ export async function POST(request: Request) {
       title: getOptionalString(body.value, "title") ?? source.value,
       content: summary.value,
       source: source.value,
+      sourceId: getOptionalString(body.value, "sourceId"),
       containerTags: containerTags.value,
       metadata: metadata.value,
     });

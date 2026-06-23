@@ -1013,7 +1013,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Resolve local ingestion symlinks before allowed-root checks.
 - [x] Replace stale materialized daily task rows when a plan is regenerated.
 - [x] Make local daemon watch mode catch failures and avoid overlapping ingestion jobs.
-- [ ] Make combined context writes idempotent or status-aware across Supabase and Supermemory.
-- [ ] Return client errors for invalid short context search queries instead of `503`.
+- [x] Make combined context writes idempotent or status-aware across Supabase and Supermemory.
+- [x] Return client errors for invalid short context search queries instead of `503`.
 - [ ] Align `github:backfill` CLI auth validation and `--commit-limit` behavior with runtime support.
 - [x] Skip malformed Antigravity artifacts without aborting valid local ingestion.
