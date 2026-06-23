@@ -4,8 +4,12 @@ export interface LinearProjectSummary {
   state: string | null;
   progress: number | null;
   url: string | null;
+  teamKey?: string | null;
   teamId: string | null;
   teamName: string | null;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
+  workspaceUrlKey?: string | null;
 }
 
 export interface LinearIssueSummary {
@@ -17,8 +21,13 @@ export interface LinearIssueSummary {
   state: string | null;
   assignee: string | null;
   projectId: string | null;
+  teamKey?: string | null;
   teamId: string | null;
   teamName: string | null;
+  updatedAt?: string | null;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
+  workspaceUrlKey?: string | null;
 }
 
 export interface LinearBackfillResult {

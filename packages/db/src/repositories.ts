@@ -23,8 +23,12 @@ export interface PersistableLinearProject {
   state: string | null;
   progress: number | null;
   url: string | null;
+  teamKey?: string | null;
   teamId?: string | null;
   teamName: string | null;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
+  workspaceUrlKey?: string | null;
 }
 
 export interface PersistableLinearIssue {
@@ -36,8 +40,13 @@ export interface PersistableLinearIssue {
   state: string | null;
   assignee: string | null;
   projectId: string | null;
+  teamKey?: string | null;
   teamId?: string | null;
   teamName?: string | null;
+  updatedAt?: string | null;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
+  workspaceUrlKey?: string | null;
 }
 
 export interface PersistableLinearBackfill {
@@ -929,35 +938,57 @@ export async function upsertLinearBackfill(
   issues: number;
   projects: number;
 }> {
-  const projectIds = new Set(input.projects.map((project) => project.id));
   const projectTeamIds = new Map(
     input.projects
       .filter((project) => project.teamId)
       .map((project) => [project.id, project.teamId as string]),
   );
-  const teams = new Map<string, string>();
+  const workspaces = new Map<string, {
+    name: string;
+    urlKey: string | null;
+  }>();
+  const teams = new Map<string, {
+    key: string | null;
+    name: string;
+    workspaceId: string | null;
+  }>();
 
   for (const project of input.projects) {
+    collectLinearWorkspace(workspaces, project);
     if (project.teamId && project.teamName) {
-      teams.set(project.teamId, project.teamName);
+      collectLinearTeam(teams, workspaces, project.teamId, project.teamName, project.teamKey, project.workspaceId);
     }
   }
 
   for (const issue of input.issues) {
+    collectLinearWorkspace(workspaces, issue);
     if (issue.teamId && issue.teamName) {
-      teams.set(issue.teamId, issue.teamName);
+      collectLinearTeam(teams, workspaces, issue.teamId, issue.teamName, issue.teamKey, issue.workspaceId);
     }
   }
 
   let projects = 0;
   let issues = 0;
 
-  for (const [id, name] of teams) {
+  for (const [id, workspace] of workspaces) {
     await sql`
-      insert into linear_teams (id, name, synced_at)
-      values (${id}, ${name}, now())
+      insert into linear_workspaces (id, name, url_key, synced_at)
+      values (${id}, ${workspace.name}, ${workspace.urlKey}, now())
       on conflict (id) do update set
         name = excluded.name,
+        url_key = coalesce(excluded.url_key, linear_workspaces.url_key),
+        synced_at = now()
+    `;
+  }
+
+  for (const [id, team] of teams) {
+    await sql`
+      insert into linear_teams (id, workspace_id, name, key, synced_at)
+      values (${id}, ${team.workspaceId && workspaces.has(team.workspaceId) ? team.workspaceId : null}, ${team.name}, ${team.key}, now())
+      on conflict (id) do update set
+        workspace_id = coalesce(excluded.workspace_id, linear_teams.workspace_id),
+        name = excluded.name,
+        key = coalesce(excluded.key, linear_teams.key),
         synced_at = now()
     `;
   }
@@ -975,7 +1006,7 @@ export async function upsertLinearBackfill(
       )
       values (
         ${project.id},
-        ${project.teamId && teams.has(project.teamId) ? project.teamId : null},
+        (select id from linear_teams where id = ${project.teamId ?? null} limit 1),
         ${project.name},
         ${project.state},
         ${project.progress},
@@ -983,6 +1014,7 @@ export async function upsertLinearBackfill(
         now()
       )
       on conflict (id) do update set
+        team_id = coalesce(excluded.team_id, linear_projects.team_id),
         name = excluded.name,
         state = excluded.state,
         progress = excluded.progress,
@@ -1006,29 +1038,32 @@ export async function upsertLinearBackfill(
         priority,
         assignee,
         url,
+        updated_at,
         synced_at
       )
       values (
         ${issue.id},
-        ${issue.projectId && projectIds.has(issue.projectId) ? issue.projectId : null},
-        ${teamId && teams.has(teamId) ? teamId : null},
+        (select id from linear_projects where id = ${issue.projectId ?? null} limit 1),
+        (select id from linear_teams where id = ${teamId} limit 1),
         ${issue.identifier},
         ${issue.title},
         ${issue.state},
         ${issue.priority},
         ${issue.assignee},
         ${issue.url},
+        ${issue.updatedAt ?? null},
         now()
       )
       on conflict (id) do update set
-        project_id = excluded.project_id,
+        project_id = coalesce(excluded.project_id, linear_issues.project_id),
         identifier = excluded.identifier,
         title = excluded.title,
         state = excluded.state,
         priority = excluded.priority,
         assignee = excluded.assignee,
-        team_id = excluded.team_id,
+        team_id = coalesce(excluded.team_id, linear_issues.team_id),
         url = excluded.url,
+        updated_at = coalesce(excluded.updated_at, linear_issues.updated_at),
         synced_at = now()
     `;
     issues += 1;
@@ -1038,6 +1073,46 @@ export async function upsertLinearBackfill(
     issues,
     projects,
   };
+}
+
+function collectLinearWorkspace(
+  workspaces: Map<string, { name: string; urlKey: string | null }>,
+  input: {
+    workspaceId?: string | null;
+    workspaceName?: string | null;
+    workspaceUrlKey?: string | null;
+  },
+) {
+  if (!input.workspaceId || !input.workspaceName) {
+    return;
+  }
+
+  const current = workspaces.get(input.workspaceId);
+
+  workspaces.set(input.workspaceId, {
+    name: input.workspaceName,
+    urlKey: input.workspaceUrlKey ?? current?.urlKey ?? null,
+  });
+}
+
+function collectLinearTeam(
+  teams: Map<string, { key: string | null; name: string; workspaceId: string | null }>,
+  workspaces: Map<string, { name: string; urlKey: string | null }>,
+  id: string,
+  name: string,
+  key: string | null | undefined,
+  workspaceId: string | null | undefined,
+) {
+  const current = teams.get(id);
+  const knownWorkspaceId = workspaceId && workspaces.has(workspaceId)
+    ? workspaceId
+    : current?.workspaceId ?? null;
+
+  teams.set(id, {
+    key: key ?? current?.key ?? null,
+    name,
+    workspaceId: knownWorkspaceId,
+  });
 }
 
 export async function listEvidenceItems(

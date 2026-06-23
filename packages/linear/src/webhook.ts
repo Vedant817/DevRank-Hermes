@@ -64,8 +64,9 @@ function linearWebhookBackfill(payload: unknown): LinearBackfillResult {
   const record = asRecord(payload);
   const data = asRecord(record.data);
   const type = stringValue(record.type);
-  const project = type === "Project" ? projectFromRecord(data) : projectFromRecord(asRecord(data.project));
-  const issue = type === "Issue" ? issueFromRecord(data) : undefined;
+  const workspace = workspaceFromRecord(asRecord(record.organization), stringValue(record.organizationId));
+  const project = type === "Project" ? projectFromRecord(data, workspace) : projectFromRecord(asRecord(data.project), workspace);
+  const issue = type === "Issue" ? issueFromRecord(data, workspace) : undefined;
 
   return {
     projects: project ? [project] : [],
@@ -73,7 +74,16 @@ function linearWebhookBackfill(payload: unknown): LinearBackfillResult {
   };
 }
 
-function projectFromRecord(record: Record<string, unknown>): LinearProjectSummary | undefined {
+type WorkspaceRecord = {
+  id?: string | null;
+  name?: string | null;
+  urlKey?: string | null;
+};
+
+function projectFromRecord(
+  record: Record<string, unknown>,
+  inheritedWorkspace?: WorkspaceRecord,
+): LinearProjectSummary | undefined {
   const id = stringValue(record.id);
   const name = stringValue(record.name);
 
@@ -81,18 +91,30 @@ function projectFromRecord(record: Record<string, unknown>): LinearProjectSummar
     return undefined;
   }
 
+  const team = asRecord(record.team);
+  const workspace = workspaceFromRecord(asRecord(record.organization))
+    ?? workspaceFromRecord(asRecord(team.organization))
+    ?? inheritedWorkspace;
+
   return {
     id,
     name,
     state: stringValue(record.state) ?? stringValue(asRecord(record.status).name) ?? null,
     progress: numberValue(record.progress) ?? null,
     url: stringValue(record.url) ?? null,
-    teamId: stringValue(asRecord(record.team).id) ?? null,
-    teamName: stringValue(asRecord(record.team).name) ?? null,
+    teamKey: stringValue(team.key) ?? null,
+    teamId: stringValue(team.id) ?? null,
+    teamName: stringValue(team.name) ?? null,
+    workspaceId: workspace?.id ?? null,
+    workspaceName: workspace?.name ?? null,
+    workspaceUrlKey: workspace?.urlKey ?? null,
   };
 }
 
-function issueFromRecord(record: Record<string, unknown>): LinearIssueSummary | undefined {
+function issueFromRecord(
+  record: Record<string, unknown>,
+  inheritedWorkspace?: WorkspaceRecord,
+): LinearIssueSummary | undefined {
   const id = stringValue(record.id);
   const identifier = stringValue(record.identifier);
   const title = stringValue(record.title);
@@ -102,6 +124,15 @@ function issueFromRecord(record: Record<string, unknown>): LinearIssueSummary | 
     return undefined;
   }
 
+  const project = asRecord(record.project);
+  const team = asRecord(record.team);
+  const projectTeam = asRecord(project.team);
+  const workspace = workspaceFromRecord(asRecord(record.organization))
+    ?? workspaceFromRecord(asRecord(team.organization))
+    ?? workspaceFromRecord(asRecord(project.organization))
+    ?? workspaceFromRecord(asRecord(projectTeam.organization))
+    ?? inheritedWorkspace;
+
   return {
     id,
     identifier,
@@ -110,9 +141,33 @@ function issueFromRecord(record: Record<string, unknown>): LinearIssueSummary | 
     url,
     state: stringValue(asRecord(record.state).name) ?? stringValue(record.state) ?? null,
     assignee: stringValue(asRecord(record.assignee).name) ?? null,
-    projectId: stringValue(asRecord(record.project).id) ?? null,
-    teamId: stringValue(asRecord(record.team).id) ?? stringValue(asRecord(asRecord(record.project).team).id) ?? null,
-    teamName: stringValue(asRecord(record.team).name) ?? stringValue(asRecord(asRecord(record.project).team).name) ?? null,
+    projectId: stringValue(project.id) ?? null,
+    teamKey: stringValue(team.key) ?? stringValue(projectTeam.key) ?? null,
+    teamId: stringValue(team.id) ?? stringValue(projectTeam.id) ?? null,
+    teamName: stringValue(team.name) ?? stringValue(projectTeam.name) ?? null,
+    updatedAt: stringValue(record.updatedAt) ?? null,
+    workspaceId: workspace?.id ?? null,
+    workspaceName: workspace?.name ?? null,
+    workspaceUrlKey: workspace?.urlKey ?? null,
+  };
+}
+
+function workspaceFromRecord(
+  record: Record<string, unknown>,
+  fallbackId?: string,
+): WorkspaceRecord | undefined {
+  const id = stringValue(record.id) ?? fallbackId;
+  const name = stringValue(record.name);
+  const urlKey = stringValue(record.urlKey);
+
+  if (id === undefined && name === undefined && urlKey === undefined) {
+    return undefined;
+  }
+
+  return {
+    id: id ?? null,
+    name: name ?? null,
+    urlKey: urlKey ?? null,
   };
 }
 
