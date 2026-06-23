@@ -86,9 +86,9 @@ function Dashboard({ summary }: { summary: DashboardSummary }) {
     <main className={styles.main}>
       <section className={styles.panel} aria-labelledby="score-heading">
         <div className={styles.sectionHeader}>
-          <p className={styles.kicker}>SDE readiness</p>
+          <p className={styles.kicker}>Dashboard A</p>
           <h2 id="score-heading">
-            {scoreSnapshot ? `Overall ${scoreSnapshot.overall}%` : "No score snapshot yet"}
+            {scoreSnapshot ? `Skill Rank Dashboard - Overall ${scoreSnapshot.overall}%` : "No score snapshot yet"}
           </h2>
         </div>
         {scoreSnapshot ? (
@@ -106,7 +106,7 @@ function Dashboard({ summary }: { summary: DashboardSummary }) {
                   />
                 </div>
                 <p className={styles.rowMeta}>
-                  {score.explanation}
+                  {scoreMetadata(score)}
                 </p>
               </div>
             ))}
@@ -192,6 +192,10 @@ function Dashboard({ summary }: { summary: DashboardSummary }) {
       </section>
     </main>
   );
+}
+
+function scoreMetadata(score: NonNullable<DashboardSummary["latestScoreSnapshot"]>["breakdown"][number]) {
+  return `${Math.round(score.weight * 100)}% weight | ${score.evidenceCount} evidence item(s) | ${score.explanation}`;
 }
 
 function SetupPlan() {

@@ -70,6 +70,12 @@ const planRules: PlanRule[] = [
     minutes: 60,
   },
   {
+    match: ["frontend", "ui", "react", "next.js", "accessibility"],
+    title: "Improve one frontend workflow with accessible states and responsive layout checks.",
+    category: "frontend",
+    minutes: 45,
+  },
+  {
     match: ["system design", "architecture"],
     title: "Revise one system design component and document the tradeoffs.",
     category: "system_design",

@@ -7,12 +7,14 @@ rubric lanes and stores a score snapshot.
 ## Overall SDE Readiness
 
 - DSA: 20%
-- Backend/API/System Design: 20%
+- Backend/API: 15%
+- Frontend/UI: 5%
+- System Design: 10%
 - GitHub Portfolio Quality: 15%
 - Code Quality + Testing: 15%
-- DevOps/Cloud: 10%
-- AI Agent/Automation Skills: 10%
-- Communication + Public Proof: 10%
+- DevOps/Cloud: 8%
+- AI Agent/Automation Skills: 7%
+- Communication + Public Proof: 5%
 
 Each lane records an evidence count and explanation. Weakest lanes drive daily
 planning.

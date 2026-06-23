@@ -22,11 +22,18 @@ const snapshot: ScoreSnapshot = {
       explanation: "Needs deploy evidence.",
     },
     {
-      label: "Backend/API/System Design",
+      label: "Backend/API",
       score: 25,
-      weight: 0.2,
+      weight: 0.15,
       evidenceCount: 1,
       explanation: "Needs backend proof.",
+    },
+    {
+      label: "Frontend/UI",
+      score: 30,
+      weight: 0.05,
+      evidenceCount: 1,
+      explanation: "Needs frontend proof.",
     },
     {
       label: "DSA",
@@ -41,6 +48,7 @@ const snapshot: ScoreSnapshot = {
 test("generates daily plan tasks from weakest rubric lanes", () => {
   const plan = generateDailyPlan(snapshot, {
     date: "2026-06-22",
+    maxWeakLaneTasks: 4,
     urgentLinearTask: "Unblock production webhook issue.",
   });
 
@@ -55,12 +63,14 @@ test("generates daily plan tasks from weakest rubric lanes", () => {
     "public_proof",
     "testing",
     "devops",
+    "frontend",
   ]);
-  assert.equal(plan.targetMinutes, 355);
+  assert.equal(plan.targetMinutes, 400);
   assert.match(plan.tasks.find((task) => task.category === "dsa")?.title ?? "", /Arrays\/Hashing - Medium/);
   assert.match(plan.tasks.find((task) => task.category === "dsa")?.title ?? "", /Binary Search - Medium/);
   assert.match(plan.tasks.find((task) => task.category === "backend")?.title ?? "", /validation, pagination, and tests/);
   assert.match(plan.tasks.find((task) => task.category === "system_design")?.title ?? "", /Redis token bucket/);
+  assert.match(plan.tasks.find((task) => task.category === "frontend")?.title ?? "", /accessible states/);
   assert.match(plan.tasks.find((task) => task.category === "github")?.title ?? "", /architecture diagram/);
   assert.match(plan.tasks.find((task) => task.category === "ai_agent")?.title ?? "", /manually verify/);
   assert.match(plan.tasks.find((task) => task.category === "public_proof")?.title ?? "", /Minimum non-zero day/);

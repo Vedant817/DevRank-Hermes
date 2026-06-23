@@ -586,11 +586,11 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Show source health/counts from GitHub, Linear, local sessions, Hermes, and Slack.
 - [x] Show latest daily plan from `daily_plans`.
 - [x] Show recent ingestion runs from `ingestion_runs`.
-- [ ] Create Dashboard A: Skill Rank Dashboard.
-- [ ] Skill Rank Dashboard shows:
+- [x] Create Dashboard A: Skill Rank Dashboard.
+- [x] Skill Rank Dashboard shows:
   - [x] Overall SDE readiness score.
   - [x] Backend score.
-  - [ ] Frontend score.
+  - [x] Frontend score.
   - [x] System design score.
   - [x] DSA score.
   - [x] Testing/QA automation score.
@@ -668,12 +668,14 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Avoid random AI-vibe scoring.
 - [x] Implement Overall SDE readiness formula:
   - [x] 20% DSA.
-  - [x] 20% Backend/API/System Design.
+  - [x] 15% Backend/API.
+  - [x] 5% Frontend/UI.
+  - [x] 10% System Design.
   - [x] 15% GitHub Portfolio Quality.
   - [x] 15% Code Quality + Testing.
-  - [x] 10% DevOps/Cloud.
-  - [x] 10% AI Agent/Automation Skills.
-  - [x] 10% Communication + Public Proof.
+  - [x] 8% DevOps/Cloud.
+  - [x] 7% AI Agent/Automation Skills.
+  - [x] 5% Communication + Public Proof.
 - [ ] Implement PR quality score formula:
   - [ ] 25% clarity of change.
   - [ ] 20% test coverage.
