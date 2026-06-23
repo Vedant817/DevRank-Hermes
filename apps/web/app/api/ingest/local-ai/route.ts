@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import {
   closeSqlClient,
@@ -19,6 +20,7 @@ import {
   rateLimit,
   readJsonObject,
   requireApiAuth,
+  sanitizeOperationalError,
 } from "../../_lib/route-utils";
 import { ingestLocalAiChats } from "@repo/ai-chat-ingestors";
 import type { EvidenceItem, EvidenceSource } from "@repo/shared";
@@ -96,7 +98,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const validatedPath = validateLocalSourcePath(sourcePath);
+  const validatedPath = await validateLocalSourcePath(sourcePath);
 
   if (!validatedPath.ok) {
     return validatedPath.response;
@@ -108,6 +110,18 @@ export async function POST(request: Request) {
       ...privacy,
       sourceRoots: [validatedPath.value],
     });
+
+    if (result.sessions.length === 0 && result.evidence.length === 0) {
+      await recordIngestionFailure(
+        `local_session:${validatedPath.value}`,
+        "No supported local AI sessions were found at the requested sourcePath.",
+      );
+
+      return jsonError(422, "local_ai_no_sessions", "No supported local AI sessions were found at sourcePath.", {
+        sourcePath: validatedPath.value,
+      });
+    }
+
     const sql = createSqlClient();
     let writtenEmbeddings = 0;
     let writtenEvidence = 0;
@@ -139,7 +153,12 @@ export async function POST(request: Request) {
       privacy: result.privacy,
       evidence: result.evidence,
     });
-  } catch {
+  } catch (error) {
+    await recordIngestionFailure(
+      `local_session:${validatedPath.value}`,
+      sanitizeOperationalError(error, "local_ai_ingestion_failed"),
+    );
+
     return jsonError(500, "local_ai_ingestion_failed", "Local AI chat ingestion failed.");
   }
 }
@@ -399,17 +418,34 @@ function importedMetadata(item: Record<string, unknown>) {
   return metadata;
 }
 
-function validateLocalSourcePath(sourcePath: string) {
-  const allowedRoots = localIngestRoots();
+export async function validateLocalSourcePath(sourcePath: string) {
+  const allowedRoots = await localIngestRoots();
 
   if (allowedRoots.length === 0) {
     return {
       ok: false as const,
-      response: jsonError(503, "local_ingest_roots_required", "DEVRANK_LOCAL_INGEST_ROOTS must be configured before server-side local_session ingestion."),
+      response: jsonError(503, "local_ingest_roots_required", "DEVRANK_LOCAL_INGEST_ROOTS must point to at least one readable directory before server-side local_session ingestion."),
     };
   }
 
-  const resolvedPath = resolve(sourcePath);
+  const resolvedInput = resolve(sourcePath);
+  const pathStat = await stat(resolvedInput).catch(() => null);
+
+  if (pathStat === null) {
+    return {
+      ok: false as const,
+      response: jsonError(404, "source_path_missing", "sourcePath does not exist."),
+    };
+  }
+
+  if (!pathStat.isDirectory() && !pathStat.isFile()) {
+    return {
+      ok: false as const,
+      response: jsonError(400, "source_path_unsupported", "sourcePath must be a file or directory."),
+    };
+  }
+
+  const resolvedPath = await realpath(resolvedInput);
   const isAllowed = allowedRoots.some((root) => isPathInsideRoot(resolvedPath, root));
 
   if (!isAllowed) {
@@ -422,18 +458,29 @@ function validateLocalSourcePath(sourcePath: string) {
   return { ok: true as const, value: resolvedPath };
 }
 
-function localIngestRoots() {
+async function localIngestRoots() {
   const value = process.env.DEVRANK_LOCAL_INGEST_ROOTS?.trim();
 
   if (!value) {
     return [];
   }
 
-  return value
+  const roots = await Promise.all(value
     .split(",")
     .map((root) => root.trim())
     .filter((root) => root.length > 0)
-    .map((root) => resolve(root));
+    .map(async (root) => {
+      const resolvedRoot = resolve(root);
+      const rootStat = await stat(resolvedRoot).catch(() => null);
+
+      if (rootStat === null || !rootStat.isDirectory()) {
+        return null;
+      }
+
+      return realpath(resolvedRoot).catch(() => null);
+    }));
+
+  return roots.filter((root): root is string => root !== null);
 }
 
 function isPathInsideRoot(path: string, root: string) {
@@ -444,6 +491,25 @@ function isPathInsideRoot(path: string, root: string) {
     !pathFromRoot.startsWith("..") &&
     !isAbsolute(pathFromRoot)
   );
+}
+
+async function recordIngestionFailure(source: string, error: string) {
+  let sql: ReturnType<typeof createSqlClient> | undefined;
+
+  try {
+    sql = createSqlClient();
+    await insertIngestionRun(sql, {
+      source,
+      status: "failed",
+      error,
+    });
+  } catch {
+    // The request still returns the original ingestion error if audit logging fails.
+  } finally {
+    if (sql !== undefined) {
+      await closeSqlClient(sql).catch(() => undefined);
+    }
+  }
 }
 
 async function embedEvidence(evidence: EvidenceItem[]) {

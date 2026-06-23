@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseAntigravityArtifact } from "../src/antigravity.js";
+import { ingestAntigravitySessions, parseAntigravityArtifact } from "../src/antigravity.js";
 import { parseClaudeSessionFile } from "../src/claude.js";
 import { parseCodexSessionFile } from "../src/codex.js";
 import { ingestLocalAiChats } from "../src/index.js";
@@ -102,6 +102,21 @@ test("parses Antigravity artifact metadata", async () => {
   assert.equal(session.agentName, "Antigravity");
   assert.equal(session.messages[0]?.content, "Completed adapter discovery.");
   assert.deepEqual(session.filesTouched, [join(root, "task.md")]);
+});
+
+test("skips malformed Antigravity metadata and keeps valid artifacts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "devrank-antigravity-"));
+  await writeFile(join(root, "broken.metadata.json"), "{not-json");
+  await writeFile(join(root, "valid.metadata.json"), JSON.stringify({
+    artifactType: "task",
+    summary: "Kept valid artifact.",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  }));
+
+  const sessions = await ingestAntigravitySessions(root);
+
+  assert.equal(sessions.length, 1);
+  assert.equal(sessions[0]?.messages[0]?.content, "Kept valid artifact.");
 });
 
 test("ingests through the adapter registry", async () => {

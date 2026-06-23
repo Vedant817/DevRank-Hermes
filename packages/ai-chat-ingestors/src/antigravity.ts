@@ -74,7 +74,11 @@ export async function ingestAntigravitySessions(roots: string[] | string): Promi
     );
 
     for (const file of files) {
-      sessions.push(await parseAntigravityArtifact(file));
+      try {
+        sessions.push(await parseAntigravityArtifact(file));
+      } catch {
+        continue;
+      }
     }
   }
 
