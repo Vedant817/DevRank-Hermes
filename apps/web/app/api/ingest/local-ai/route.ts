@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isAbsolute, relative, resolve } from "node:path";
 import {
   closeSqlClient,
   createSqlClient,
@@ -9,7 +10,7 @@ import {
 } from "@repo/db";
 import { embedTexts } from "@repo/embeddings";
 import {
-  containsLikelySecret,
+  containsLikelySecretInJson,
   getOptionalString,
   isJsonObject,
   jsonError,
@@ -36,6 +37,12 @@ const EXPORT_SOURCE_TYPES = new Set<EvidenceSource>([
   "manual_export",
   "workspace_export",
 ]);
+const MAX_IMPORTED_EVIDENCE_ITEMS = 100;
+const MAX_IMPORTED_EMBEDDING_ITEMS = 25;
+const MAX_EVIDENCE_ID_LENGTH = 256;
+const MAX_EVIDENCE_TITLE_LENGTH = 500;
+const MAX_EVIDENCE_SUMMARY_LENGTH = 10_000;
+const MAX_EVIDENCE_URL_LENGTH = 2_000;
 
 export function GET() {
   return methodNotAllowed(["POST"]);
@@ -89,11 +96,17 @@ export async function POST(request: Request) {
     });
   }
 
+  const validatedPath = validateLocalSourcePath(sourcePath);
+
+  if (!validatedPath.ok) {
+    return validatedPath.response;
+  }
+
   try {
     const result = await ingestLocalAiChats({
-      codexSessionsDir: sourcePath,
+      codexSessionsDir: validatedPath.value,
       ...privacy,
-      sourceRoots: [sourcePath],
+      sourceRoots: [validatedPath.value],
     });
     const sql = createSqlClient();
     let writtenEmbeddings = 0;
@@ -105,7 +118,7 @@ export async function POST(request: Request) {
       writtenEmbeddings = await upsertEvidenceEmbeddings(sql, result.embeddings);
       writtenTranscripts = await upsertAiChatSessions(sql, result.transcripts);
       await insertIngestionRun(sql, {
-        source: `local_session:${sourcePath}`,
+        source: `local_session:${validatedPath.value}`,
         status: "success",
         summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), ${writtenEmbeddings} embedding(s), and ${writtenTranscripts} transcript(s).`,
       });
@@ -115,7 +128,7 @@ export async function POST(request: Request) {
 
     return jsonOk({
       sourceType,
-      sourcePath,
+      sourcePath: validatedPath.value,
       sessionCount: result.sessions.length,
       evidenceCount: result.evidence.length,
       embeddingCount: result.embeddings.length,
@@ -155,6 +168,12 @@ async function ingestEvidenceExport(
   }
 
   const evidence = evidenceResult.value;
+
+  if (privacy.storeEmbeddings && evidence.length > MAX_IMPORTED_EMBEDDING_ITEMS) {
+    return jsonError(400, "embedding_batch_too_large", "Embedding generation is limited for imported evidence batches.", {
+      maxItems: MAX_IMPORTED_EMBEDDING_ITEMS,
+    });
+  }
 
   try {
     const embeddings = privacy.storeEmbeddings ? await embedEvidence(evidence) : [];
@@ -222,6 +241,15 @@ function parseImportedEvidence(
     };
   }
 
+  if (value.length > MAX_IMPORTED_EVIDENCE_ITEMS) {
+    return {
+      ok: false as const,
+      response: jsonError(400, "evidence_batch_too_large", "Imported evidence batches are limited.", {
+        maxItems: MAX_IMPORTED_EVIDENCE_ITEMS,
+      }),
+    };
+  }
+
   const evidence: EvidenceItem[] = [];
 
   for (let index = 0; index < value.length; index += 1) {
@@ -253,6 +281,8 @@ function parseImportedEvidenceItem(
 ) {
   const title = trimmedString(item.title);
   const summary = trimmedString(item.summary);
+  const id = trimmedString(item.id);
+  const url = trimmedString(item.url);
 
   if (!title || !summary) {
     return {
@@ -261,10 +291,49 @@ function parseImportedEvidenceItem(
     };
   }
 
-  if (containsLikelySecret(summary)) {
+  if (id !== undefined && id.length > MAX_EVIDENCE_ID_LENGTH) {
     return {
       ok: false as const,
-      response: jsonError(422, "summary_contains_secret", "Evidence summary appears to contain a secret.", { index }),
+      response: jsonError(400, "invalid_evidence", "Evidence id is too long.", {
+        index,
+        maxLength: MAX_EVIDENCE_ID_LENGTH,
+      }),
+    };
+  }
+
+  if (title.length > MAX_EVIDENCE_TITLE_LENGTH || summary.length > MAX_EVIDENCE_SUMMARY_LENGTH) {
+    return {
+      ok: false as const,
+      response: jsonError(400, "invalid_evidence", "Evidence title or summary is too long.", {
+        index,
+        maxSummaryLength: MAX_EVIDENCE_SUMMARY_LENGTH,
+        maxTitleLength: MAX_EVIDENCE_TITLE_LENGTH,
+      }),
+    };
+  }
+
+  if (url !== undefined && url.length > MAX_EVIDENCE_URL_LENGTH) {
+    return {
+      ok: false as const,
+      response: jsonError(400, "invalid_evidence", "Evidence url is too long.", {
+        index,
+        maxLength: MAX_EVIDENCE_URL_LENGTH,
+      }),
+    };
+  }
+
+  const metadata = importedMetadata(item);
+
+  if (containsLikelySecretInJson({
+    id,
+    metadata,
+    summary,
+    title,
+    url,
+  })) {
+    return {
+      ok: false as const,
+      response: jsonError(422, "evidence_contains_secret", "Evidence item appears to contain a secret.", { index }),
     };
   }
 
@@ -274,10 +343,8 @@ function parseImportedEvidenceItem(
     return occurredAt;
   }
 
-  const metadata = importedMetadata(item);
-  const url = trimmedString(item.url);
   const evidenceItem: EvidenceItem = {
-    id: trimmedString(item.id) ?? generatedEvidenceId(sourceType, index, title, summary),
+    id: id ?? generatedEvidenceId(sourceType, index, title, summary),
     source: sourceType,
     title,
     summary,
@@ -330,6 +397,53 @@ function importedMetadata(item: Record<string, unknown>) {
   }
 
   return metadata;
+}
+
+function validateLocalSourcePath(sourcePath: string) {
+  const allowedRoots = localIngestRoots();
+
+  if (allowedRoots.length === 0) {
+    return {
+      ok: false as const,
+      response: jsonError(503, "local_ingest_roots_required", "DEVRANK_LOCAL_INGEST_ROOTS must be configured before server-side local_session ingestion."),
+    };
+  }
+
+  const resolvedPath = resolve(sourcePath);
+  const isAllowed = allowedRoots.some((root) => isPathInsideRoot(resolvedPath, root));
+
+  if (!isAllowed) {
+    return {
+      ok: false as const,
+      response: jsonError(403, "source_path_not_allowed", "sourcePath is outside the configured local ingestion roots."),
+    };
+  }
+
+  return { ok: true as const, value: resolvedPath };
+}
+
+function localIngestRoots() {
+  const value = process.env.DEVRANK_LOCAL_INGEST_ROOTS?.trim();
+
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((root) => root.trim())
+    .filter((root) => root.length > 0)
+    .map((root) => resolve(root));
+}
+
+function isPathInsideRoot(path: string, root: string) {
+  const pathFromRoot = relative(root, path);
+
+  return path === root || (
+    pathFromRoot.length > 0 &&
+    !pathFromRoot.startsWith("..") &&
+    !isAbsolute(pathFromRoot)
+  );
 }
 
 async function embedEvidence(evidence: EvidenceItem[]) {

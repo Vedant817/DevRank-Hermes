@@ -503,6 +503,10 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Add per-route in-process rate limits for backend APIs and webhooks.
   - [x] Support scoped bearer-token environment variables with `DEVRANK_API_TOKEN` fallback.
   - [x] Return stable public error messages instead of raw internal exception text.
+  - [x] Limit imported/direct evidence batch sizes and expensive embedding batches.
+  - [x] Require `DEVRANK_LOCAL_INGEST_ROOTS` before server-side local path ingestion.
+  - [x] Bound context `containerTags` and keep Supabase context retrieval scoped by tags.
+  - [x] Block obvious secrets in context metadata, imported evidence fields, direct scoring evidence, and Slack text.
 - [x] Create `vercel.json`.
 - [x] Add daily plan cron:
   - [x] Path: `/api/cron/daily-plan`.

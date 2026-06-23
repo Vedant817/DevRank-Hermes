@@ -110,7 +110,19 @@ const marketSearchRequirement: EnvRequirement = {
 
 const apiTokenRequirement: EnvRequirement = {
   label: "API route auth",
-  oneOf: [["DEVRANK_API_TOKEN"]],
+  oneOf: [
+    ["DEVRANK_API_TOKEN"],
+    [
+      "DEVRANK_CONTEXT_READ_TOKEN",
+      "DEVRANK_CONTEXT_WRITE_TOKEN",
+      "DEVRANK_SCORE_RECOMPUTE_TOKEN",
+      "DEVRANK_INGEST_TOKEN",
+      "DEVRANK_SLACK_SEND_TOKEN",
+      "DEVRANK_LINEAR_BACKFILL_TOKEN",
+      "DEVRANK_PLANNER_TOKEN",
+      "DEVRANK_HERMES_REVIEW_TOKEN",
+    ],
+  ],
 };
 
 const cronRequirement: EnvRequirement = {

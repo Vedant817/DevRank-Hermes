@@ -1,10 +1,23 @@
 import { closeSqlClient, createSqlClient } from "@repo/db";
 import type { ContextItem, ContextSearchInput, ContextWriteInput } from "./types.js";
 
+const DEFAULT_CONTEXT_LIMIT = 10;
+const MAX_CONTEXT_LIMIT = 25;
+const MAX_CONTEXT_SCAN_LIMIT = 100;
+const MIN_CONTEXT_QUERY_LENGTH = 2;
+
 export async function searchSupabaseContext(
   input: ContextSearchInput,
 ): Promise<ContextItem[]> {
   const sql = createSqlClient();
+  const query = input.query.trim();
+  const limit = clampLimit(input.limit);
+
+  if (query.length < MIN_CONTEXT_QUERY_LENGTH) {
+    throw new Error("Supabase context search requires at least two characters.");
+  }
+
+  const pattern = `%${escapeLikePattern(query)}%`;
 
   try {
     const rows = await sql<ContextItem[]>`
@@ -15,13 +28,13 @@ export async function searchSupabaseContext(
         source,
         metadata
       from memory_items
-      where title ilike ${`%${input.query}%`}
-        or summary ilike ${`%${input.query}%`}
+      where title ilike ${pattern} escape '!'
+        or summary ilike ${pattern} escape '!'
       order by created_at desc
-      limit ${input.limit ?? 10}
+      limit ${Math.min(limit * 5, MAX_CONTEXT_SCAN_LIMIT)}
     `;
 
-    return rows;
+    return filterByContainerTags(rows, input.containerTags).slice(0, limit);
   } finally {
     await closeSqlClient(sql);
   }
@@ -31,7 +44,10 @@ export async function writeSupabaseContext(
   input: ContextWriteInput,
 ): Promise<ContextItem> {
   const sql = createSqlClient();
-  const metadataJson = JSON.stringify(input.metadata ?? {});
+  const metadataJson = JSON.stringify({
+    ...(input.metadata ?? {}),
+    ...(input.containerTags ? { containerTags: input.containerTags } : {}),
+  });
 
   try {
     const rows = await sql<ContextItem[]>`
@@ -55,4 +71,28 @@ export async function writeSupabaseContext(
   } finally {
     await closeSqlClient(sql);
   }
+}
+
+function clampLimit(limit: number | undefined) {
+  return Math.max(1, Math.min(limit ?? DEFAULT_CONTEXT_LIMIT, MAX_CONTEXT_LIMIT));
+}
+
+function escapeLikePattern(value: string) {
+  return value.replace(/[!%_]/g, (character) => `!${character}`);
+}
+
+function filterByContainerTags(
+  rows: ContextItem[],
+  containerTags: string[] | undefined,
+) {
+  if (containerTags === undefined || containerTags.length === 0) {
+    return rows;
+  }
+
+  return rows.filter((row) => {
+    const tags = row.metadata?.containerTags;
+
+    return Array.isArray(tags)
+      && containerTags.every((tag) => tags.includes(tag));
+  });
 }

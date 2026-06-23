@@ -9,6 +9,7 @@ import {
   jsonError,
   jsonOk,
   methodNotAllowed,
+  parseOptionalStringArray,
   rateLimit,
   readJsonObject,
   requireApiAuth,
@@ -104,20 +105,24 @@ export async function POST(request: Request) {
     return evidenceSummary.response;
   }
 
-  const weakestLanes = body.value.weakestLanes;
+  const weakestLanes = parseOptionalStringArray(body.value.weakestLanes, {
+    field: "weakestLanes",
+    maxItems: 10,
+    maxLength: 80,
+  });
 
-  if (
-    !Array.isArray(weakestLanes) ||
-    weakestLanes.length === 0 ||
-    !weakestLanes.every((lane) => typeof lane === "string" && lane.trim().length > 0)
-  ) {
+  if (!weakestLanes.ok) {
+    return weakestLanes.response;
+  }
+
+  if (weakestLanes.value === undefined) {
     return jsonError(400, "invalid_weakest_lanes", "weakestLanes must be a non-empty array of strings.");
   }
 
   try {
     const result = await runHermesMentorSummary({
       evidenceSummary: evidenceSummary.value,
-      weakestLanes,
+      weakestLanes: weakestLanes.value,
     });
 
     return jsonOk({ review: result });

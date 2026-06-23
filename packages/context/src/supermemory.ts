@@ -1,6 +1,9 @@
 import { readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
 import type { ContextItem, ContextSearchInput, ContextWriteInput } from "./types.js";
 
+const DEFAULT_CONTEXT_LIMIT = 10;
+const MAX_CONTEXT_LIMIT = 25;
+
 function baseHeaders(env: RuntimeEnv): HeadersInit {
   const { SUPERMEMORY_API_KEY } = requireEnv(
     env,
@@ -20,7 +23,7 @@ export async function searchSupermemoryContext(
 ): Promise<ContextItem[]> {
   const url = new URL("https://api.supermemory.ai/v3/search");
   url.searchParams.set("q", input.query);
-  url.searchParams.set("limit", String(input.limit ?? 10));
+  url.searchParams.set("limit", String(clampLimit(input.limit)));
 
   for (const tag of input.containerTags ?? []) {
     url.searchParams.append("containerTags", tag);
@@ -51,6 +54,10 @@ export async function searchSupermemoryContext(
     source: "supermemory",
     score: result.score,
   }));
+}
+
+function clampLimit(limit: number | undefined) {
+  return Math.max(1, Math.min(limit ?? DEFAULT_CONTEXT_LIMIT, MAX_CONTEXT_LIMIT));
 }
 
 export async function writeSupermemoryContext(

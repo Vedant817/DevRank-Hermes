@@ -1,4 +1,5 @@
 import {
+  containsLikelySecret,
   getRequiredEnv,
   jsonError,
   jsonOk,
@@ -58,6 +59,10 @@ export async function POST(request: Request) {
     return jsonError(400, "slack_text_too_long", "Slack text must be 4000 characters or fewer.", {
       maxLength: 4_000,
     });
+  }
+
+  if (containsLikelySecret(text)) {
+    return jsonError(422, "slack_text_contains_secret", "Slack text appears to contain a secret and cannot be sent.");
   }
 
   try {

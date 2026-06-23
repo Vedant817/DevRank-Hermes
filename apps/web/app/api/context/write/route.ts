@@ -7,6 +7,7 @@ import {
   jsonError,
   jsonOk,
   methodNotAllowed,
+  parseOptionalStringArray,
   rateLimit,
   readJsonObject,
   requireApiAuth,
@@ -82,6 +83,12 @@ export async function POST(request: Request) {
     return metadata.response;
   }
 
+  const containerTags = parseContainerTags(scope.value);
+
+  if (!containerTags.ok) {
+    return containerTags.response;
+  }
+
   if (containsLikelySecretInJson({
     metadata: metadata.value,
     scope: scope.value,
@@ -96,7 +103,7 @@ export async function POST(request: Request) {
       title: getOptionalString(body.value, "title") ?? source.value,
       content: summary.value,
       source: source.value,
-      containerTags: parseContainerTags(scope.value),
+      containerTags: containerTags.value,
       metadata: metadata.value,
     });
 
@@ -106,12 +113,10 @@ export async function POST(request: Request) {
   }
 }
 
-function parseContainerTags(scope: Record<string, unknown> | undefined): string[] | undefined {
-  const tags = scope?.containerTags;
-
-  if (!Array.isArray(tags)) {
-    return undefined;
-  }
-
-  return tags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0);
+function parseContainerTags(scope: Record<string, unknown> | undefined) {
+  return parseOptionalStringArray(scope?.containerTags, {
+    field: "scope.containerTags",
+    maxItems: 10,
+    maxLength: 64,
+  });
 }

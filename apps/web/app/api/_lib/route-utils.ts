@@ -213,6 +213,77 @@ export function getOptionalObject(
   return { ok: true as const, value };
 }
 
+export function parseOptionalStringArray(
+  value: unknown,
+  options: {
+    field: string;
+    maxItems: number;
+    maxLength: number;
+  },
+) {
+  if (value === undefined) {
+    return { ok: true as const, value: undefined };
+  }
+
+  if (!Array.isArray(value)) {
+    return {
+      ok: false as const,
+      response: jsonError(400, "invalid_field", `${options.field} must be an array of strings.`, {
+        field: options.field,
+      }),
+    };
+  }
+
+  if (value.length > options.maxItems) {
+    return {
+      ok: false as const,
+      response: jsonError(400, "array_too_long", `${options.field} has too many items.`, {
+        field: options.field,
+        maxItems: options.maxItems,
+      }),
+    };
+  }
+
+  const items: string[] = [];
+
+  for (let index = 0; index < value.length; index += 1) {
+    const item = value[index];
+
+    if (typeof item !== "string") {
+      return {
+        ok: false as const,
+        response: jsonError(400, "invalid_field", `${options.field} must contain only strings.`, {
+          field: options.field,
+          index,
+        }),
+      };
+    }
+
+    const trimmed = item.trim();
+
+    if (trimmed.length === 0) {
+      continue;
+    }
+
+    if (trimmed.length > options.maxLength) {
+      return {
+        ok: false as const,
+        response: jsonError(400, "field_too_long", `${options.field} item is too long.`, {
+          field: options.field,
+          index,
+          maxLength: options.maxLength,
+        }),
+      };
+    }
+
+    if (!items.includes(trimmed)) {
+      items.push(trimmed);
+    }
+  }
+
+  return { ok: true as const, value: items.length > 0 ? items : undefined };
+}
+
 export function requireApiAuth(
   request: Request,
   options: ApiAuthOptions = {},

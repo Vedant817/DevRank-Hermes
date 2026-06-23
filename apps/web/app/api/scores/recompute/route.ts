@@ -6,6 +6,7 @@ import {
   type ScoringEvidenceScope,
 } from "@repo/db";
 import {
+  containsLikelySecretInJson,
   getOptionalString,
   isJsonObject,
   jsonError,
@@ -23,6 +24,11 @@ export const dynamic = "force-dynamic";
 
 const SCOPES = new Set<string>(["all", "user", "repo", "pull_request"]);
 const EVIDENCE_SOURCES = new Set<string>(evidenceSources);
+const MAX_DIRECT_EVIDENCE_ITEMS = 250;
+const MAX_EVIDENCE_ID_LENGTH = 256;
+const MAX_EVIDENCE_TITLE_LENGTH = 500;
+const MAX_EVIDENCE_SUMMARY_LENGTH = 10_000;
+const MAX_EVIDENCE_URL_LENGTH = 2_000;
 
 type EvidenceItems = Parameters<typeof computeSdeReadinessSnapshot>[0];
 type EvidenceItem = EvidenceItems[number];
@@ -136,6 +142,15 @@ function parseEvidenceItems(value: unknown) {
     };
   }
 
+  if (value.length > MAX_DIRECT_EVIDENCE_ITEMS) {
+    return {
+      ok: false as const,
+      response: jsonError(400, "evidence_batch_too_large", "Direct score recompute evidence batches are limited.", {
+        maxItems: MAX_DIRECT_EVIDENCE_ITEMS,
+      }),
+    };
+  }
+
   const evidence: EvidenceItems = [];
 
   for (const [index, item] of value.entries()) {
@@ -186,11 +201,37 @@ function parseEvidenceItem(value: unknown, index: number) {
     };
   }
 
+  if (
+    id.length > MAX_EVIDENCE_ID_LENGTH ||
+    title.length > MAX_EVIDENCE_TITLE_LENGTH ||
+    summary.length > MAX_EVIDENCE_SUMMARY_LENGTH
+  ) {
+    return {
+      ok: false as const,
+      response: jsonError(400, "invalid_evidence", "Evidence id, title, or summary is too long.", {
+        index,
+        maxIdLength: MAX_EVIDENCE_ID_LENGTH,
+        maxSummaryLength: MAX_EVIDENCE_SUMMARY_LENGTH,
+        maxTitleLength: MAX_EVIDENCE_TITLE_LENGTH,
+      }),
+    };
+  }
+
   if (url !== undefined && typeof url !== "string") {
     return {
       ok: false as const,
       response: jsonError(400, "invalid_evidence", "Evidence item url must be a string when provided.", {
         index,
+      }),
+    };
+  }
+
+  if (url !== undefined && url.length > MAX_EVIDENCE_URL_LENGTH) {
+    return {
+      ok: false as const,
+      response: jsonError(400, "invalid_evidence", "Evidence item url is too long.", {
+        index,
+        maxLength: MAX_EVIDENCE_URL_LENGTH,
       }),
     };
   }
@@ -201,6 +242,19 @@ function parseEvidenceItem(value: unknown, index: number) {
       response: jsonError(400, "invalid_evidence", "Evidence item metadata must be a JSON object when provided.", {
         index,
       }),
+    };
+  }
+
+  if (containsLikelySecretInJson({
+    id,
+    metadata,
+    summary,
+    title,
+    url,
+  })) {
+    return {
+      ok: false as const,
+      response: jsonError(422, "evidence_contains_secret", "Evidence item appears to contain a secret.", { index }),
     };
   }
 
