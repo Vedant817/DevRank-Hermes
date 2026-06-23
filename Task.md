@@ -37,10 +37,10 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Local AI Chat Sources.
   - [x] Optional Supermemory context provider.
 - [ ] Support local AI chat sources:
-  - [ ] Claude Code.
+  - [x] Claude Code.
   - [x] Codex CLI / Codex Desktop.
-  - [ ] OpenCode.
-  - [ ] Antigravity.
+  - [x] OpenCode.
+  - [x] Antigravity.
   - [x] Local transcripts.
   - [x] Sessions.
   - [x] Logs.
@@ -225,25 +225,25 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Check possible Antigravity folders:
   - [x] `~/.gemini/antigravity`
   - [x] `~/Library/Application Support/Antigravity`
-- [ ] Extract from each session:
+- [x] Extract from each session:
   - [x] Prompt.
   - [x] Agent response.
   - [x] Tool calls.
   - [x] Files edited.
   - [x] Commands run.
-  - [ ] Errors faced.
-  - [ ] How the issue was solved.
+  - [x] Errors faced.
+  - [x] How the issue was solved.
   - [x] Project/repo context.
   - [x] Skill tags.
   - [x] Timestamp.
   - [x] Agent name.
-  - [ ] Confidence score.
-- [ ] Generate derived learning output:
-  - [ ] Learning signals.
-  - [ ] Skill evidence.
-  - [ ] Weaknesses.
-  - [ ] Repeated mistakes.
-  - [ ] Strong patterns.
+  - [x] Confidence score.
+- [x] Generate derived learning output:
+  - [x] Learning signals.
+  - [x] Skill evidence.
+  - [x] Weaknesses.
+  - [x] Repeated mistakes.
+  - [x] Strong patterns.
   - [x] Summaries.
   - [x] Embeddings.
 - [x] Reject embedding dimensions that do not match `memory_embeddings.embedding vector(1536)`.
@@ -255,7 +255,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Database URLs.
   - [x] Personal emails.
   - [ ] Client-sensitive code.
-  - [ ] Private Jira/customer data.
+  - [x] Private Jira/customer data.
 - [x] Store raw transcript locally only unless explicit cloud raw storage is enabled.
 - [x] Add ingestion run tracking.
 - [x] Add ingestion error handling.
