@@ -999,3 +999,21 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] DevRank OS can use optional external context without replacing Supabase as the source of truth.
 - [x] DevRank OS can generate resume, LinkedIn, X, and portfolio content from real evidence.
 - [ ] DevRank OS supports the final story: a real, resume-worthy system that works locally, works on Vercel when the Mac is off, learns from AI-agent usage, tracks GitHub/PR/Linear project growth, and gives a measurable path for Software Engineering growth.
+
+## 26. Production Hardening Audit Fixes
+
+- [x] Protect all dashboard routes with fail-closed Basic/Bearer auth, not only `/`.
+- [x] Stop unauthenticated API rate limiting from trusting spoofable IP headers by default.
+- [ ] Redact or reject secret-like evidence before Hermes sends mentor-review prompts to the AI provider.
+- [ ] Preserve Linear project and team links when sparse issue webhooks arrive.
+- [ ] Import and persist Linear workspace ownership for workspace filters.
+- [ ] Import and persist Linear `updatedAt` values for stale issue detection.
+- [ ] Reclaim stale webhook deliveries that remain stuck in `processing`.
+- [ ] Treat missing, unreadable, or no-op local ingestion paths as explicit failures.
+- [ ] Resolve local ingestion symlinks before allowed-root checks.
+- [ ] Replace stale materialized daily task rows when a plan is regenerated.
+- [ ] Make local daemon watch mode catch failures and avoid overlapping ingestion jobs.
+- [ ] Make combined context writes idempotent or status-aware across Supabase and Supermemory.
+- [ ] Return client errors for invalid short context search queries instead of `503`.
+- [ ] Align `github:backfill` CLI auth validation and `--commit-limit` behavior with runtime support.
+- [ ] Skip malformed Antigravity artifacts without aborting valid local ingestion.
