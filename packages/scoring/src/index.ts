@@ -55,6 +55,26 @@ export function computeSdeReadinessSnapshot(
   };
 }
 
+export function isCurrentSdeReadinessSnapshot(snapshot: ScoreSnapshot): boolean {
+  if (snapshot.breakdown.length !== sdeReadinessRubric.length) {
+    return false;
+  }
+
+  const expectedByLabel = new Map(
+    sdeReadinessRubric.map((lane) => [lane.label, lane.weight]),
+  );
+
+  for (const lane of snapshot.breakdown) {
+    const expectedWeight = expectedByLabel.get(lane.label);
+
+    if (expectedWeight === undefined || Math.abs(lane.weight - expectedWeight) > 0.000001) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function keywordMatchesText(text: string, keyword: string): boolean {
   const normalized = keyword.trim().toLowerCase();
 

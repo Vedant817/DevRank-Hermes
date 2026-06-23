@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatDailyPlanForSlack, generateDailyPlan } from "../src/index.js";
+import { formatDailyPlanForSlack, generateDailyPlan, generateWeeklyPlan } from "../src/index.js";
 import type { ScoreSnapshot } from "@repo/shared";
 
 const snapshot: ScoreSnapshot = {
@@ -87,6 +87,22 @@ test("ignores blank urgent Linear tasks and clamps weak lane limits", () => {
   assert.deepEqual(plan.tasks.map((task) => task.category), ["testing"]);
 });
 
+test("surfaces Linear sync failures as visible daily plan work", () => {
+  const plan = generateDailyPlan(snapshot, {
+    date: "2026-06-22",
+    includeDailyEssentials: false,
+    linearSyncWarning: "Latest Linear sync failed. Fix Linear backfill before relying on project planning.",
+    maxWeakLaneTasks: 1,
+    urgentLinearTask: "Linear DEV-12: Unblock webhook ingestion.",
+  });
+  const linearTask = plan.tasks.find((task) => task.category === "linear");
+
+  assert.equal(linearTask?.minutes, 35);
+  assert.match(linearTask?.title ?? "", /Latest Linear sync failed/);
+  assert.match(linearTask?.title ?? "", /Linear DEV-12/);
+  assert.equal(linearTask?.evidence, "Linear sync health; Linear priority");
+});
+
 test("formats Slack message with greeting, target time, and SDE switch plan", () => {
   const plan = generateDailyPlan(snapshot, {
     date: "2026-06-22",
@@ -101,4 +117,21 @@ test("formats Slack message with greeting, target time, and SDE switch plan", ()
   assert.match(slackText, /DSA: solve Arrays\/Hashing - Medium and Binary Search - Medium/);
   assert.match(slackText, /Backend: build one endpoint with validation, pagination, and tests/);
   assert.match(slackText, /AI-agent: use Hermes\/Codex\/Claude to generate tests/);
+});
+
+test("generates weekly plan with fixed weekday ladder and weak lane goal", () => {
+  const plan = generateWeeklyPlan(snapshot, {
+    generatedAt: "2026-06-24T10:00:00.000Z",
+    maxWeakLaneTasks: 3,
+  });
+
+  assert.equal(plan.weekStart, "2026-06-22");
+  assert.equal(plan.generatedAt, "2026-06-24T10:00:00.000Z");
+  assert.match(plan.weeklyGoal, /Code Quality \+ Testing/);
+  assert.equal(plan.tasks.length, 15);
+  assert.equal(plan.targetMinutes, 870);
+  assert.deepEqual(plan.tasks.slice(0, 2).map((task) => task.day), ["Monday", "Monday"]);
+  assert.match(plan.tasks[0]?.title ?? "", /Arrays\/Hashing/);
+  assert.match(plan.tasks[1]?.title ?? "", /Backend API/);
+  assert.match(plan.tasks.find((task) => task.day === "Sunday" && task.category === "public_proof")?.title ?? "", /resume, LinkedIn, X/);
 });

@@ -37,10 +37,10 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Local AI Chat Sources.
   - [x] Optional Supermemory context provider.
 - [ ] Support local AI chat sources:
-  - [ ] Claude Code.
+  - [x] Claude Code.
   - [x] Codex CLI / Codex Desktop.
-  - [ ] OpenCode.
-  - [ ] Antigravity.
+  - [x] OpenCode.
+  - [x] Antigravity.
   - [x] Local transcripts.
   - [x] Sessions.
   - [x] Logs.
@@ -65,7 +65,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] PRs.
   - [ ] Reviews.
   - [ ] Linear workspaces.
-  - [ ] Linear teams.
+  - [x] Linear teams.
   - [ ] Linear projects.
   - [ ] Linear issues.
   - [ ] Linear cycles.
@@ -163,8 +163,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `github_commits`
   - [x] `github_pull_requests`
   - [x] `github_webhook_events`
-  - [ ] `github_pr_files`
-  - [ ] `github_pr_reviews`
+  - [x] `github_pr_files`
+  - [x] `github_pr_reviews`
   - [ ] `github_issues`
   - [ ] `github_workflow_runs`
   - [ ] `github_code_scanning_alerts`
@@ -179,14 +179,14 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] `external_memory_providers`
   - [ ] `external_memory_links`
   - [x] `daily_plans`
-  - [ ] `daily_tasks`
+  - [x] `daily_tasks`
   - [ ] `dsa_questions`
-  - [ ] `weekly_plans`
+  - [x] `weekly_plans`
   - [ ] `learning_goals`
   - [x] `scores`
   - [x] `score_snapshots`
   - [ ] `portfolio_items`
-  - [ ] `content_drafts`
+  - [x] `content_drafts`
   - [x] `slack_notifications`
   - [x] `ingestion_runs`
 - [ ] Create vector tables:
@@ -225,25 +225,25 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Check possible Antigravity folders:
   - [x] `~/.gemini/antigravity`
   - [x] `~/Library/Application Support/Antigravity`
-- [ ] Extract from each session:
+- [x] Extract from each session:
   - [x] Prompt.
   - [x] Agent response.
   - [x] Tool calls.
   - [x] Files edited.
   - [x] Commands run.
-  - [ ] Errors faced.
-  - [ ] How the issue was solved.
+  - [x] Errors faced.
+  - [x] How the issue was solved.
   - [x] Project/repo context.
   - [x] Skill tags.
   - [x] Timestamp.
   - [x] Agent name.
-  - [ ] Confidence score.
-- [ ] Generate derived learning output:
-  - [ ] Learning signals.
-  - [ ] Skill evidence.
-  - [ ] Weaknesses.
-  - [ ] Repeated mistakes.
-  - [ ] Strong patterns.
+  - [x] Confidence score.
+- [x] Generate derived learning output:
+  - [x] Learning signals.
+  - [x] Skill evidence.
+  - [x] Weaknesses.
+  - [x] Repeated mistakes.
+  - [x] Strong patterns.
   - [x] Summaries.
   - [x] Embeddings.
 - [x] Reject embedding dimensions that do not match `memory_embeddings.embedding vector(1536)`.
@@ -255,7 +255,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Database URLs.
   - [x] Personal emails.
   - [ ] Client-sensitive code.
-  - [ ] Private Jira/customer data.
+  - [x] Private Jira/customer data.
 - [x] Store raw transcript locally only unless explicit cloud raw storage is enabled.
 - [x] Add ingestion run tracking.
 - [x] Add ingestion error handling.
@@ -379,15 +379,15 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Languages.
   - [x] Commits.
   - [x] PRs.
-  - [ ] Changed files.
-  - [ ] Review comments.
-  - [ ] Merge time.
+  - [x] Changed files.
+  - [x] Review comments.
+  - [x] Merge time.
   - [ ] Issue activity.
-  - [ ] README quality.
-  - [ ] Test coverage signals.
+  - [x] README quality.
+  - [x] Test coverage signals.
   - [ ] CI status.
   - [ ] Security/code scanning alerts.
-  - [ ] Project complexity.
+  - [x] Project complexity.
 - [ ] Use GitHub REST APIs for:
   - [x] Listing pull requests.
   - [x] Listing recent default-branch commits.
@@ -407,10 +407,10 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Verify webhook signatures.
 - [x] Block GitHub webhook replay with persisted `x-github-delivery` IDs.
 - [x] Store PR metadata.
-- [ ] Fetch changed files.
+- [x] Fetch changed files.
 - [x] Fetch commits from backfill and push webhooks.
-- [ ] Fetch reviews.
-- [ ] Fetch comments.
+- [x] Fetch reviews.
+- [x] Fetch comments.
 - [ ] Run static analysis summary.
 - [ ] Classify PR type:
   - [ ] Feature.
@@ -419,10 +419,10 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Test.
   - [ ] Docs.
 - [ ] Classify PR complexity.
-- [ ] Classify PR risk.
-- [ ] Classify PR test quality.
-- [ ] Classify PR design quality.
-- [ ] Update PR dashboard.
+- [x] Classify PR risk.
+- [x] Classify PR test quality.
+- [x] Classify PR design quality.
+- [x] Update PR dashboard.
 - [ ] Update skill evidence.
 - [ ] Recompute SDE readiness score.
 - [x] Handle `pull_request.opened`.
@@ -434,7 +434,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 ## 11. Linear Project Intelligence
 
-- [ ] Add Linear as a project-wise planning and execution source.
+- [x] Add Linear as a project-wise planning and execution source.
 - [x] Choose Linear integration path:
   - [x] Use Linear GraphQL API or TypeScript SDK for production sync.
   - [x] Use Linear webhooks for near-realtime project and issue changes.
@@ -449,7 +449,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `devrank linear:backfill`.
 - [ ] Sync Linear data:
   - [ ] Workspaces.
-  - [ ] Teams.
+  - [x] Teams.
   - [x] Projects.
   - [x] Issues.
   - [ ] Cycles.
@@ -458,32 +458,32 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Labels and priorities.
   - [x] Assignees.
   - [x] Status/workflow states.
-- [ ] Build project-wise Linear dashboard data:
-  - [ ] Open issues per project.
-  - [ ] Done issues per project.
-  - [ ] Blocked issues.
-  - [ ] Stale issues.
-  - [ ] High-priority issues.
-  - [ ] Issues without owners.
-  - [ ] Issues without GitHub PR links.
-  - [ ] Project progress by status.
-  - [ ] Cycle progress.
+- [x] Build project-wise Linear dashboard data:
+  - [x] Open issues per project.
+  - [x] Done issues per project.
+  - [x] Blocked issues.
+  - [x] Stale issues.
+  - [x] High-priority issues.
+  - [x] Issues without owners.
+  - [x] Issues without GitHub PR links.
+  - [x] Project progress by status.
+  - [x] Cycle progress.
   - [ ] Recent project updates.
 - [ ] Link Linear work to engineering evidence:
-  - [ ] Connect Linear issues to GitHub branches, commits, and PRs where possible.
+  - [x] Connect Linear issues to GitHub branches, commits, and PRs where possible.
   - [ ] Connect Linear project work to daily and weekly plans.
-  - [ ] Connect completed issues to skill evidence and resume-worthy proof.
-  - [ ] Keep GitHub PR evidence as the stronger engineering proof when both exist.
+  - [x] Connect completed issues to skill evidence and resume-worthy proof.
+  - [x] Keep GitHub PR evidence as the stronger engineering proof when both exist.
 - [x] Use Linear data in planning:
   - [x] Pull highest-priority open project tasks into daily plans.
-  - [ ] Detect stalled project work.
-  - [ ] Recommend one small project task for non-zero progress days.
+  - [x] Detect stalled project work.
+  - [x] Recommend one small project task for non-zero progress days.
   - [x] Avoid creating daily plans that ignore urgent Linear project work.
 - [ ] Verify Linear sync:
   - [ ] Backfill imports projects and issues.
   - [ ] Webhook updates project dashboard after issue changes.
-  - [ ] Project-wise dashboard can filter by workspace, team, project, status, and priority.
-  - [ ] Linear failures are visible and do not silently break planning.
+  - [x] Project-wise dashboard can filter by workspace, team, project, status, and priority.
+  - [x] Linear failures are visible and do not silently break planning.
 
 ## 12. Vercel and Cloud Behavior
 
@@ -598,69 +598,69 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] AI-agent/orchestration score.
   - [x] GitHub portfolio score.
   - [x] Communication/content score.
-- [ ] Create Dashboard B: AI Agent Learning Dashboard.
-- [ ] AI Agent Learning Dashboard shows:
-  - [ ] Which agents were used most.
-  - [ ] What kind of tasks agents are asked to do.
-  - [ ] Which sessions came from local history, cloud exports, or manual imports.
-  - [ ] Where there is too much AI dependency.
-  - [ ] Where improvement happened.
-  - [ ] Repeated bugs/errors.
-  - [ ] Best prompts.
-  - [ ] Reusable skills created.
-- [ ] Create Dashboard C: GitHub Portfolio Dashboard.
-- [ ] GitHub Portfolio Dashboard shows:
-  - [ ] Best repos.
-  - [ ] Weak repos.
-  - [ ] Repos needing README.
-  - [ ] Repos needing tests.
-  - [ ] Repos needing deployment.
-  - [ ] Repos needing architecture diagram.
-  - [ ] Tech stack distribution.
-  - [ ] Commit consistency.
-  - [ ] PR quality.
-  - [ ] Project complexity.
-- [ ] Create Dashboard D: PR Review Dashboard.
-- [ ] PR Review Dashboard shows:
-  - [ ] Summary.
-  - [ ] Files changed.
-  - [ ] Risk level.
-  - [ ] Test quality.
-  - [ ] Review comments.
-  - [ ] Merge status.
-  - [ ] Architecture impact.
-  - [ ] Code smell score.
-  - [ ] Security issues.
-  - [ ] Learning extracted.
-  - [ ] Resume-worthy impact.
-- [ ] Create Dashboard E: Daily/Weekly Learning Plan Dashboard.
-- [ ] Daily/Weekly Learning Plan Dashboard shows:
-  - [ ] Today's DSA questions.
-  - [ ] Today's backend task.
-  - [ ] Today's system design topic.
-  - [ ] Today's GitHub/portfolio task.
-  - [ ] Today's AI-agent/orchestration task.
-  - [ ] Weekly goal.
-  - [ ] Completion status.
-  - [ ] Streak.
-- [ ] Create Dashboard F: Career/Content Dashboard.
-- [ ] Career/Content Dashboard generates:
-  - [ ] Resume bullets.
-  - [ ] LinkedIn post ideas.
-  - [ ] X/Twitter build-in-public posts.
-  - [ ] Portfolio project descriptions.
-  - [ ] Interview talking points.
-  - [ ] Weekly progress summary.
-- [ ] Create Dashboard G: Linear Project Dashboard.
-- [ ] Linear Project Dashboard shows:
-  - [ ] Projects by workspace/team.
-  - [ ] Open, done, blocked, and stale issues per project.
-  - [ ] Priority distribution.
-  - [ ] Cycle progress.
-  - [ ] Issues linked to GitHub PRs.
-  - [ ] Issues missing GitHub proof.
-  - [ ] Project work that should become today's plan.
-  - [ ] Resume-worthy completed project evidence.
+- [x] Create Dashboard B: AI Agent Learning Dashboard.
+- [x] AI Agent Learning Dashboard shows:
+  - [x] Which agents were used most.
+  - [x] What kind of tasks agents are asked to do.
+  - [x] Which sessions came from local history, cloud exports, or manual imports.
+  - [x] Where there is too much AI dependency.
+  - [x] Where improvement happened.
+  - [x] Repeated bugs/errors.
+  - [x] Best prompts.
+  - [x] Reusable skills created.
+- [x] Create Dashboard C: GitHub Portfolio Dashboard.
+- [x] GitHub Portfolio Dashboard shows:
+  - [x] Best repos.
+  - [x] Weak repos.
+  - [x] Repos needing README.
+  - [x] Repos needing tests.
+  - [x] Repos needing deployment.
+  - [x] Repos needing architecture diagram.
+  - [x] Tech stack distribution.
+  - [x] Commit consistency.
+  - [x] PR quality.
+  - [x] Project complexity.
+- [x] Create Dashboard D: PR Review Dashboard.
+- [x] PR Review Dashboard shows:
+  - [x] Summary.
+  - [x] Files changed.
+  - [x] Risk level.
+  - [x] Test quality.
+  - [x] Review comments.
+  - [x] Merge status.
+  - [x] Architecture impact.
+  - [x] Code smell score.
+  - [x] Security issues.
+  - [x] Learning extracted.
+  - [x] Resume-worthy impact.
+- [x] Create Dashboard E: Daily/Weekly Learning Plan Dashboard.
+- [x] Daily/Weekly Learning Plan Dashboard shows:
+  - [x] Today's DSA questions.
+  - [x] Today's backend task.
+  - [x] Today's system design topic.
+  - [x] Today's GitHub/portfolio task.
+  - [x] Today's AI-agent/orchestration task.
+  - [x] Weekly goal.
+  - [x] Completion status.
+  - [x] Streak.
+- [x] Create Dashboard F: Career/Content Dashboard.
+- [x] Career/Content Dashboard generates:
+  - [x] Resume bullets.
+  - [x] LinkedIn post ideas.
+  - [x] X/Twitter build-in-public posts.
+  - [x] Portfolio project descriptions.
+  - [x] Interview talking points.
+  - [x] Weekly progress summary.
+- [x] Create Dashboard G: Linear Project Dashboard.
+- [x] Linear Project Dashboard shows:
+  - [x] Projects by workspace/team.
+  - [x] Open, done, blocked, and stale issues per project.
+  - [x] Priority distribution.
+  - [x] Cycle progress.
+  - [x] Issues linked to GitHub PRs.
+  - [x] Issues missing GitHub proof.
+  - [x] Project work that should become today's plan.
+  - [x] Resume-worthy completed project evidence.
 
 ## 15. Scoring System
 
@@ -677,13 +677,13 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] 7% AI Agent/Automation Skills.
   - [x] 5% Communication + Public Proof.
 - [ ] Implement PR quality score formula:
-  - [ ] 25% clarity of change.
-  - [ ] 20% test coverage.
-  - [ ] 15% code structure.
-  - [ ] 15% review response quality.
+  - [x] 25% clarity of change.
+  - [x] 20% test coverage.
+  - [x] 15% code structure.
+  - [x] 15% review response quality.
   - [ ] 10% CI health.
-  - [ ] 10% security/static analysis.
-  - [ ] 5% documentation.
+  - [x] 10% security/static analysis.
+  - [x] 5% documentation.
 - [ ] Implement AI-agent maturity score formula:
   - [ ] 25% ability to break tasks into plans.
   - [ ] 20% prompt quality.
@@ -702,6 +702,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] 5% uniqueness.
 - [x] Store score snapshots over time.
 - [x] Explain every score with evidence.
+- [x] Detect stale score snapshots when the scoring rubric changes.
+- [x] Refresh stale score snapshots from persisted evidence before dashboard and daily planning use.
 - [ ] Show score changes in dashboards.
 
 ## 16. Portfolio Generation Logic
@@ -717,8 +719,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] This repo does not prove SDE skill yet.
 - [ ] Link repo scores to dashboard recommendations.
 - [ ] Link repo improvements to daily/weekly learning plans.
-- [ ] Link Linear completed issues to portfolio evidence only when they map to real code, PRs, docs, or deployed work.
-- [ ] Link strong repos to resume and LinkedIn content generation.
+- [x] Link Linear completed issues to portfolio evidence only when they map to real code, PRs, docs, or deployed work.
+- [x] Link strong repos to resume and LinkedIn content generation.
 
 ## 17. Daily and Weekly Learning Planner
 
@@ -738,16 +740,16 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Map weak testing, DevOps, system design, AI-agent, GitHub, DSA, backend, and public-proof lanes to deterministic tasks.
 - [x] Worker daily-plan job uses persisted score snapshots or persisted evidence instead of empty in-memory defaults.
 - [x] Cloud daily-plan cron recomputes and persists a score snapshot from persisted evidence when no snapshot exists.
-- [ ] Generate weekly plan:
-  - [ ] Monday: Arrays/Hashing + backend API.
-  - [ ] Tuesday: Binary Search/Two Pointers + database design.
-  - [ ] Wednesday: Stack/Queue/Linked List + testing/CI.
-  - [ ] Thursday: Trees/Graphs + system design.
-  - [ ] Friday: DP basics + project feature.
-  - [ ] Saturday: Build day, one solid PR.
-  - [ ] Sunday: Review dashboard, update resume/LinkedIn/X, plan next week.
-- [ ] Track completion status.
-- [ ] Track streak.
+- [x] Generate weekly plan:
+  - [x] Monday: Arrays/Hashing + backend API.
+  - [x] Tuesday: Binary Search/Two Pointers + database design.
+  - [x] Wednesday: Stack/Queue/Linked List + testing/CI.
+  - [x] Thursday: Trees/Graphs + system design.
+  - [x] Friday: DP basics + project feature.
+  - [x] Saturday: Build day, one solid PR.
+  - [x] Sunday: Review dashboard, update resume/LinkedIn/X, plan next week.
+- [x] Track completion status.
+- [x] Track streak.
 - [ ] Recompute future plans based on weak areas, Linear project priority, and market benchmark.
 
 ## 18. Search Access and Market Benchmarking
@@ -835,17 +837,17 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 ## 20. Resume, LinkedIn, and X Output
 
-- [ ] Generate resume bullets after 4-6 weeks of real usage.
-- [ ] Generate LinkedIn post ideas.
-- [ ] Generate X/Twitter build-in-public posts.
-- [ ] Generate portfolio project descriptions.
-- [ ] Generate interview talking points.
-- [ ] Generate weekly progress summary.
+- [x] Generate resume bullets after 4-6 weeks of real usage.
+- [x] Generate LinkedIn post ideas.
+- [x] Generate X/Twitter build-in-public posts.
+- [x] Generate portfolio project descriptions.
+- [x] Generate interview talking points.
+- [x] Generate weekly progress summary.
 - [ ] Include this resume-level positioning when evidence exists:
   - [ ] Built DevRank OS, a personal engineering intelligence platform that ingests AI-agent sessions, GitHub repositories, PRs, reviews, and learning activity to generate SDE-readiness scores, skill-gap analysis, portfolio insights, and daily Slack learning plans.
   - [ ] Implemented event-driven GitHub App and Linear webhooks, Postgres + pgvector memory storage, Next.js dashboards, Hermes-based AI orchestration, local macOS transcript ingestion, and automated career planning workflows.
-- [ ] Avoid weak positioning like "Used AI tools for coding."
-- [ ] Ensure generated content is backed by actual repo, PR, dashboard, or usage evidence.
+- [x] Avoid weak positioning like "Used AI tools for coding."
+- [x] Ensure generated content is backed by actual repo, PR, dashboard, or usage evidence.
 
 ## 21. MVP Build Order
 
@@ -890,12 +892,12 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Set up Linear API access if Linear is in MVP.
 - [ ] Backfill Linear projects and issues if Linear is in MVP.
 - [ ] Handle Linear issue/project webhook if Linear is in MVP.
-- [ ] Build Linear Project Dashboard if Linear is in MVP.
+- [x] Build Linear Project Dashboard if Linear is in MVP.
 
 ### Week 5: Planning and Slack
 
 - [x] Build daily planner.
-- [ ] Build weekly planner.
+- [x] Build weekly planner.
 - [ ] Build DSA target generator.
 - [x] Integrate Slack incoming webhook.
 - [x] Configure Vercel cron.
@@ -905,9 +907,9 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Add search access.
 - [x] Build skill-gap benchmark.
 - [x] Add optional Supermemory context provider after redaction is stable.
-- [ ] Generate resume bullets.
-- [ ] Generate LinkedIn/X content.
-- [ ] Generate weekly public-proof report.
+- [x] Generate resume bullets.
+- [x] Generate LinkedIn/X content.
+- [x] Generate weekly public-proof report.
 
 ## 22. First MVP Scope
 
@@ -954,7 +956,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Push webhook updates repo activity.
 - [ ] Linear backfill imports teams, projects, issues, cycles, and project updates if Linear is enabled.
 - [ ] Linear webhook updates project dashboard if Linear is enabled.
-- [ ] Linear project dashboard filters by workspace, team, project, status, and priority if Linear is enabled.
+- [x] Linear project dashboard filters by workspace, team, project, status, and priority if Linear is enabled.
 - [ ] Score recomputation updates snapshots.
 - [ ] Slack daily message sends manually.
 - [ ] Slack daily message sends through cron inside the documented IST delivery window.
@@ -977,7 +979,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Daily planner uses scores, weak areas, and market gaps.
 - [ ] Career/content dashboard generates evidence-backed output.
 - [ ] Portfolio dashboard identifies resume-ready and weak repos.
-- [ ] Linear dashboard identifies blocked, stale, and high-priority project work if Linear is enabled.
+- [x] Linear dashboard identifies blocked, stale, and high-priority project work if Linear is enabled.
 - [x] README and docs explain setup and architecture.
 - [ ] The project can be described clearly as a resume-worthy system.
 
@@ -989,11 +991,29 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] DevRank OS can ingest local AI-agent chats when the Mac daemon is running.
 - [ ] DevRank OS can optionally import Codex Cloud/Web history from supported exports without relying on unsupported scraping.
 - [ ] DevRank OS can analyze GitHub repos and PRs.
-- [ ] DevRank OS can show project-wise Linear dashboards when Linear integration is enabled.
+- [x] DevRank OS can show project-wise Linear dashboards when Linear integration is enabled.
 - [ ] DevRank OS can produce transparent SDE readiness, PR quality, AI-agent maturity, and portfolio scores.
-- [ ] DevRank OS can create daily and weekly learning plans.
+- [x] DevRank OS can create daily and weekly learning plans.
 - [ ] DevRank OS can send Slack targets.
 - [ ] DevRank OS can benchmark current market skill demand.
 - [ ] DevRank OS can use optional external context without replacing Supabase as the source of truth.
-- [ ] DevRank OS can generate resume, LinkedIn, X, and portfolio content from real evidence.
+- [x] DevRank OS can generate resume, LinkedIn, X, and portfolio content from real evidence.
 - [ ] DevRank OS supports the final story: a real, resume-worthy system that works locally, works on Vercel when the Mac is off, learns from AI-agent usage, tracks GitHub/PR/Linear project growth, and gives a measurable path for Software Engineering growth.
+
+## 26. Production Hardening Audit Fixes
+
+- [x] Protect all dashboard routes with fail-closed Basic/Bearer auth, not only `/`.
+- [x] Stop unauthenticated API rate limiting from trusting spoofable IP headers by default.
+- [x] Redact or reject secret-like evidence before Hermes sends mentor-review prompts to the AI provider.
+- [x] Preserve Linear project and team links when sparse issue webhooks arrive.
+- [x] Import and persist Linear workspace ownership for workspace filters.
+- [x] Import and persist Linear `updatedAt` values for stale issue detection.
+- [x] Reclaim stale webhook deliveries that remain stuck in `processing`.
+- [x] Treat missing, unreadable, or no-op local ingestion paths as explicit failures.
+- [x] Resolve local ingestion symlinks before allowed-root checks.
+- [x] Replace stale materialized daily task rows when a plan is regenerated.
+- [x] Make local daemon watch mode catch failures and avoid overlapping ingestion jobs.
+- [x] Make combined context writes idempotent or status-aware across Supabase and Supermemory.
+- [x] Return client errors for invalid short context search queries instead of `503`.
+- [x] Align `github:backfill` CLI auth validation and `--commit-limit` behavior with runtime support.
+- [x] Skip malformed Antigravity artifacts without aborting valid local ingestion.

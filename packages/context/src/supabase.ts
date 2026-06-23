@@ -50,6 +50,37 @@ export async function writeSupabaseContext(
   });
 
   try {
+    if (input.sourceId) {
+      const existing = await sql<Array<{ id: string }>>`
+        select id::text
+        from memory_items
+        where source = ${input.source}
+          and source_id = ${input.sourceId}
+        order by created_at desc
+        limit 1
+      `;
+      const existingId = existing[0]?.id;
+
+      if (existingId) {
+        const updated = await sql<ContextItem[]>`
+          update memory_items
+          set
+            title = ${input.title},
+            summary = ${input.content},
+            metadata = ${metadataJson}::jsonb
+          where id = ${existingId}
+          returning id::text, title, summary, source, metadata
+        `;
+        const item = updated[0];
+
+        if (!item) {
+          throw new Error("Supabase context update returned no row.");
+        }
+
+        return item;
+      }
+    }
+
     const rows = await sql<ContextItem[]>`
       insert into memory_items (source, source_id, title, summary, metadata)
       values (

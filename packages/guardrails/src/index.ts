@@ -31,6 +31,8 @@ const PII_PATTERNS: Array<{ name: string; pattern: RegExp; replacement: string }
   { name: "[REDACTED_DATABASE_URL]", pattern: /(postgres(?:ql)?|mysql|mongodb|redis|rediss):\/\/[^\s"']+/g, replacement: "[REDACTED_DATABASE_URL]" },
   { name: "[REDACTED_AWS_KEY]", pattern: /AKIA[0-9A-Z]{16}/g, replacement: "[REDACTED_AWS_KEY]" },
   { name: "[REDACTED_EMAIL]", pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, replacement: "[REDACTED_EMAIL]" },
+  { name: "[REDACTED_JIRA_REFERENCE]", pattern: /\b[A-Z][A-Z0-9]{1,9}-\d{1,8}\b/g, replacement: "[REDACTED_JIRA_REFERENCE]" },
+  { name: "[REDACTED_CUSTOMER_REFERENCE]", pattern: /\b(customer|client|tenant|account)(?:[_-]?(?:id|name|email|slug))?\s*[:=]\s*["']?[^"'\s,;]+/gi, replacement: "$1=[REDACTED_CUSTOMER_REFERENCE]" },
   { name: "[REDACTED_SECRET]", pattern: /((?:secret|password|api[_-]?key|token|auth|credential)\s*[:=]\s*)['"]?(?!\[REDACTED_)[^\s"']{4,}/gi, replacement: "$1[REDACTED_SECRET]" },
 ];
 

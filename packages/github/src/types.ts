@@ -22,6 +22,30 @@ export interface GithubPullRequestSummary {
   updatedAt: string | null;
 }
 
+export interface GithubPullRequestFileSummary {
+  additions: number;
+  changes: number;
+  deletions: number;
+  filename: string;
+  previousFilename: string | null;
+  pullRequestId: number;
+  pullRequestNumber: number;
+  repoFullName: string;
+  status: string;
+}
+
+export interface GithubPullRequestReviewSummary {
+  commentCount: number;
+  htmlUrl: string | null;
+  id: number;
+  pullRequestId: number;
+  pullRequestNumber: number;
+  repoFullName: string;
+  reviewerLogin: string | null;
+  state: string;
+  submittedAt: string | null;
+}
+
 export interface GithubCommitSummary {
   authorLogin: string | null;
   branch: string | null;
@@ -32,14 +56,33 @@ export interface GithubCommitSummary {
   sha: string;
 }
 
+export interface GithubRepoProfileSummary {
+  evidencePaths: string[];
+  hasArchitectureDiagram: boolean | null;
+  hasDeploymentConfig: boolean | null;
+  hasReadme: boolean | null;
+  hasTests: boolean | null;
+  repoFullName: string;
+  scanError: string | null;
+  scannedAt: string;
+  scanStatus: "scanned" | "unavailable";
+  techStack: string[];
+}
+
 export interface GithubBackfillResult {
   commits: GithubCommitSummary[];
+  pullRequestFiles: GithubPullRequestFileSummary[];
+  pullRequestReviews: GithubPullRequestReviewSummary[];
+  repoProfiles: GithubRepoProfileSummary[];
   repos: GithubRepoSummary[];
   pullRequests: GithubPullRequestSummary[];
 }
 
 export interface GithubBackfillOptions {
   commitLimitPerRepo?: number;
+  prMetadataLimitPerRepo?: number;
+  prMetadataScan?: boolean;
+  profileScan?: boolean;
 }
 
 export interface GithubWebhookResult {

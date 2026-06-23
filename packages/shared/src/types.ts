@@ -38,17 +38,7 @@ export interface ScoreSnapshot {
 
 export interface DailyPlanTask {
   title: string;
-  category:
-    | "dsa"
-    | "backend"
-    | "frontend"
-    | "system_design"
-    | "testing"
-    | "devops"
-    | "github"
-    | "linear"
-    | "ai_agent"
-    | "public_proof";
+  category: DailyPlanTaskCategory;
   minutes: number;
   evidence?: string;
 }
@@ -57,4 +47,41 @@ export interface DailyPlan {
   date: string;
   targetMinutes: number;
   tasks: DailyPlanTask[];
+}
+
+export type DailyPlanTaskCategory =
+  | "dsa"
+  | "backend"
+  | "frontend"
+  | "system_design"
+  | "testing"
+  | "devops"
+  | "github"
+  | "linear"
+  | "ai_agent"
+  | "public_proof";
+
+export type WeeklyPlanDay =
+  | "Monday"
+  | "Tuesday"
+  | "Wednesday"
+  | "Thursday"
+  | "Friday"
+  | "Saturday"
+  | "Sunday";
+
+export interface WeeklyPlanTask {
+  day: WeeklyPlanDay;
+  title: string;
+  category: DailyPlanTaskCategory;
+  minutes: number;
+  evidence?: string;
+}
+
+export interface WeeklyPlan {
+  weekStart: string;
+  weeklyGoal: string;
+  targetMinutes: number;
+  tasks: WeeklyPlanTask[];
+  generatedAt: string;
 }

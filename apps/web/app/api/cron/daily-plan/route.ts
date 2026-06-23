@@ -2,15 +2,12 @@ import {
   closeSqlClient,
   createSlackNotificationAttempt,
   createSqlClient,
-  getHighestPriorityLinearPlanningIssue,
+  getLinearPlanningSignal,
   getLatestScoreSnapshot,
   insertDailyPlan,
-  insertScoreSnapshot,
-  listScoringEvidence,
   markSlackNotificationDelivered,
   markSlackNotificationFailed,
 } from "@repo/db";
-import { computeSdeReadinessSnapshot } from "@repo/scoring";
 import { sendSlackMessage } from "@repo/slack";
 import {
   getOptionalString,
@@ -28,6 +25,7 @@ import {
   formatDailyPlanForSlack,
   generateDailyPlan,
 } from "@repo/planner";
+import { ensureCurrentScoreSnapshot } from "../../../_lib/current-score";
 import { dailyPlanCronSchedule } from "../_lib/schedule";
 
 export const runtime = "nodejs";
@@ -57,23 +55,20 @@ export async function GET(request: Request) {
     const sql = createSqlClient();
 
     try {
-      let snapshot = await getLatestScoreSnapshot(sql);
+      const latestSnapshot = await getLatestScoreSnapshot(sql);
+      const currentScore = await ensureCurrentScoreSnapshot(sql, latestSnapshot);
 
-      if (!snapshot) {
-        const evidence = await listScoringEvidence(sql);
-
-        if (evidence.length === 0) {
-          return jsonError(422, "evidence_required", "No persisted evidence exists yet. Run ingestion first.");
-        }
-
-        snapshot = computeSdeReadinessSnapshot(evidence);
-        await insertScoreSnapshot(sql, snapshot);
+      if (!currentScore.snapshot) {
+        return jsonError(422, "evidence_required", "No current score snapshot or persisted evidence exists. Run ingestion first.");
       }
 
-      const linearIssue = await getHighestPriorityLinearPlanningIssue(sql);
-      const plan = generateDailyPlan(snapshot, {
-        urgentLinearTask: linearIssue
-          ? `Linear ${linearIssue.identifier}: ${linearIssue.title}`
+      const linearSignal = await getLinearPlanningSignal(sql);
+      const plan = generateDailyPlan(currentScore.snapshot, {
+        linearSyncWarning: linearSignal.syncHealth.status === "failed"
+          ? linearSignal.syncHealth.message
+          : undefined,
+        urgentLinearTask: linearSignal.issue
+          ? `Linear ${linearSignal.issue.identifier}: ${linearSignal.issue.title}`
           : undefined,
       });
       await insertDailyPlan(sql, plan);
@@ -129,7 +124,9 @@ export async function GET(request: Request) {
       return jsonOk({
         plan,
         cron: dailyPlanCronSchedule,
-        linearIssue,
+        linearIssue: linearSignal.issue,
+        linearSyncHealth: linearSignal.syncHealth,
+        scoreSnapshotStatus: currentScore.status,
         slackText,
         slackDelivered: true,
         slackNotificationId: notificationId,
@@ -185,7 +182,12 @@ export async function POST(request: Request) {
   }
 
   const urgentLinearTask = getOptionalString(body.value, "urgentLinearTask");
-  const plan = generateDailyPlan(snapshot.value, date, urgentLinearTask);
+  const linearSyncWarning = getOptionalString(body.value, "linearSyncWarning");
+  const plan = generateDailyPlan(snapshot.value, {
+    date,
+    linearSyncWarning,
+    urgentLinearTask,
+  });
   const slackText = formatDailyPlanForSlack(plan);
 
   return jsonOk({

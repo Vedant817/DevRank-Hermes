@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { computeSdeReadinessSnapshot } from "../src/index.js";
+import {
+  computeSdeReadinessSnapshot,
+  isCurrentSdeReadinessSnapshot,
+} from "../src/index.js";
 import { sdeReadinessRubric } from "../src/rubrics.js";
 import type { EvidenceItem } from "@repo/shared";
 
@@ -12,6 +15,26 @@ test("keeps the scoring rubric weighted to a complete snapshot", () => {
   assert.ok(labels.includes("Backend/API"));
   assert.ok(labels.includes("Frontend/UI"));
   assert.ok(labels.includes("System Design"));
+});
+
+test("detects score snapshots written by an older rubric", () => {
+  assert.equal(isCurrentSdeReadinessSnapshot(computeSdeReadinessSnapshot([])), true);
+  assert.equal(
+    isCurrentSdeReadinessSnapshot({
+      overall: 0,
+      generatedAt: "2026-06-22T00:00:00.000Z",
+      breakdown: [
+        {
+          label: "Backend/API/System Design",
+          score: 0,
+          weight: 0.2,
+          evidenceCount: 0,
+          explanation: "Legacy combined lane.",
+        },
+      ],
+    }),
+    false,
+  );
 });
 
 test("matches scoring keywords as terms instead of substrings", () => {

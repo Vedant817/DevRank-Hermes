@@ -18,6 +18,7 @@ export interface LocalAgentOptions {
   codexSessionsDir?: string;
   configPath?: string;
   forceSkillExtraction?: boolean;
+  onWatchError?: (error: unknown) => void;
   persist?: boolean;
   privacy?: Partial<LocalAgentPrivacyConfig>;
   sources?: string[];
@@ -62,7 +63,7 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
     persistent: true,
   });
 
-  const reingest = async () => {
+  const reingest = createSingleFlightRunner(async () => {
     await ingestAndMaybePersist({
       codexSessionsDir,
       persist,
@@ -73,10 +74,16 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
       config: config.automation.weeklySkillExtraction,
       persist,
     });
-  };
+  }, options.onWatchError ?? ((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+  }));
 
-  watcher.on("add", reingest);
-  watcher.on("change", reingest);
+  watcher.on("add", () => {
+    void reingest();
+  });
+  watcher.on("change", () => {
+    void reingest();
+  });
 
   return {
     ...result,
@@ -127,6 +134,39 @@ async function ingestAndMaybePersist(input: {
   }
 
   return result;
+}
+
+export function createSingleFlightRunner(
+  task: () => Promise<void>,
+  onError: (error: unknown) => void,
+) {
+  let running: Promise<void> | null = null;
+  let runAgain = false;
+
+  const runQueuedTask = async () => {
+    do {
+      runAgain = false;
+
+      try {
+        await task();
+      } catch (error) {
+        onError(error);
+      }
+    } while (runAgain);
+  };
+
+  return () => {
+    if (running !== null) {
+      runAgain = true;
+      return running;
+    }
+
+    running = runQueuedTask().finally(() => {
+      running = null;
+    });
+
+    return running;
+  };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

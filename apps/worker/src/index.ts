@@ -16,7 +16,11 @@ import {
   type SqlClient,
 } from "@repo/db";
 import { generateDailyPlan, formatDailyPlanForSlack } from "@repo/planner";
-import { computeSdeReadinessSnapshot, explainWeakestLanes } from "@repo/scoring";
+import {
+  computeSdeReadinessSnapshot,
+  explainWeakestLanes,
+  isCurrentSdeReadinessSnapshot,
+} from "@repo/scoring";
 import { runHermesMentorSummary } from "@repo/hermes";
 import { runMarketBenchmark } from "@repo/search";
 import { sendSlackMessage } from "@repo/slack";
@@ -35,16 +39,23 @@ export async function runDailyPlanJob(evidence?: EvidenceItem[]) {
 
   try {
     let snapshot = await getLatestScoreSnapshot(sql);
+    let scoreSnapshotStatus = "current";
 
-    if (!snapshot) {
+    if (!snapshot || !isCurrentSdeReadinessSnapshot(snapshot)) {
+      const hadStaleSnapshot = snapshot !== undefined;
       const persistedEvidence = await listScoringEvidence(sql);
 
       if (persistedEvidence.length === 0) {
-        throw new Error("Daily plan requires a score snapshot or persisted evidence. Run ingestion first.");
+        throw new Error(
+          hadStaleSnapshot
+            ? "Daily plan found a stale score snapshot but no persisted evidence to refresh it."
+            : "Daily plan requires a score snapshot or persisted evidence. Run ingestion first.",
+        );
       }
 
       snapshot = computeSdeReadinessSnapshot(persistedEvidence);
       await insertScoreSnapshot(sql, snapshot);
+      scoreSnapshotStatus = hadStaleSnapshot ? "refreshed" : "created";
     }
 
     const linearIssue = await getHighestPriorityLinearPlanningIssue(sql);
@@ -57,7 +68,7 @@ export async function runDailyPlanJob(evidence?: EvidenceItem[]) {
     const slackText = formatDailyPlanForSlack(plan);
     const slackDelivery = await sendAuditedDailyPlanSlack(sql, slackText, "daily_plan_worker", plan.date);
 
-    return { snapshot, plan, linearIssue, ...slackDelivery, slackText, stored: true };
+    return { snapshot, plan, linearIssue, scoreSnapshotStatus, ...slackDelivery, slackText, stored: true };
   } finally {
     await closeSqlClient(sql);
   }

@@ -90,6 +90,35 @@ create table if not exists github_pull_requests (
   synced_at timestamptz not null default now()
 );
 
+create table if not exists github_pr_files (
+  pull_request_id bigint not null references github_pull_requests(id) on delete cascade,
+  filename text not null,
+  status text not null,
+  additions integer not null default 0,
+  deletions integer not null default 0,
+  changes integer not null default 0,
+  previous_filename text,
+  synced_at timestamptz not null default now(),
+  primary key (pull_request_id, filename)
+);
+
+create index if not exists github_pr_files_pull_request_idx
+  on github_pr_files (pull_request_id);
+
+create table if not exists github_pr_reviews (
+  id bigint primary key,
+  pull_request_id bigint not null references github_pull_requests(id) on delete cascade,
+  reviewer_login text,
+  state text not null,
+  html_url text,
+  submitted_at timestamptz,
+  comment_count integer not null default 0,
+  synced_at timestamptz not null default now()
+);
+
+create index if not exists github_pr_reviews_pull_request_idx
+  on github_pr_reviews (pull_request_id);
+
 create table if not exists github_commits (
   repo_id bigint not null references github_repos(id) on delete cascade,
   sha text not null,
@@ -104,6 +133,24 @@ create table if not exists github_commits (
 
 create index if not exists github_commits_repo_committed_at_idx
   on github_commits (repo_id, committed_at desc);
+
+create table if not exists github_repo_profiles (
+  repo_id bigint primary key references github_repos(id) on delete cascade,
+  scan_status text not null default 'scanned'
+    check (scan_status in ('scanned', 'unavailable')),
+  scan_error text,
+  has_readme boolean,
+  has_tests boolean,
+  has_deployment_config boolean,
+  has_architecture_diagram boolean,
+  tech_stack text[] not null default '{}',
+  evidence_paths text[] not null default '{}',
+  scanned_at timestamptz not null,
+  synced_at timestamptz not null default now()
+);
+
+create index if not exists github_repo_profiles_scan_status_idx
+  on github_repo_profiles (scan_status);
 
 create table if not exists linear_workspaces (
   id text primary key,
@@ -166,6 +213,67 @@ create table if not exists daily_plans (
   target_minutes integer not null,
   created_at timestamptz not null default now()
 );
+
+create table if not exists daily_tasks (
+  id uuid primary key default gen_random_uuid(),
+  plan_date date not null,
+  task_key text not null,
+  category text not null,
+  title text not null,
+  minutes integer not null,
+  evidence text,
+  status text not null default 'pending'
+    check (status in ('pending', 'completed', 'skipped')),
+  completed_at timestamptz,
+  notes text,
+  evidence_url text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (plan_date, task_key)
+);
+
+create index if not exists daily_tasks_plan_date_idx
+  on daily_tasks (plan_date desc);
+
+create index if not exists daily_tasks_status_idx
+  on daily_tasks (status);
+
+create table if not exists weekly_plans (
+  id uuid primary key default gen_random_uuid(),
+  week_start date not null unique,
+  weekly_goal text not null,
+  tasks jsonb not null,
+  target_minutes integer not null,
+  generated_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists weekly_plans_week_start_idx
+  on weekly_plans (week_start desc);
+
+create table if not exists content_drafts (
+  id uuid primary key default gen_random_uuid(),
+  draft_key text not null unique,
+  draft_type text not null
+    check (draft_type in (
+      'resume_bullet',
+      'linkedin_post',
+      'x_post',
+      'portfolio_description',
+      'interview_talking_point',
+      'weekly_progress_summary'
+    )),
+  title text not null,
+  body text not null,
+  evidence jsonb not null,
+  metadata jsonb not null default '{}',
+  generated_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists content_drafts_type_generated_idx
+  on content_drafts (draft_type, generated_at desc);
 
 create table if not exists slack_notifications (
   id uuid primary key default gen_random_uuid(),

@@ -14,6 +14,7 @@ import {
   insertIngestionRun,
   insertScoreSnapshot,
   listEvidenceItems,
+  listScoringEvidence,
   runDbMigrations,
   upsertAiChatSessions,
   upsertGithubBackfill,
@@ -26,7 +27,10 @@ import {
 } from "@repo/db";
 import { buildReusableSkillArtifacts, writeReusableSkillArtifacts } from "@repo/hermes";
 import { formatDailyPlanForSlack, generateDailyPlan } from "@repo/planner";
-import { computeSdeReadinessSnapshot } from "@repo/scoring";
+import {
+  computeSdeReadinessSnapshot,
+  isCurrentSdeReadinessSnapshot,
+} from "@repo/scoring";
 import { runMarketBenchmark } from "@repo/search";
 import { evidenceSources } from "@repo/shared";
 import { sendSlackMessage } from "@repo/slack";
@@ -52,7 +56,7 @@ type OptionRequirement = {
   label: string;
 };
 
-type CommandContext = {
+export type CommandContext = {
   command: string;
   options: Record<string, OptionValue>;
   positionals: string[];
@@ -62,7 +66,7 @@ type CommandContext = {
 
 type CommandHandler = (context: CommandContext) => Promise<unknown> | unknown;
 type UnknownFunction = (...args: unknown[]) => unknown;
-type ModuleExports = Record<string, unknown>;
+export type ModuleExports = Record<string, unknown>;
 type CommandInvoker = (
   moduleExports: ModuleExports,
   context: CommandContext,
@@ -87,13 +91,11 @@ const databaseRequirement: EnvRequirement = {
   oneOf: [["DEVRANK_DATABASE_URL"], ["DATABASE_URL"], ["SUPABASE_DATABASE_URL"]],
 };
 
-const githubAuthRequirement: EnvRequirement = {
+export const githubBackfillAuthRequirement: EnvRequirement = {
   label: "GitHub REST auth",
   oneOf: [
     ["GITHUB_PERSONAL_ACCESS_TOKEN"],
     ["GITHUB_TOKEN"],
-    ["GITHUB_APP_ID", "GITHUB_INSTALLATION_ID", "GITHUB_PRIVATE_KEY"],
-    ["GITHUB_APP_ID", "GITHUB_INSTALLATION_ID", "GITHUB_PRIVATE_KEY_PATH"],
   ],
 };
 
@@ -207,17 +209,12 @@ const commands: CommandSpec[] = [
   {
     name: "github:backfill",
     description: "Backfill repository, pull request, and issue history through the GitHub package.",
-    usage: "devrank github:backfill --user <github-user> [--commit-limit <count>] [--dry-run]",
+    usage: "devrank github:backfill --user <github-user> [--commit-limit <count>] [--pr-metadata-limit <count>] [--dry-run]",
     moduleCandidates: ["@repo/github"],
     exportCandidates: ["backfillGithubUser", "backfillGitHub", "backfillGithub", "githubBackfill", "run"],
-    envRequirements: [databaseRequirement, githubAuthRequirement],
+    envRequirements: [databaseRequirement, githubBackfillAuthRequirement],
     optionRequirements: [{ name: "user", label: "GitHub username or organization to backfill" }],
-    buildConfig: (parsed, env) => ({
-      authMode: firstPresentEnv(env, githubAuthRequirement) === "GITHUB_TOKEN" ? "token" : "github-app",
-      databaseEnv: firstPresentEnv(env, databaseRequirement),
-      dryRun: booleanOption(parsed, "dry-run"),
-      user: stringOption(parsed, "user"),
-    }),
+    buildConfig: buildGithubBackfillConfig,
     invoke: invokeGithubBackfill,
   },
   {
@@ -386,7 +383,19 @@ const commands: CommandSpec[] = [
 const commandMap = new Map(commands.map((command) => [command.name, command]));
 const evidenceSourceSet = new Set<EvidenceItemForCli["source"]>(evidenceSources);
 
-async function main(argv: string[]) {
+export function buildGithubBackfillConfig(parsed: ParsedArgs, env: NodeJS.ProcessEnv) {
+  return {
+    authEnv: firstPresentEnv(env, githubBackfillAuthRequirement),
+    authMode: "token",
+    commitLimit: numberOption(parsed, "commit-limit", 100),
+    databaseEnv: firstPresentEnv(env, databaseRequirement),
+    dryRun: booleanOption(parsed, "dry-run"),
+    prMetadataLimit: numberOption(parsed, "pr-metadata-limit", 25),
+    user: stringOption(parsed, "user"),
+  };
+}
+
+export async function main(argv: string[]) {
   const parsed = parseArgs(argv);
 
   if (!parsed.commandName || parsed.commandName === "help" || booleanOption(parsed, "help") || booleanOption(parsed, "h")) {
@@ -477,7 +486,7 @@ async function handleEnvCheck(context: CommandContext) {
     context: [databaseRequirement, supermemoryRequirement],
     database: [databaseRequirement],
     embeddings: [embeddingsRequirement],
-    github: [databaseRequirement, githubAuthRequirement],
+    github: [databaseRequirement, githubBackfillAuthRequirement],
     hermes: [hermesRequirement],
     linear: [databaseRequirement, linearAuthRequirement],
     market: [marketSearchRequirement],
@@ -532,7 +541,7 @@ async function handleScoresRecompute(context: CommandContext) {
   const sql = createSqlClient();
 
   try {
-    const evidence = await listEvidenceItems(sql, {
+    const evidence = await listScoringEvidence(sql, {
       limit: configNumber(context, "limit", 500),
     });
     const snapshot = computeSdeReadinessSnapshot(evidence);
@@ -555,10 +564,29 @@ async function handlePlannerDaily(context: CommandContext) {
   const sql = createSqlClient();
 
   try {
-    const snapshot = await getLatestScoreSnapshot(sql);
+    let snapshot = await getLatestScoreSnapshot(sql);
+    const dryRun = configBoolean(context, "dryRun");
+    let scoreSnapshotStatus = "current";
 
-    if (!snapshot) {
-      throw new CliError("No score snapshot exists yet. Run devrank scores:recompute first.", 2);
+    if (!snapshot || !isCurrentSdeReadinessSnapshot(snapshot)) {
+      const hadStaleSnapshot = snapshot !== undefined;
+      const evidence = await listScoringEvidence(sql);
+
+      if (evidence.length === 0) {
+        throw new CliError(
+          hadStaleSnapshot
+            ? "Latest score snapshot uses an old rubric and no persisted evidence exists to refresh it."
+            : "No score snapshot exists yet. Run devrank scores:recompute first.",
+          2,
+        );
+      }
+
+      snapshot = computeSdeReadinessSnapshot(evidence);
+      scoreSnapshotStatus = hadStaleSnapshot ? "refreshed" : "created";
+
+      if (!dryRun) {
+        await insertScoreSnapshot(sql, snapshot);
+      }
     }
 
     const plan = generateDailyPlan(
@@ -567,7 +595,6 @@ async function handlePlannerDaily(context: CommandContext) {
       configString(context, "urgentLinearTask"),
     );
     const slackText = formatDailyPlanForSlack(plan);
-    const dryRun = configBoolean(context, "dryRun");
     const sendSlack = configBoolean(context, "sendSlack");
     let slackDelivery:
       | Awaited<ReturnType<typeof sendAuditedCliSlack>>
@@ -584,6 +611,7 @@ async function handlePlannerDaily(context: CommandContext) {
     return {
       dryRun,
       plan,
+      scoreSnapshotStatus,
       slackDelivered: slackDelivery?.slackDelivered ?? false,
       ...(sendSlack && dryRun ? { slackSkippedReason: "dry_run" } : {}),
       ...(slackDelivery ?? {}),
@@ -770,7 +798,7 @@ async function invokeLocalAiIngest(moduleExports: ModuleExports, context: Comman
   return handler(context);
 }
 
-async function invokeGithubBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+export async function invokeGithubBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
   const directHandler = optionalFunction(moduleExports, ["backfillGitHub", "backfillGithub", "githubBackfill", "run"]);
 
   if (directHandler) {
@@ -799,7 +827,8 @@ async function invokeGithubBackfill(moduleExports: ModuleExports, context: Comma
   return persistGithubBackfillResult(
     context,
     await backfillGithubUser(client, configString(context, "user"), {
-      commitLimitPerRepo: configNumber(context, "commit-limit", 100),
+      commitLimitPerRepo: configNumber(context, "commitLimit", 100),
+      prMetadataLimitPerRepo: configNumber(context, "prMetadataLimit", 25),
     }),
   );
 }
@@ -816,7 +845,7 @@ async function persistGithubBackfillResult(context: CommandContext, result: unkn
     await insertIngestionRun(sql, {
       source: "github_backfill",
       status: "success",
-      summary: `Imported ${written.repos} GitHub repo(s), ${written.pullRequests} pull request(s), and ${written.commits} commit(s).`,
+      summary: `Imported ${written.repos} GitHub repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), and ${written.repoProfiles} repo profile(s).`,
     });
 
     return {
@@ -1052,7 +1081,10 @@ function isGithubBackfillLike(value: unknown): value is Parameters<typeof upsert
   const record = value as Record<string, unknown>;
   return Array.isArray(record.repos) &&
     Array.isArray(record.pullRequests) &&
-    (record.commits === undefined || Array.isArray(record.commits));
+    (record.commits === undefined || Array.isArray(record.commits)) &&
+    (record.pullRequestFiles === undefined || Array.isArray(record.pullRequestFiles)) &&
+    (record.pullRequestReviews === undefined || Array.isArray(record.pullRequestReviews)) &&
+    (record.repoProfiles === undefined || Array.isArray(record.repoProfiles));
 }
 
 function isLinearBackfillLike(value: unknown): value is Parameters<typeof upsertLinearBackfill>[1] {
@@ -1283,19 +1315,21 @@ function renderHelp(commandName?: string) {
   ].join("\n");
 }
 
-main(process.argv.slice(2)).catch((error: unknown) => {
-  if (error instanceof CliError) {
-    console.error(error.message);
-    process.exitCode = error.exitCode;
-    return;
-  }
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main(process.argv.slice(2)).catch((error: unknown) => {
+    if (error instanceof CliError) {
+      console.error(error.message);
+      process.exitCode = error.exitCode;
+      return;
+    }
 
-  if (error instanceof Error) {
-    console.error(error.message);
+    if (error instanceof Error) {
+      console.error(error.message);
+      process.exitCode = 1;
+      return;
+    }
+
+    console.error(String(error));
     process.exitCode = 1;
-    return;
-  }
-
-  console.error(String(error));
-  process.exitCode = 1;
-});
+  });
+}

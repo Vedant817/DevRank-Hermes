@@ -622,6 +622,16 @@ function getRateLimitBuckets() {
 }
 
 function clientIdentity(request: Request) {
+  const authorization = request.headers.get("authorization");
+
+  if (authorization) {
+    return `auth:${createHash("sha256").update(authorization).digest("hex").slice(0, 24)}`;
+  }
+
+  if (process.env.DEVRANK_TRUST_PROXY_IP_HEADERS !== "true") {
+    return "anonymous";
+  }
+
   const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
 
   if (forwardedFor) {
@@ -632,12 +642,6 @@ function clientIdentity(request: Request) {
 
   if (realIp) {
     return `ip:${realIp}`;
-  }
-
-  const authorization = request.headers.get("authorization");
-
-  if (authorization) {
-    return `auth:${createHash("sha256").update(authorization).digest("hex").slice(0, 24)}`;
   }
 
   return "anonymous";

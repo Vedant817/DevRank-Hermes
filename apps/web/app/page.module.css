@@ -120,6 +120,77 @@
   gap: 10px;
 }
 
+.filterForm {
+  display: grid;
+  gap: 16px;
+}
+
+.filterGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.filterField {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filterField span {
+  color: #59667a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.filterField select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #172033;
+  font: inherit;
+}
+
+.filterActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filterButton,
+.filterReset {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.filterButton {
+  border: 1px solid #1f7a8c;
+  background: #1f7a8c;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.filterReset {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #172033;
+}
+
+.filterButton:focus-visible,
+.filterReset:focus-visible,
+.filterField select:focus-visible {
+  outline: 3px solid #2f80ed;
+  outline-offset: 2px;
+}
+
 .sourceRow {
   display: flex;
   align-items: center;
@@ -130,6 +201,16 @@
   border: 1px solid #e3e8ef;
   border-radius: 8px;
   background: #fbfcfe;
+}
+
+a.sourceRow {
+  color: inherit;
+  text-decoration: none;
+}
+
+a.sourceRow:focus-visible {
+  outline: 3px solid #2f80ed;
+  outline-offset: 2px;
 }
 
 .sourceRow div {

@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import {
   type DailyPlan,
   type EvidenceItem,
   type EvidenceSource,
   type ScoreBreakdown,
   type ScoreSnapshot,
+  type WeeklyPlan,
 } from "@repo/shared";
 import { ensureVectorStore } from "@repo/vector-store";
 import type { SqlClient } from "./client.js";
@@ -20,7 +22,12 @@ export interface PersistableLinearProject {
   state: string | null;
   progress: number | null;
   url: string | null;
+  teamKey?: string | null;
+  teamId?: string | null;
   teamName: string | null;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
+  workspaceUrlKey?: string | null;
 }
 
 export interface PersistableLinearIssue {
@@ -32,6 +39,13 @@ export interface PersistableLinearIssue {
   state: string | null;
   assignee: string | null;
   projectId: string | null;
+  teamKey?: string | null;
+  teamId?: string | null;
+  teamName?: string | null;
+  updatedAt?: string | null;
+  workspaceId?: string | null;
+  workspaceName?: string | null;
+  workspaceUrlKey?: string | null;
 }
 
 export interface PersistableLinearBackfill {
@@ -119,6 +133,30 @@ type DailyPlanRow = {
   created_at: Date | string;
 };
 
+export type WeeklyPlanRow = {
+  week_start: Date | string;
+  weekly_goal: string;
+  target_minutes: number;
+  tasks: WeeklyPlan["tasks"] | string;
+  generated_at: Date | string;
+  created_at: Date | string;
+};
+
+export type DailyTaskRow = {
+  plan_date: Date | string;
+  task_key: string;
+  category: DailyPlan["tasks"][number]["category"];
+  title: string;
+  minutes: number;
+  evidence: string | null;
+  status: DailyTaskStatus;
+  completed_at: Date | string | null;
+  notes: string | null;
+  evidence_url: string | null;
+  created_at: Date | string;
+  updated_at: Date | string;
+};
+
 type IngestionRunRow = {
   source: string;
   status: string;
@@ -155,7 +193,61 @@ type LinearPlanningIssueRow = {
   url: string | null;
 };
 
+export interface LinearSyncRunStatus {
+  error?: string | null;
+  finishedAt?: string | null;
+  source: string;
+  status: string;
+  summary?: string | null;
+}
+
+export interface LinearSyncHealth {
+  error?: string;
+  finishedAt?: string;
+  message: string;
+  source?: string;
+  status: "failed" | "healthy" | "unknown";
+  summary?: string;
+}
+
+export interface LinearPlanningSignal {
+  issue?: {
+    identifier: string;
+    priority: number | null;
+    state: string | null;
+    title: string;
+    url: string | null;
+  };
+  syncHealth: LinearSyncHealth;
+}
+
 export type ScoringEvidenceScope = "all" | "user" | "repo" | "pull_request";
+
+export type DailyTaskStatus = "pending" | "completed" | "skipped";
+
+export interface DailyTaskRecord {
+  planDate: string;
+  taskKey: string;
+  category: DailyPlan["tasks"][number]["category"];
+  title: string;
+  minutes: number;
+  status: DailyTaskStatus;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  evidence?: string;
+  evidenceUrl?: string;
+  notes?: string;
+}
+
+export interface DailyTaskStatusUpdate {
+  completedAt?: string;
+  date: string;
+  evidenceUrl?: string;
+  notes?: string;
+  status: DailyTaskStatus;
+  taskKey: string;
+}
 
 export interface DashboardSummary {
   counts: {
@@ -313,11 +405,76 @@ export async function getHighestPriorityLinearPlanningIssue(
   return rows[0];
 }
 
+export async function getLinearPlanningSignal(
+  sql: SqlClient,
+): Promise<LinearPlanningSignal> {
+  const [issue, syncRows] = await Promise.all([
+    getHighestPriorityLinearPlanningIssue(sql),
+    sql<IngestionRunRow[]>`
+      select source, status, summary, error, finished_at
+      from ingestion_runs
+      where source in ('linear_backfill', 'linear_webhook')
+      order by coalesce(finished_at, started_at) desc
+      limit 1
+    `,
+  ]);
+
+  return {
+    ...(issue ? { issue } : {}),
+    syncHealth: buildLinearSyncHealth(syncRows[0] ? ingestionRunStatusFromRow(syncRows[0]) : undefined),
+  };
+}
+
+export function buildLinearSyncHealth(run?: LinearSyncRunStatus): LinearSyncHealth {
+  if (!run) {
+    return {
+      status: "unknown",
+      message: "No Linear sync run has been recorded yet.",
+    };
+  }
+
+  const source = safeOperationalText(run.source);
+  const finishedAt = run.finishedAt ? safeOperationalText(run.finishedAt) : undefined;
+  const summary = run.summary ? safeOperationalText(run.summary) : undefined;
+  const error = run.error ? safeOperationalText(run.error) : undefined;
+
+  if (run.status === "failed") {
+    return {
+      status: "failed",
+      message: "Latest Linear sync failed. Fix Linear backfill or webhook delivery before relying on project planning.",
+      ...(source ? { source } : {}),
+      ...(finishedAt ? { finishedAt } : {}),
+      ...(summary ? { summary } : {}),
+      ...(error ? { error } : {}),
+    };
+  }
+
+  if (run.status === "success") {
+    return {
+      status: "healthy",
+      message: "Latest Linear sync completed successfully.",
+      ...(source ? { source } : {}),
+      ...(finishedAt ? { finishedAt } : {}),
+      ...(summary ? { summary } : {}),
+    };
+  }
+
+  return {
+    status: "unknown",
+    message: "Latest Linear sync status is not recognized.",
+    ...(source ? { source } : {}),
+    ...(finishedAt ? { finishedAt } : {}),
+    ...(summary ? { summary } : {}),
+    ...(error ? { error } : {}),
+  };
+}
+
 export async function insertDailyPlan(
   sql: SqlClient,
   plan: DailyPlan,
 ): Promise<void> {
   const tasksJson = JSON.stringify(plan.tasks);
+  const taskKeys = plan.tasks.map((task) => dailyTaskKey(plan.date, task));
 
   await sql`
     insert into daily_plans (plan_date, tasks, target_minutes)
@@ -326,6 +483,112 @@ export async function insertDailyPlan(
       tasks = excluded.tasks,
       target_minutes = excluded.target_minutes
   `;
+
+  if (taskKeys.length > 0) {
+    await sql`
+      delete from daily_tasks
+      where plan_date = ${plan.date}
+        and task_key <> all(${taskKeys})
+    `;
+  } else {
+    await sql`
+      delete from daily_tasks
+      where plan_date = ${plan.date}
+    `;
+  }
+
+  for (const [index, task] of plan.tasks.entries()) {
+    await sql`
+      insert into daily_tasks (
+        plan_date,
+        task_key,
+        category,
+        title,
+        minutes,
+        evidence,
+        status,
+        updated_at
+      )
+      values (
+        ${plan.date},
+        ${taskKeys[index] ?? dailyTaskKey(plan.date, task)},
+        ${task.category},
+        ${task.title},
+        ${task.minutes},
+        ${task.evidence ?? null},
+        'pending',
+        now()
+      )
+      on conflict (plan_date, task_key) do update set
+        category = excluded.category,
+        title = excluded.title,
+        minutes = excluded.minutes,
+        evidence = excluded.evidence,
+        updated_at = now()
+    `;
+  }
+}
+
+export async function insertWeeklyPlan(
+  sql: SqlClient,
+  plan: WeeklyPlan,
+): Promise<void> {
+  const tasksJson = JSON.stringify(plan.tasks);
+
+  await sql`
+    insert into weekly_plans (
+      week_start,
+      weekly_goal,
+      tasks,
+      target_minutes,
+      generated_at
+    )
+    values (
+      ${plan.weekStart},
+      ${plan.weeklyGoal},
+      ${tasksJson}::jsonb,
+      ${plan.targetMinutes},
+      ${plan.generatedAt}
+    )
+    on conflict (week_start) do update set
+      weekly_goal = excluded.weekly_goal,
+      tasks = excluded.tasks,
+      target_minutes = excluded.target_minutes,
+      generated_at = excluded.generated_at
+  `;
+}
+
+export async function updateDailyTaskStatus(
+  sql: SqlClient,
+  input: DailyTaskStatusUpdate,
+): Promise<DailyTaskRecord | undefined> {
+  const completedAt = input.status === "completed" ? input.completedAt ?? new Date().toISOString() : null;
+  const rows = await sql<DailyTaskRow[]>`
+    update daily_tasks
+    set
+      status = ${input.status},
+      completed_at = ${completedAt},
+      notes = ${input.notes ?? null},
+      evidence_url = ${input.evidenceUrl ?? null},
+      updated_at = now()
+    where plan_date = ${input.date}
+      and task_key = ${input.taskKey}
+    returning
+      plan_date,
+      task_key,
+      category,
+      title,
+      minutes,
+      evidence,
+      status,
+      completed_at,
+      notes,
+      evidence_url,
+      created_at,
+      updated_at
+  `;
+
+  return rows[0] ? dailyTaskFromRow(rows[0]) : undefined;
 }
 
 export async function createSlackNotificationAttempt(
@@ -434,6 +697,10 @@ export async function claimGithubWebhookDelivery(
       received_at = now(),
       processed_at = null
     where github_webhook_events.status = 'failed'
+      or (
+        github_webhook_events.status = 'processing'
+        and github_webhook_events.received_at < now() - interval '10 minutes'
+      )
     returning delivery_id
   `;
 
@@ -503,6 +770,10 @@ export async function claimLinearWebhookDelivery(
       received_at = now(),
       processed_at = null
     where linear_webhook_events.status = 'failed'
+      or (
+        linear_webhook_events.status = 'processing'
+        and linear_webhook_events.received_at < now() - interval '10 minutes'
+      )
     returning delivery_id
   `;
 
@@ -692,9 +963,60 @@ export async function upsertLinearBackfill(
   issues: number;
   projects: number;
 }> {
-  const projectIds = new Set(input.projects.map((project) => project.id));
+  const projectTeamIds = new Map(
+    input.projects
+      .filter((project) => project.teamId)
+      .map((project) => [project.id, project.teamId as string]),
+  );
+  const workspaces = new Map<string, {
+    name: string;
+    urlKey: string | null;
+  }>();
+  const teams = new Map<string, {
+    key: string | null;
+    name: string;
+    workspaceId: string | null;
+  }>();
+
+  for (const project of input.projects) {
+    collectLinearWorkspace(workspaces, project);
+    if (project.teamId && project.teamName) {
+      collectLinearTeam(teams, workspaces, project.teamId, project.teamName, project.teamKey, project.workspaceId);
+    }
+  }
+
+  for (const issue of input.issues) {
+    collectLinearWorkspace(workspaces, issue);
+    if (issue.teamId && issue.teamName) {
+      collectLinearTeam(teams, workspaces, issue.teamId, issue.teamName, issue.teamKey, issue.workspaceId);
+    }
+  }
+
   let projects = 0;
   let issues = 0;
+
+  for (const [id, workspace] of workspaces) {
+    await sql`
+      insert into linear_workspaces (id, name, url_key, synced_at)
+      values (${id}, ${workspace.name}, ${workspace.urlKey}, now())
+      on conflict (id) do update set
+        name = excluded.name,
+        url_key = coalesce(excluded.url_key, linear_workspaces.url_key),
+        synced_at = now()
+    `;
+  }
+
+  for (const [id, team] of teams) {
+    await sql`
+      insert into linear_teams (id, workspace_id, name, key, synced_at)
+      values (${id}, ${team.workspaceId && workspaces.has(team.workspaceId) ? team.workspaceId : null}, ${team.name}, ${team.key}, now())
+      on conflict (id) do update set
+        workspace_id = coalesce(excluded.workspace_id, linear_teams.workspace_id),
+        name = excluded.name,
+        key = coalesce(excluded.key, linear_teams.key),
+        synced_at = now()
+    `;
+  }
 
   for (const project of input.projects) {
     await sql`
@@ -709,7 +1031,7 @@ export async function upsertLinearBackfill(
       )
       values (
         ${project.id},
-        ${null},
+        (select id from linear_teams where id = ${project.teamId ?? null} limit 1),
         ${project.name},
         ${project.state},
         ${project.progress},
@@ -717,6 +1039,7 @@ export async function upsertLinearBackfill(
         now()
       )
       on conflict (id) do update set
+        team_id = coalesce(excluded.team_id, linear_projects.team_id),
         name = excluded.name,
         state = excluded.state,
         progress = excluded.progress,
@@ -727,6 +1050,8 @@ export async function upsertLinearBackfill(
   }
 
   for (const issue of input.issues) {
+    const teamId = issue.teamId ?? (issue.projectId ? projectTeamIds.get(issue.projectId) : undefined) ?? null;
+
     await sql`
       insert into linear_issues (
         id,
@@ -738,28 +1063,32 @@ export async function upsertLinearBackfill(
         priority,
         assignee,
         url,
+        updated_at,
         synced_at
       )
       values (
         ${issue.id},
-        ${issue.projectId && projectIds.has(issue.projectId) ? issue.projectId : null},
-        ${null},
+        (select id from linear_projects where id = ${issue.projectId ?? null} limit 1),
+        (select id from linear_teams where id = ${teamId} limit 1),
         ${issue.identifier},
         ${issue.title},
         ${issue.state},
         ${issue.priority},
         ${issue.assignee},
         ${issue.url},
+        ${issue.updatedAt ?? null},
         now()
       )
       on conflict (id) do update set
-        project_id = excluded.project_id,
+        project_id = coalesce(excluded.project_id, linear_issues.project_id),
         identifier = excluded.identifier,
         title = excluded.title,
         state = excluded.state,
         priority = excluded.priority,
         assignee = excluded.assignee,
+        team_id = coalesce(excluded.team_id, linear_issues.team_id),
         url = excluded.url,
+        updated_at = coalesce(excluded.updated_at, linear_issues.updated_at),
         synced_at = now()
     `;
     issues += 1;
@@ -769,6 +1098,46 @@ export async function upsertLinearBackfill(
     issues,
     projects,
   };
+}
+
+function collectLinearWorkspace(
+  workspaces: Map<string, { name: string; urlKey: string | null }>,
+  input: {
+    workspaceId?: string | null;
+    workspaceName?: string | null;
+    workspaceUrlKey?: string | null;
+  },
+) {
+  if (!input.workspaceId || !input.workspaceName) {
+    return;
+  }
+
+  const current = workspaces.get(input.workspaceId);
+
+  workspaces.set(input.workspaceId, {
+    name: input.workspaceName,
+    urlKey: input.workspaceUrlKey ?? current?.urlKey ?? null,
+  });
+}
+
+function collectLinearTeam(
+  teams: Map<string, { key: string | null; name: string; workspaceId: string | null }>,
+  workspaces: Map<string, { name: string; urlKey: string | null }>,
+  id: string,
+  name: string,
+  key: string | null | undefined,
+  workspaceId: string | null | undefined,
+) {
+  const current = teams.get(id);
+  const knownWorkspaceId = workspaceId && workspaces.has(workspaceId)
+    ? workspaceId
+    : current?.workspaceId ?? null;
+
+  teams.set(id, {
+    key: key ?? current?.key ?? null,
+    name,
+    workspaceId: knownWorkspaceId,
+  });
 }
 
 export async function listEvidenceItems(
@@ -997,10 +1366,74 @@ function dailyPlanFromRow(row: DailyPlanRow): DailyPlan & { createdAt: string } 
   };
 }
 
+function ingestionRunStatusFromRow(row: IngestionRunRow): LinearSyncRunStatus {
+  return {
+    source: row.source,
+    status: row.status,
+    ...(row.summary ? { summary: row.summary } : {}),
+    ...(row.error ? { error: row.error } : {}),
+    ...(row.finished_at ? { finishedAt: toIso(row.finished_at) } : {}),
+  };
+}
+
+export function dailyTaskKey(
+  planDate: string,
+  task: Pick<DailyPlan["tasks"][number], "category" | "title">,
+): string {
+  return createHash("sha256")
+    .update(`${planDate}:${task.category}:${task.title}`)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+export function dailyTaskFromRow(row: DailyTaskRow): DailyTaskRecord {
+  return {
+    planDate: row.plan_date instanceof Date ? row.plan_date.toISOString().slice(0, 10) : String(row.plan_date),
+    taskKey: row.task_key,
+    category: row.category,
+    title: row.title,
+    minutes: row.minutes,
+    status: row.status,
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+    ...(row.completed_at ? { completedAt: toIso(row.completed_at) } : {}),
+    ...(row.evidence ? { evidence: row.evidence } : {}),
+    ...(row.evidence_url ? { evidenceUrl: row.evidence_url } : {}),
+    ...(row.notes ? { notes: row.notes } : {}),
+  };
+}
+
+export function weeklyPlanFromRow(row: WeeklyPlanRow): WeeklyPlan & { createdAt: string } {
+  const tasks =
+    typeof row.tasks === "string"
+      ? JSON.parse(row.tasks) as WeeklyPlan["tasks"]
+      : row.tasks;
+
+  return {
+    weekStart: row.week_start instanceof Date ? row.week_start.toISOString().slice(0, 10) : String(row.week_start),
+    weeklyGoal: row.weekly_goal,
+    targetMinutes: row.target_minutes,
+    tasks,
+    generatedAt: toIso(row.generated_at),
+    createdAt: toIso(row.created_at),
+  };
+}
+
 function numberCount(value: string | number | undefined) {
   return Number(value ?? 0);
 }
 
 function toIso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function safeOperationalText(value: string): string {
+  return value
+    .replace(/(api[_-]?key|token|secret|password)\s*[:=]\s*["']?[^\s"',;]+/gi, "$1=[REDACTED_SECRET]")
+    .replace(/(?:ghp_|github_pat_)[A-Za-z0-9_]{20,}/g, "[REDACTED_GITHUB_TOKEN]")
+    .replace(/sk-[A-Za-z0-9_-]{16,}/g, "[REDACTED_OPENAI_KEY]")
+    .replace(/postgres(?:ql)?:\/\/[^\s"'`]+/gi, "[REDACTED_DATABASE_URL]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 280);
 }

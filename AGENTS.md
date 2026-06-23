@@ -14,6 +14,7 @@ Build this project iteratively until tests, lint, and build pass.
 - Do not add new dependencies unless necessary.
 - After every feature or task, run the relevant validation gate.
 - If tests fail, inspect the error and fix only the relevant issue.
+- After every feature or task passes validation, review the changed files for code quality, security issues, hardcoded/demo-only values, AI-slop or stub behavior, and production deploy readiness; fix or document any blocker before committing.
 - After a feature or task passes its gate, stage only the files changed for that feature.
 - Commit each completed feature or task separately with a clear commit message before starting the next unrelated feature.
 - Do not bundle unrelated feature files into one commit just because they were edited in the same session.

@@ -51,6 +51,13 @@ export async function POST(request: Request) {
     return query.response;
   }
 
+  if (query.value.trim().length < 2) {
+    return jsonError(400, "query_too_short", "query must contain at least two characters.", {
+      field: "query",
+      minLength: 2,
+    });
+  }
+
   const limit = getOptionalInteger(body.value, "limit", 5, 1, 25);
 
   if (!limit.ok) {

@@ -1,9 +1,11 @@
 import {
   closeSqlClient,
   createSqlClient,
+  insertWeeklyPlan,
   listEvidenceItems,
 } from "@repo/db";
 import { computeSdeReadinessSnapshot, explainWeakestLanes } from "@repo/scoring";
+import { generateWeeklyPlan } from "@repo/planner";
 import {
   getRequiredString,
   jsonError,
@@ -50,6 +52,8 @@ export async function GET(request: Request) {
 
       const snapshot = computeSdeReadinessSnapshot(evidence);
       const weakestLanes = explainWeakestLanes(snapshot);
+      const weeklyPlan = generateWeeklyPlan(snapshot);
+      await insertWeeklyPlan(sql, weeklyPlan);
       const evidenceSummary = evidence
         .slice(0, 25)
         .map((item) => `${item.title}: ${item.summary}`)
@@ -61,6 +65,7 @@ export async function GET(request: Request) {
 
       return jsonOk({
         review,
+        weeklyPlan,
         cron: weeklyReviewCronSchedule,
         evidenceCount: evidence.length,
         weakestLanes,
