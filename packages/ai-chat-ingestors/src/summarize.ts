@@ -64,6 +64,8 @@ export function summarizeSession(session: ParsedSession): EvidenceItem {
     occurredAt: session.startedAt ?? new Date().toISOString(),
     metadata: {
       sourcePath: session.sourcePath,
+      agentName: session.agentName,
+      prompts: userPrompts.slice(0, 5),
       toolCalls: session.toolCalls,
       filesTouched: session.filesTouched,
       commandsRun: session.commandsRun,

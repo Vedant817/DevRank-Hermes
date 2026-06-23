@@ -598,16 +598,16 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] AI-agent/orchestration score.
   - [x] GitHub portfolio score.
   - [x] Communication/content score.
-- [ ] Create Dashboard B: AI Agent Learning Dashboard.
-- [ ] AI Agent Learning Dashboard shows:
-  - [ ] Which agents were used most.
-  - [ ] What kind of tasks agents are asked to do.
-  - [ ] Which sessions came from local history, cloud exports, or manual imports.
-  - [ ] Where there is too much AI dependency.
-  - [ ] Where improvement happened.
-  - [ ] Repeated bugs/errors.
-  - [ ] Best prompts.
-  - [ ] Reusable skills created.
+- [x] Create Dashboard B: AI Agent Learning Dashboard.
+- [x] AI Agent Learning Dashboard shows:
+  - [x] Which agents were used most.
+  - [x] What kind of tasks agents are asked to do.
+  - [x] Which sessions came from local history, cloud exports, or manual imports.
+  - [x] Where there is too much AI dependency.
+  - [x] Where improvement happened.
+  - [x] Repeated bugs/errors.
+  - [x] Best prompts.
+  - [x] Reusable skills created.
 - [ ] Create Dashboard C: GitHub Portfolio Dashboard.
 - [ ] GitHub Portfolio Dashboard shows:
   - [ ] Best repos.

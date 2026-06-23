@@ -1,3 +1,4 @@
+export * from "./ai-learning.js";
 export * from "./client.js";
 export * from "./github.js";
 export * from "./migrate.js";

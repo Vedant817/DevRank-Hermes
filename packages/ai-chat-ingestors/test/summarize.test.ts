@@ -31,6 +31,8 @@ test("uses Hermes local AI chat summary for evidence output", () => {
   assert.match(evidence.summary, /Hermes local AI chat summary for Codex/);
   assert.match(evidence.summary, /Evidence:/);
   assert.equal(evidence.metadata?.hermesSummary && typeof evidence.metadata.hermesSummary === "object", true);
+  assert.equal(evidence.metadata?.agentName, "Codex");
+  assert.deepEqual(evidence.metadata?.prompts, ["Implement a local AI chat summarizer."]);
   assert.deepEqual(evidence.metadata?.redactions, ["[REDACTED_SECRET]"]);
 });
 
