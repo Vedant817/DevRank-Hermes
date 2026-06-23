@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@repo/embeddings": "workspace:*",
+    "@repo/guardrails": "workspace:*",
     "@repo/hermes": "workspace:*",
     "@repo/shared": "workspace:*"
   },
