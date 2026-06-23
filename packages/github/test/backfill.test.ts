@@ -42,6 +42,19 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
       list: listPulls,
     },
     repos: {
+      getContent: async ({ path }: { path: string }) => ({
+        data: path === ""
+          ? [
+              { name: "README.md", path: "README.md", type: "file" },
+              { name: "package.json", path: "package.json", type: "file" },
+              { name: "vercel.json", path: "vercel.json", type: "file" },
+              { name: "docs", path: "docs", type: "dir" },
+              { name: "tests", path: "tests", type: "dir" },
+            ]
+          : path === "docs"
+            ? [{ name: "architecture.md", path: "docs/architecture.md", type: "file" }]
+            : [],
+      }),
       listCommits: async (params: unknown) => {
         commitCalls.push(params);
 
@@ -68,6 +81,24 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
 
   assert.equal(result.repos.length, 1);
   assert.equal(result.pullRequests.length, 1);
+  assert.deepEqual(result.repoProfiles[0], {
+    evidencePaths: [
+      "docs/architecture.md",
+      "package.json",
+      "README.md",
+      "tests",
+      "vercel.json",
+    ],
+    hasArchitectureDiagram: true,
+    hasDeploymentConfig: true,
+    hasReadme: true,
+    hasTests: true,
+    repoFullName: "salescode/devrank-os",
+    scanError: null,
+    scannedAt: result.repoProfiles[0]?.scannedAt,
+    scanStatus: "scanned",
+    techStack: ["Node.js", "TypeScript", "Vercel"],
+  });
   assert.deepEqual(result.commits, [{
     authorLogin: "salescode",
     branch: "master",
@@ -107,6 +138,9 @@ test("skips empty repositories when GitHub reports no commits", async () => {
       list: listPulls,
     },
     repos: {
+      getContent: async () => ({
+        data: [],
+      }),
       listCommits: async () => {
         const error = new Error("Git Repository is empty.") as Error & { status: number };
         error.status = 409;

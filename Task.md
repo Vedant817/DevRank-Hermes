@@ -608,18 +608,18 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Repeated bugs/errors.
   - [x] Best prompts.
   - [x] Reusable skills created.
-- [ ] Create Dashboard C: GitHub Portfolio Dashboard.
-- [ ] GitHub Portfolio Dashboard shows:
-  - [ ] Best repos.
-  - [ ] Weak repos.
-  - [ ] Repos needing README.
-  - [ ] Repos needing tests.
-  - [ ] Repos needing deployment.
-  - [ ] Repos needing architecture diagram.
-  - [ ] Tech stack distribution.
-  - [ ] Commit consistency.
-  - [ ] PR quality.
-  - [ ] Project complexity.
+- [x] Create Dashboard C: GitHub Portfolio Dashboard.
+- [x] GitHub Portfolio Dashboard shows:
+  - [x] Best repos.
+  - [x] Weak repos.
+  - [x] Repos needing README.
+  - [x] Repos needing tests.
+  - [x] Repos needing deployment.
+  - [x] Repos needing architecture diagram.
+  - [x] Tech stack distribution.
+  - [x] Commit consistency.
+  - [x] PR quality.
+  - [x] Project complexity.
 - [ ] Create Dashboard D: PR Review Dashboard.
 - [ ] PR Review Dashboard shows:
   - [ ] Summary.

@@ -839,7 +839,7 @@ async function persistGithubBackfillResult(context: CommandContext, result: unkn
     await insertIngestionRun(sql, {
       source: "github_backfill",
       status: "success",
-      summary: `Imported ${written.repos} GitHub repo(s), ${written.pullRequests} pull request(s), and ${written.commits} commit(s).`,
+      summary: `Imported ${written.repos} GitHub repo(s), ${written.pullRequests} pull request(s), ${written.commits} commit(s), and ${written.repoProfiles} repo profile(s).`,
     });
 
     return {
@@ -1075,7 +1075,8 @@ function isGithubBackfillLike(value: unknown): value is Parameters<typeof upsert
   const record = value as Record<string, unknown>;
   return Array.isArray(record.repos) &&
     Array.isArray(record.pullRequests) &&
-    (record.commits === undefined || Array.isArray(record.commits));
+    (record.commits === undefined || Array.isArray(record.commits)) &&
+    (record.repoProfiles === undefined || Array.isArray(record.repoProfiles));
 }
 
 function isLinearBackfillLike(value: unknown): value is Parameters<typeof upsertLinearBackfill>[1] {

@@ -105,6 +105,24 @@ create table if not exists github_commits (
 create index if not exists github_commits_repo_committed_at_idx
   on github_commits (repo_id, committed_at desc);
 
+create table if not exists github_repo_profiles (
+  repo_id bigint primary key references github_repos(id) on delete cascade,
+  scan_status text not null default 'scanned'
+    check (scan_status in ('scanned', 'unavailable')),
+  scan_error text,
+  has_readme boolean,
+  has_tests boolean,
+  has_deployment_config boolean,
+  has_architecture_diagram boolean,
+  tech_stack text[] not null default '{}',
+  evidence_paths text[] not null default '{}',
+  scanned_at timestamptz not null,
+  synced_at timestamptz not null default now()
+);
+
+create index if not exists github_repo_profiles_scan_status_idx
+  on github_repo_profiles (scan_status);
+
 create table if not exists linear_workspaces (
   id text primary key,
   name text not null,

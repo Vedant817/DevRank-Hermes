@@ -35,8 +35,22 @@ export interface PersistableGithubCommit {
   sha: string;
 }
 
+export interface PersistableGithubRepoProfile {
+  evidencePaths: string[];
+  hasArchitectureDiagram: boolean | null;
+  hasDeploymentConfig: boolean | null;
+  hasReadme: boolean | null;
+  hasTests: boolean | null;
+  repoFullName: string;
+  scanError: string | null;
+  scannedAt: string;
+  scanStatus: "scanned" | "unavailable";
+  techStack: string[];
+}
+
 export interface PersistableGithubBackfill {
   commits?: PersistableGithubCommit[];
+  repoProfiles?: PersistableGithubRepoProfile[];
   repos: PersistableGithubRepo[];
   pullRequests: PersistableGithubPullRequest[];
 }
@@ -81,11 +95,13 @@ export async function upsertGithubBackfill(
   input: PersistableGithubBackfill,
 ): Promise<{
   commits: number;
+  repoProfiles: number;
   pullRequests: number;
   repos: number;
 }> {
   const repoIdsByFullName = new Map<string, number>();
   let commits = 0;
+  let repoProfiles = 0;
   let repos = 0;
   let pullRequests = 0;
 
@@ -217,8 +233,59 @@ export async function upsertGithubBackfill(
     commits += 1;
   }
 
+  for (const profile of input.repoProfiles ?? []) {
+    const repoId = repoIdsByFullName.get(profile.repoFullName)
+      ?? await getGithubRepoIdByFullName(sql, profile.repoFullName);
+
+    if (repoId === undefined) {
+      continue;
+    }
+
+    await sql`
+      insert into github_repo_profiles (
+        repo_id,
+        scan_status,
+        scan_error,
+        has_readme,
+        has_tests,
+        has_deployment_config,
+        has_architecture_diagram,
+        tech_stack,
+        evidence_paths,
+        scanned_at,
+        synced_at
+      )
+      values (
+        ${repoId},
+        ${profile.scanStatus},
+        ${profile.scanError},
+        ${profile.hasReadme},
+        ${profile.hasTests},
+        ${profile.hasDeploymentConfig},
+        ${profile.hasArchitectureDiagram},
+        ${profile.techStack},
+        ${profile.evidencePaths},
+        ${profile.scannedAt},
+        now()
+      )
+      on conflict (repo_id) do update set
+        scan_status = excluded.scan_status,
+        scan_error = excluded.scan_error,
+        has_readme = excluded.has_readme,
+        has_tests = excluded.has_tests,
+        has_deployment_config = excluded.has_deployment_config,
+        has_architecture_diagram = excluded.has_architecture_diagram,
+        tech_stack = excluded.tech_stack,
+        evidence_paths = excluded.evidence_paths,
+        scanned_at = excluded.scanned_at,
+        synced_at = now()
+    `;
+    repoProfiles += 1;
+  }
+
   return {
     commits,
+    repoProfiles,
     pullRequests,
     repos,
   };

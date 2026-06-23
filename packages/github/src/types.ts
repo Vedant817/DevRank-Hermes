@@ -32,14 +32,29 @@ export interface GithubCommitSummary {
   sha: string;
 }
 
+export interface GithubRepoProfileSummary {
+  evidencePaths: string[];
+  hasArchitectureDiagram: boolean | null;
+  hasDeploymentConfig: boolean | null;
+  hasReadme: boolean | null;
+  hasTests: boolean | null;
+  repoFullName: string;
+  scanError: string | null;
+  scannedAt: string;
+  scanStatus: "scanned" | "unavailable";
+  techStack: string[];
+}
+
 export interface GithubBackfillResult {
   commits: GithubCommitSummary[];
+  repoProfiles: GithubRepoProfileSummary[];
   repos: GithubRepoSummary[];
   pullRequests: GithubPullRequestSummary[];
 }
 
 export interface GithubBackfillOptions {
   commitLimitPerRepo?: number;
+  profileScan?: boolean;
 }
 
 export interface GithubWebhookResult {
