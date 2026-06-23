@@ -185,6 +185,34 @@ type LinearPlanningIssueRow = {
   url: string | null;
 };
 
+export interface LinearSyncRunStatus {
+  error?: string | null;
+  finishedAt?: string | null;
+  source: string;
+  status: string;
+  summary?: string | null;
+}
+
+export interface LinearSyncHealth {
+  error?: string;
+  finishedAt?: string;
+  message: string;
+  source?: string;
+  status: "failed" | "healthy" | "unknown";
+  summary?: string;
+}
+
+export interface LinearPlanningSignal {
+  issue?: {
+    identifier: string;
+    priority: number | null;
+    state: string | null;
+    title: string;
+    url: string | null;
+  };
+  syncHealth: LinearSyncHealth;
+}
+
 export type ScoringEvidenceScope = "all" | "user" | "repo" | "pull_request";
 
 export type DailyTaskStatus = "pending" | "completed" | "skipped";
@@ -367,6 +395,70 @@ export async function getHighestPriorityLinearPlanningIssue(
   `;
 
   return rows[0];
+}
+
+export async function getLinearPlanningSignal(
+  sql: SqlClient,
+): Promise<LinearPlanningSignal> {
+  const [issue, syncRows] = await Promise.all([
+    getHighestPriorityLinearPlanningIssue(sql),
+    sql<IngestionRunRow[]>`
+      select source, status, summary, error, finished_at
+      from ingestion_runs
+      where source in ('linear_backfill', 'linear_webhook')
+      order by coalesce(finished_at, started_at) desc
+      limit 1
+    `,
+  ]);
+
+  return {
+    ...(issue ? { issue } : {}),
+    syncHealth: buildLinearSyncHealth(syncRows[0] ? ingestionRunStatusFromRow(syncRows[0]) : undefined),
+  };
+}
+
+export function buildLinearSyncHealth(run?: LinearSyncRunStatus): LinearSyncHealth {
+  if (!run) {
+    return {
+      status: "unknown",
+      message: "No Linear sync run has been recorded yet.",
+    };
+  }
+
+  const source = safeOperationalText(run.source);
+  const finishedAt = run.finishedAt ? safeOperationalText(run.finishedAt) : undefined;
+  const summary = run.summary ? safeOperationalText(run.summary) : undefined;
+  const error = run.error ? safeOperationalText(run.error) : undefined;
+
+  if (run.status === "failed") {
+    return {
+      status: "failed",
+      message: "Latest Linear sync failed. Fix Linear backfill or webhook delivery before relying on project planning.",
+      ...(source ? { source } : {}),
+      ...(finishedAt ? { finishedAt } : {}),
+      ...(summary ? { summary } : {}),
+      ...(error ? { error } : {}),
+    };
+  }
+
+  if (run.status === "success") {
+    return {
+      status: "healthy",
+      message: "Latest Linear sync completed successfully.",
+      ...(source ? { source } : {}),
+      ...(finishedAt ? { finishedAt } : {}),
+      ...(summary ? { summary } : {}),
+    };
+  }
+
+  return {
+    status: "unknown",
+    message: "Latest Linear sync status is not recognized.",
+    ...(source ? { source } : {}),
+    ...(finishedAt ? { finishedAt } : {}),
+    ...(summary ? { summary } : {}),
+    ...(error ? { error } : {}),
+  };
 }
 
 export async function insertDailyPlan(
@@ -1174,6 +1266,16 @@ function dailyPlanFromRow(row: DailyPlanRow): DailyPlan & { createdAt: string } 
   };
 }
 
+function ingestionRunStatusFromRow(row: IngestionRunRow): LinearSyncRunStatus {
+  return {
+    source: row.source,
+    status: row.status,
+    ...(row.summary ? { summary: row.summary } : {}),
+    ...(row.error ? { error: row.error } : {}),
+    ...(row.finished_at ? { finishedAt: toIso(row.finished_at) } : {}),
+  };
+}
+
 export function dailyTaskKey(
   planDate: string,
   task: Pick<DailyPlan["tasks"][number], "category" | "title">,
@@ -1223,6 +1325,17 @@ function numberCount(value: string | number | undefined) {
 
 function toIso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function safeOperationalText(value: string): string {
+  return value
+    .replace(/(api[_-]?key|token|secret|password)\s*[:=]\s*["']?[^\s"',;]+/gi, "$1=[REDACTED_SECRET]")
+    .replace(/(?:ghp_|github_pat_)[A-Za-z0-9_]{20,}/g, "[REDACTED_GITHUB_TOKEN]")
+    .replace(/sk-[A-Za-z0-9_-]{16,}/g, "[REDACTED_OPENAI_KEY]")
+    .replace(/postgres(?:ql)?:\/\/[^\s"'`]+/gi, "[REDACTED_DATABASE_URL]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 280);
 }
 
 function vectorLiteral(values: number[]) {

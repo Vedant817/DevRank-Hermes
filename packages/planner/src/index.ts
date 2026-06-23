@@ -11,6 +11,7 @@ interface PlanRule {
 export interface GenerateDailyPlanOptions {
   date?: string;
   includeDailyEssentials?: boolean;
+  linearSyncWarning?: string;
   maxWeakLaneTasks?: number;
   urgentLinearTask?: string;
 }
@@ -236,13 +237,10 @@ export function generateDailyPlan(
   const weakLanes = explainWeakestLanes(snapshot, options.maxWeakLaneTasks);
   const tasks: DailyPlanTask[] = [];
 
-  if (options.urgentLinearTask) {
-    addTask(tasks, {
-      title: options.urgentLinearTask,
-      category: "linear",
-      minutes: 30,
-      evidence: "Linear priority",
-    });
+  const linearTask = linearTaskForOptions(options);
+
+  if (linearTask) {
+    addTask(tasks, linearTask);
   }
 
   if (options.includeDailyEssentials) {
@@ -307,21 +305,57 @@ function normalizeOptions(
   dateOrOptions: string | GenerateDailyPlanOptions,
   urgentLinearTask?: string,
 ): Required<Pick<GenerateDailyPlanOptions, "date" | "includeDailyEssentials" | "maxWeakLaneTasks">> &
-  Pick<GenerateDailyPlanOptions, "urgentLinearTask"> {
+  Pick<GenerateDailyPlanOptions, "linearSyncWarning" | "urgentLinearTask"> {
   if (typeof dateOrOptions === "string") {
     return {
       date: dateOrOptions,
       includeDailyEssentials: true,
+      linearSyncWarning: undefined,
       maxWeakLaneTasks: DEFAULT_MAX_WEAK_LANE_TASKS,
-      urgentLinearTask: urgentLinearTask?.trim() || undefined,
+      urgentLinearTask: normalizePlannerText(urgentLinearTask),
     };
   }
 
   return {
     date: dateOrOptions.date ?? new Date().toISOString().slice(0, 10),
     includeDailyEssentials: dateOrOptions.includeDailyEssentials ?? true,
+    linearSyncWarning: normalizePlannerText(dateOrOptions.linearSyncWarning),
     maxWeakLaneTasks: normalizeTaskLimit(dateOrOptions.maxWeakLaneTasks),
-    urgentLinearTask: dateOrOptions.urgentLinearTask?.trim() || undefined,
+    urgentLinearTask: normalizePlannerText(dateOrOptions.urgentLinearTask),
+  };
+}
+
+function linearTaskForOptions(
+  options: Required<Pick<GenerateDailyPlanOptions, "date" | "includeDailyEssentials" | "maxWeakLaneTasks">> &
+    Pick<GenerateDailyPlanOptions, "linearSyncWarning" | "urgentLinearTask">,
+): DailyPlanTask | undefined {
+  if (!options.linearSyncWarning && !options.urgentLinearTask) {
+    return undefined;
+  }
+
+  if (options.linearSyncWarning && options.urgentLinearTask) {
+    return {
+      title: `${options.linearSyncWarning} Last known priority: ${options.urgentLinearTask}`,
+      category: "linear",
+      minutes: 35,
+      evidence: "Linear sync health; Linear priority",
+    };
+  }
+
+  if (options.linearSyncWarning) {
+    return {
+      title: options.linearSyncWarning,
+      category: "linear",
+      minutes: 20,
+      evidence: "Linear sync health",
+    };
+  }
+
+  return {
+    title: options.urgentLinearTask ?? "",
+    category: "linear",
+    minutes: 30,
+    evidence: "Linear priority",
   };
 }
 
@@ -385,6 +419,16 @@ function normalizeTaskLimit(value: number | undefined): number {
   }
 
   return Math.min(MAX_WEAK_LANE_TASKS, Math.max(1, Math.trunc(value)));
+}
+
+function normalizePlannerText(value: string | undefined): string | undefined {
+  const trimmed = value?.replace(/\s+/g, " ").trim();
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return trimmed.slice(0, 280);
 }
 
 function enrichWeeklyTask(task: WeeklyPlanTask, weakLanes: string[]): WeeklyPlanTask {

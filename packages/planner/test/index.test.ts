@@ -87,6 +87,22 @@ test("ignores blank urgent Linear tasks and clamps weak lane limits", () => {
   assert.deepEqual(plan.tasks.map((task) => task.category), ["testing"]);
 });
 
+test("surfaces Linear sync failures as visible daily plan work", () => {
+  const plan = generateDailyPlan(snapshot, {
+    date: "2026-06-22",
+    includeDailyEssentials: false,
+    linearSyncWarning: "Latest Linear sync failed. Fix Linear backfill before relying on project planning.",
+    maxWeakLaneTasks: 1,
+    urgentLinearTask: "Linear DEV-12: Unblock webhook ingestion.",
+  });
+  const linearTask = plan.tasks.find((task) => task.category === "linear");
+
+  assert.equal(linearTask?.minutes, 35);
+  assert.match(linearTask?.title ?? "", /Latest Linear sync failed/);
+  assert.match(linearTask?.title ?? "", /Linear DEV-12/);
+  assert.equal(linearTask?.evidence, "Linear sync health; Linear priority");
+});
+
 test("formats Slack message with greeting, target time, and SDE switch plan", () => {
   const plan = generateDailyPlan(snapshot, {
     date: "2026-06-22",

@@ -483,7 +483,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Backfill imports projects and issues.
   - [ ] Webhook updates project dashboard after issue changes.
   - [x] Project-wise dashboard can filter by workspace, team, project, status, and priority.
-  - [ ] Linear failures are visible and do not silently break planning.
+  - [x] Linear failures are visible and do not silently break planning.
 
 ## 12. Vercel and Cloud Behavior
 

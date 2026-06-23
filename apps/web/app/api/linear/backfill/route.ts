@@ -13,6 +13,7 @@ import {
   rateLimit,
   readJsonObject,
   requireApiAuth,
+  sanitizeOperationalError,
 } from "../../_lib/route-utils";
 
 export const runtime = "nodejs";
@@ -76,7 +77,28 @@ export async function POST(request: Request) {
       written,
       result,
     });
-  } catch {
+  } catch (error) {
+    await recordLinearBackfillFailure(sanitizeOperationalError(error, "linear_backfill_failed"));
+
     return jsonError(503, "linear_backfill_failed", "Linear backfill failed.");
+  }
+}
+
+async function recordLinearBackfillFailure(error: string): Promise<void> {
+  let sql: ReturnType<typeof createSqlClient> | undefined;
+
+  try {
+    sql = createSqlClient();
+    await insertIngestionRun(sql, {
+      source: "linear_backfill",
+      status: "failed",
+      error,
+    });
+  } catch {
+    // The public response already fails clearly; this best-effort audit cannot run without database access.
+  } finally {
+    if (sql) {
+      await closeSqlClient(sql);
+    }
   }
 }
