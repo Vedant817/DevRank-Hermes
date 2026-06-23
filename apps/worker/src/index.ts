@@ -3,6 +3,7 @@ import "dotenv/config";
 
 import {
   closeSqlClient,
+  createSlackNotificationAttempt,
   createSqlClient,
   getHighestPriorityLinearPlanningIssue,
   getLatestScoreSnapshot,
@@ -10,6 +11,9 @@ import {
   insertScoreSnapshot,
   listEvidenceItems,
   listScoringEvidence,
+  markSlackNotificationDelivered,
+  markSlackNotificationFailed,
+  type SqlClient,
 } from "@repo/db";
 import { generateDailyPlan, formatDailyPlanForSlack } from "@repo/planner";
 import { computeSdeReadinessSnapshot, explainWeakestLanes } from "@repo/scoring";
@@ -51,9 +55,9 @@ export async function runDailyPlanJob(evidence?: EvidenceItem[]) {
     });
     await insertDailyPlan(sql, plan);
     const slackText = formatDailyPlanForSlack(plan);
-    const slack = await sendSlackMessage(slackText);
+    const slackDelivery = await sendAuditedDailyPlanSlack(sql, slackText, "daily_plan_worker", plan.date);
 
-    return { snapshot, plan, linearIssue, slack, slackText, stored: true };
+    return { snapshot, plan, linearIssue, ...slackDelivery, slackText, stored: true };
   } finally {
     await closeSqlClient(sql);
   }
@@ -63,9 +67,65 @@ async function createDailyPlanFromEvidence(evidence: EvidenceItem[], stored: boo
   const snapshot = computeSdeReadinessSnapshot(evidence);
   const plan = generateDailyPlan(snapshot);
   const slackText = formatDailyPlanForSlack(plan);
-  const slack = await sendSlackMessage(slackText);
 
-  return { snapshot, plan, slack, slackText, stored };
+  return { snapshot, plan, slackDelivered: false, slackText, stored };
+}
+
+async function sendAuditedDailyPlanSlack(
+  sql: SqlClient,
+  text: string,
+  source: string,
+  planDate: string,
+) {
+  const notificationId = await createSlackNotificationAttempt(sql, {
+    text,
+    response: {
+      planDate,
+      source,
+      status: "pending",
+    },
+  });
+  let slack: Awaited<ReturnType<typeof sendSlackMessage>>;
+
+  try {
+    slack = await sendSlackMessage(text);
+  } catch (error) {
+    await markSlackNotificationFailed(sql, {
+      id: notificationId,
+      errorCode: "slack_delivery_failed",
+      response: {
+        planDate,
+        source,
+      },
+    }).catch(() => undefined);
+
+    throw error;
+  }
+
+  let slackNotificationRecorded = true;
+
+  try {
+    await markSlackNotificationDelivered(sql, {
+      id: notificationId,
+      deliveredAt: slack.deliveredAt,
+      response: {
+        deliveredAt: slack.deliveredAt,
+        planDate,
+        provider: "slack_webhook",
+        source,
+        status: "delivered",
+      },
+    });
+  } catch {
+    slackNotificationRecorded = false;
+  }
+
+  return {
+    slack,
+    slackDelivered: true,
+    slackNotificationId: notificationId,
+    slackNotificationRecorded,
+  };
 }
 
 export async function runWeeklyReviewJob(input?: {

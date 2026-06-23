@@ -64,6 +64,12 @@ export interface PersistableAiChatSession {
   title: string;
 }
 
+export interface SlackNotificationAttempt {
+  channel?: string;
+  response?: Record<string, unknown>;
+  text: string;
+}
+
 export interface GithubWebhookDelivery {
   action?: string;
   deliveryId: string;
@@ -320,6 +326,66 @@ export async function insertDailyPlan(
     on conflict (plan_date) do update set
       tasks = excluded.tasks,
       target_minutes = excluded.target_minutes
+  `;
+}
+
+export async function createSlackNotificationAttempt(
+  sql: SqlClient,
+  input: SlackNotificationAttempt,
+): Promise<string> {
+  const responseJson = JSON.stringify(input.response ?? { status: "pending" });
+  const rows = await sql<{ id: string }[]>`
+    insert into slack_notifications (channel, text, delivered_at, response)
+    values (${input.channel ?? null}, ${input.text}, null, ${responseJson}::jsonb)
+    returning id::text
+  `;
+  const row = rows[0];
+
+  if (!row) {
+    throw new Error("Slack notification audit insert returned no id.");
+  }
+
+  return row.id;
+}
+
+export async function markSlackNotificationDelivered(
+  sql: SqlClient,
+  input: {
+    deliveredAt: string;
+    id: string;
+    response?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const responseJson = JSON.stringify(input.response ?? { status: "delivered" });
+
+  await sql`
+    update slack_notifications
+    set
+      delivered_at = ${input.deliveredAt},
+      response = ${responseJson}::jsonb
+    where id = ${input.id}
+  `;
+}
+
+export async function markSlackNotificationFailed(
+  sql: SqlClient,
+  input: {
+    errorCode: string;
+    id: string;
+    response?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const responseJson = JSON.stringify({
+    ...(input.response ?? {}),
+    errorCode: input.errorCode,
+    failedAt: new Date().toISOString(),
+    status: "failed",
+  });
+
+  await sql`
+    update slack_notifications
+    set response = ${responseJson}::jsonb
+    where id = ${input.id}
   `;
 }
 

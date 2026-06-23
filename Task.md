@@ -536,7 +536,10 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `linear_projects`.
   - [x] `linear_issues`.
   - [x] Scoped repo and pull-request recompute.
-- [ ] Confirm cloud app can send Slack daily target without the Mac running.
+- [ ] Confirm cloud app can send Slack daily target without the Mac running:
+  - [x] Daily plan cron creates a persisted Slack notification audit row before delivery.
+  - [x] Daily plan cron records delivered or failed Slack delivery results.
+  - [ ] Verify live Vercel/Supabase/Slack credentials in cloud.
 
 ## 13. Slack Daily Target
 
@@ -544,6 +547,9 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Store Slack webhook URL securely.
 - [x] Add Slack package integration.
 - [x] Build `/api/slack/send`.
+- [x] Persist manual Slack send attempts/results in `slack_notifications`.
+- [x] Persist scheduled daily Slack attempts/results in `slack_notifications`.
+- [x] Keep CLI planner dry-runs side-effect-free when `--send-slack` is passed.
 - [x] Generate daily Slack message with:
   - [x] Greeting.
   - [x] Today's SDE Switch Plan.

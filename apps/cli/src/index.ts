@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import {
   checkVectorSupport,
   closeSqlClient,
+  createSlackNotificationAttempt,
   createSqlClient,
   getLatestScoreSnapshot,
   insertDailyPlan,
@@ -19,6 +20,9 @@ import {
   upsertEvidenceEmbeddings,
   upsertEvidenceItems,
   upsertLinearBackfill,
+  markSlackNotificationDelivered,
+  markSlackNotificationFailed,
+  type SqlClient,
 } from "@repo/db";
 import { buildReusableSkillArtifacts, writeReusableSkillArtifacts } from "@repo/hermes";
 import { formatDailyPlanForSlack, generateDailyPlan } from "@repo/planner";
@@ -563,21 +567,26 @@ async function handlePlannerDaily(context: CommandContext) {
       configString(context, "urgentLinearTask"),
     );
     const slackText = formatDailyPlanForSlack(plan);
-    let slackDelivered = false;
+    const dryRun = configBoolean(context, "dryRun");
+    const sendSlack = configBoolean(context, "sendSlack");
+    let slackDelivery:
+      | Awaited<ReturnType<typeof sendAuditedCliSlack>>
+      | undefined;
 
-    if (!configBoolean(context, "dryRun")) {
+    if (!dryRun) {
       await insertDailyPlan(sql, plan);
     }
 
-    if (configBoolean(context, "sendSlack")) {
-      await sendSlackMessage(slackText);
-      slackDelivered = true;
+    if (sendSlack && !dryRun) {
+      slackDelivery = await sendAuditedCliSlack(sql, slackText, "planner_daily_cli", plan.date);
     }
 
     return {
-      dryRun: configBoolean(context, "dryRun"),
+      dryRun,
       plan,
-      slackDelivered,
+      slackDelivered: slackDelivery?.slackDelivered ?? false,
+      ...(sendSlack && dryRun ? { slackSkippedReason: "dry_run" } : {}),
+      ...(slackDelivery ?? {}),
       slackText,
     };
   } finally {
@@ -587,6 +596,63 @@ async function handlePlannerDaily(context: CommandContext) {
 
 async function handleSlackTest(context: CommandContext) {
   return sendSlackMessage(configString(context, "text") ?? "DevRank OS Slack webhook test.");
+}
+
+async function sendAuditedCliSlack(
+  sql: SqlClient,
+  text: string,
+  source: string,
+  planDate: string,
+) {
+  const notificationId = await createSlackNotificationAttempt(sql, {
+    text,
+    response: {
+      planDate,
+      source,
+      status: "pending",
+    },
+  });
+  let slack: Awaited<ReturnType<typeof sendSlackMessage>>;
+
+  try {
+    slack = await sendSlackMessage(text);
+  } catch (error) {
+    await markSlackNotificationFailed(sql, {
+      id: notificationId,
+      errorCode: "slack_delivery_failed",
+      response: {
+        planDate,
+        source,
+      },
+    }).catch(() => undefined);
+
+    throw error;
+  }
+
+  let slackNotificationRecorded = true;
+
+  try {
+    await markSlackNotificationDelivered(sql, {
+      id: notificationId,
+      deliveredAt: slack.deliveredAt,
+      response: {
+        deliveredAt: slack.deliveredAt,
+        planDate,
+        provider: "slack_webhook",
+        source,
+        status: "delivered",
+      },
+    });
+  } catch {
+    slackNotificationRecorded = false;
+  }
+
+  return {
+    slack,
+    slackDelivered: true,
+    slackNotificationId: notificationId,
+    slackNotificationRecorded,
+  };
 }
 
 async function handleMarketBenchmark(context: CommandContext) {

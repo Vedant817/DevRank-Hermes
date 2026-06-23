@@ -1,11 +1,14 @@
 import {
   closeSqlClient,
+  createSlackNotificationAttempt,
   createSqlClient,
   getHighestPriorityLinearPlanningIssue,
   getLatestScoreSnapshot,
   insertDailyPlan,
   insertScoreSnapshot,
   listScoringEvidence,
+  markSlackNotificationDelivered,
+  markSlackNotificationFailed,
 } from "@repo/db";
 import { computeSdeReadinessSnapshot } from "@repo/scoring";
 import { sendSlackMessage } from "@repo/slack";
@@ -81,7 +84,47 @@ export async function GET(request: Request) {
         return slackEnv.response;
       }
 
-      const slack = await sendSlackMessage(slackText);
+      const notificationId = await createSlackNotificationAttempt(sql, {
+        text: slackText,
+        response: {
+          planDate: plan.date,
+          source: "daily_plan_cron",
+          status: "pending",
+        },
+      });
+      let slack: Awaited<ReturnType<typeof sendSlackMessage>>;
+      let notificationRecorded = true;
+
+      try {
+        slack = await sendSlackMessage(slackText);
+      } catch {
+        await markSlackNotificationFailed(sql, {
+          id: notificationId,
+          errorCode: "slack_delivery_failed",
+          response: {
+            planDate: plan.date,
+            source: "daily_plan_cron",
+          },
+        }).catch(() => undefined);
+
+        return jsonError(502, "slack_delivery_failed", "Slack delivery failed.");
+      }
+
+      try {
+        await markSlackNotificationDelivered(sql, {
+          id: notificationId,
+          deliveredAt: slack.deliveredAt,
+          response: {
+            deliveredAt: slack.deliveredAt,
+            planDate: plan.date,
+            provider: "slack_webhook",
+            source: "daily_plan_cron",
+            status: "delivered",
+          },
+        });
+      } catch {
+        notificationRecorded = false;
+      }
 
       return jsonOk({
         plan,
@@ -89,6 +132,8 @@ export async function GET(request: Request) {
         linearIssue,
         slackText,
         slackDelivered: true,
+        slackNotificationId: notificationId,
+        slackNotificationRecorded: notificationRecorded,
         slack,
       });
     } finally {

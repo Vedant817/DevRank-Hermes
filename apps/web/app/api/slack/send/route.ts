@@ -8,6 +8,13 @@ import {
   readJsonObject,
   requireApiAuth,
 } from "../../_lib/route-utils";
+import {
+  closeSqlClient,
+  createSlackNotificationAttempt,
+  createSqlClient,
+  markSlackNotificationDelivered,
+  markSlackNotificationFailed,
+} from "@repo/db";
 import { sendSlackMessage } from "@repo/slack";
 
 export const runtime = "nodejs";
@@ -65,15 +72,62 @@ export async function POST(request: Request) {
     return jsonError(422, "slack_text_contains_secret", "Slack text appears to contain a secret and cannot be sent.");
   }
 
+  let sql: ReturnType<typeof createSqlClient> | undefined;
+  let notificationId: string | undefined;
+  let sendAttempted = false;
+
   try {
+    sql = createSqlClient();
+    notificationId = await createSlackNotificationAttempt(sql, {
+      text,
+      response: {
+        source: "manual_api",
+        status: "pending",
+      },
+    });
+    sendAttempted = true;
     const result = await sendSlackMessage(text);
+    let notificationRecorded = true;
+
+    try {
+      await markSlackNotificationDelivered(sql, {
+        id: notificationId,
+        deliveredAt: result.deliveredAt,
+        response: {
+          deliveredAt: result.deliveredAt,
+          provider: "slack_webhook",
+          source: "manual_api",
+          status: "delivered",
+        },
+      });
+    } catch {
+      notificationRecorded = false;
+    }
 
     return jsonOk({
       delivered: true,
+      notificationId,
+      notificationRecorded,
       result,
       webhookConfigured: webhookUrl.value.length > 0,
     });
   } catch {
-    return jsonError(502, "slack_delivery_failed", "Slack delivery failed.");
+    if (sql && notificationId) {
+      await markSlackNotificationFailed(sql, {
+        id: notificationId,
+        errorCode: "slack_delivery_failed",
+        response: {
+          source: "manual_api",
+        },
+      }).catch(() => undefined);
+    }
+
+    return sendAttempted
+      ? jsonError(502, "slack_delivery_failed", "Slack delivery failed.")
+      : jsonError(503, "slack_audit_unavailable", "Slack delivery audit could not be started.");
+  } finally {
+    if (sql) {
+      await closeSqlClient(sql);
+    }
   }
 }
