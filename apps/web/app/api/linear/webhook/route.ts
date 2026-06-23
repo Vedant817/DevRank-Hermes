@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   getRequiredEnv,
   jsonError,
@@ -81,14 +82,11 @@ export async function POST(request: Request) {
     });
   }
 
-  const deliveryId = request.headers.get("linear-delivery")?.trim();
+  const deliveryId = request.headers.get("linear-delivery")?.trim()
+    || linearReplayKey(payload.value, rawBody.text);
   const eventType = request.headers.get("linear-event")?.trim()
     || (typeof payload.value.type === "string" ? payload.value.type : undefined);
   const action = typeof payload.value.action === "string" ? payload.value.action : undefined;
-
-  if (deliveryId === undefined || deliveryId.length === 0) {
-    return jsonError(400, "linear_delivery_missing", "linear-delivery is required.");
-  }
 
   const ingestion = linearWebhookIngestion(payload.value);
   let sql: ReturnType<typeof createSqlClient> | undefined;
@@ -175,4 +173,33 @@ export async function POST(request: Request) {
       await closeSqlClient(sql);
     }
   }
+}
+
+function linearReplayKey(payload: Record<string, unknown>, rawBody: string) {
+  const webhookId = typeof payload.webhookId === "string" ? payload.webhookId : "unknown-webhook";
+  const eventType = typeof payload.type === "string" ? payload.type : "event";
+  const action = typeof payload.action === "string" ? payload.action : "action";
+  const timestamp = typeof payload.webhookTimestamp === "number"
+    ? String(payload.webhookTimestamp)
+    : "unknown-time";
+  const entityId = linearEntityId(payload.data);
+  const digest = createHash("sha256").update(rawBody).digest("hex").slice(0, 24);
+
+  return [
+    "payload",
+    webhookId,
+    timestamp,
+    eventType,
+    action,
+    entityId ?? digest,
+  ].join(":");
+}
+
+function linearEntityId(value: unknown) {
+  return typeof value === "object"
+    && value !== null
+    && "id" in value
+    && typeof value.id === "string"
+    ? value.id
+    : undefined;
 }

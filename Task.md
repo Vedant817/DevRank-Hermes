@@ -444,7 +444,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] OAuth credentials if building a reusable Linear app.
 - [x] Webhook secret or verification settings according to Linear webhook setup.
 - [x] Add endpoint `/api/linear/webhook`.
-- [x] Block Linear webhook replay with persisted `linear-delivery` IDs and timestamp checks.
+- [x] Block Linear webhook replay with persisted delivery/replay keys and timestamp checks.
 - [x] Add Linear backfill command:
   - [x] `devrank linear:backfill`.
 - [ ] Sync Linear data:
