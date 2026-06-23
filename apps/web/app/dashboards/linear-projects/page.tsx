@@ -2,8 +2,10 @@ import {
   closeSqlClient,
   createSqlClient,
   getLinearProjectDashboard,
+  parseLinearProjectDashboardFilters,
   type LinearDashboardIssue,
   type LinearDashboardProject,
+  type LinearProjectDashboardFilters,
   type LinearProjectDashboard,
 } from "@repo/db";
 import styles from "../../page.module.css";
@@ -14,8 +16,13 @@ type DashboardState =
   | { dashboard: LinearProjectDashboard; status: "ready" }
   | { message: string; status: "unavailable" };
 
-export default async function LinearProjectDashboardPage() {
-  const state = await loadDashboardState();
+type PageProps = {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function LinearProjectDashboardPage({ searchParams }: PageProps) {
+  const filters = parseLinearProjectDashboardFilters((await searchParams) ?? {});
+  const state = await loadDashboardState(filters);
 
   return (
     <div className={styles.page}>
@@ -26,7 +33,7 @@ export default async function LinearProjectDashboardPage() {
         </div>
         <div className={styles.summary}>
           <span>Project-wise execution health</span>
-          <strong>{state.status === "ready" ? "Live Linear graph" : "Setup required"}</strong>
+          <strong>{state.status === "ready" ? `${state.dashboard.totals.issues} issue(s)` : "Setup required"}</strong>
         </div>
       </header>
 
@@ -47,13 +54,13 @@ export default async function LinearProjectDashboardPage() {
   );
 }
 
-async function loadDashboardState(): Promise<DashboardState> {
+async function loadDashboardState(filters: LinearProjectDashboardFilters): Promise<DashboardState> {
   let sql: ReturnType<typeof createSqlClient> | undefined;
 
   try {
     sql = createSqlClient();
     return {
-      dashboard: await getLinearProjectDashboard(sql),
+      dashboard: await getLinearProjectDashboard(sql, { filters }),
       status: "ready",
     };
   } catch {
@@ -71,6 +78,8 @@ async function loadDashboardState(): Promise<DashboardState> {
 function Dashboard({ dashboard }: { dashboard: LinearProjectDashboard }) {
   return (
     <main className={styles.main}>
+      <FilterPanel dashboard={dashboard} />
+
       <section className={styles.panel} aria-labelledby="projects-heading">
         <div className={styles.sectionHeader}>
           <p className={styles.kicker}>Projects by workspace/team</p>
@@ -89,7 +98,7 @@ function Dashboard({ dashboard }: { dashboard: LinearProjectDashboard }) {
             )}
           </div>
         ) : (
-          <p className={styles.emptyState}>No Linear project data has been imported yet.</p>
+          <p className={styles.emptyState}>No Linear project data matches the selected filters.</p>
         )}
       </section>
 
@@ -208,6 +217,83 @@ function Dashboard({ dashboard }: { dashboard: LinearProjectDashboard }) {
         )}
       </section>
     </main>
+  );
+}
+
+function FilterPanel({ dashboard }: { dashboard: LinearProjectDashboard }) {
+  const filters = dashboard.activeFilters;
+
+  return (
+    <section className={styles.panel} aria-labelledby="filters-heading">
+      <div className={styles.sectionHeader}>
+        <p className={styles.kicker}>Filters</p>
+        <h2 id="filters-heading">Linear scope</h2>
+      </div>
+      <form action="/dashboards/linear-projects" className={styles.filterForm} method="get">
+        <div className={styles.filterGrid}>
+          <label className={styles.filterField}>
+            <span>Workspace</span>
+            <select defaultValue={filters.workspaceName ?? ""} name="workspace">
+              <option value="">All workspaces</option>
+              {dashboard.filterOptions.workspaces.map((workspace) => (
+                <option key={workspace} value={workspace}>{workspace}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className={styles.filterField}>
+            <span>Team</span>
+            <select defaultValue={filters.teamName ?? ""} name="team">
+              <option value="">All teams</option>
+              {dashboard.filterOptions.teams.map((team) => (
+                <option key={team} value={team}>{team}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className={styles.filterField}>
+            <span>Project</span>
+            <select defaultValue={filters.projectId ?? ""} name="project">
+              <option value="">All projects</option>
+              {dashboard.filterOptions.projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name} - {project.teamName}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className={styles.filterField}>
+            <span>Status</span>
+            <select defaultValue={filters.status ?? ""} name="status">
+              <option value="">All statuses</option>
+              {dashboard.filterOptions.statuses.map((status) => (
+                <option key={status.value} value={status.value}>
+                  {status.label} ({status.count})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className={styles.filterField}>
+            <span>Priority</span>
+            <select defaultValue={filters.priority?.toString() ?? ""} name="priority">
+              <option value="">All priorities</option>
+              {dashboard.filterOptions.priorities.map((priority) => (
+                <option key={priority.value} value={priority.value}>
+                  {priority.value}: {priority.label} ({priority.count})
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className={styles.filterActions}>
+          <button className={styles.filterButton} type="submit">Apply</button>
+          <a className={styles.filterReset} href="/dashboards/linear-projects">Reset</a>
+        </div>
+      </form>
+    </section>
   );
 }
 

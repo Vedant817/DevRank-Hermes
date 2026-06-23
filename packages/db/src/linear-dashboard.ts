@@ -5,9 +5,40 @@ const MAX_SIGNAL_ROWS = 20;
 
 export type LinearIssueStatusCategory = "blocked" | "canceled" | "done" | "open";
 
+export interface LinearProjectDashboardFilters {
+  priority?: number;
+  projectId?: string;
+  status?: LinearIssueStatusCategory;
+  teamName?: string;
+  workspaceName?: string;
+}
+
+export interface LinearProjectDashboardFilterOptions {
+  priorities: Array<{
+    count: number;
+    label: string;
+    value: number;
+  }>;
+  projects: Array<{
+    id: string;
+    name: string;
+    teamName: string;
+    workspaceName: string;
+  }>;
+  statuses: Array<{
+    count: number;
+    label: string;
+    value: LinearIssueStatusCategory;
+  }>;
+  teams: string[];
+  workspaces: string[];
+}
+
 export interface LinearProjectDashboard {
+  activeFilters: LinearProjectDashboardFilters;
   blockedIssues: LinearDashboardIssue[];
   cycleProgress: LinearProjectProgress[];
+  filterOptions: LinearProjectDashboardFilterOptions;
   highPriorityIssues: LinearDashboardIssue[];
   issuesMissingGithubProof: LinearDashboardIssue[];
   planningCandidates: LinearDashboardIssue[];
@@ -175,7 +206,7 @@ type GithubProofSqlRow = {
 
 export async function getLinearProjectDashboard(
   sql: SqlClient,
-  options: { now?: Date } = {},
+  options: { filters?: LinearProjectDashboardFilters; now?: Date } = {},
 ): Promise<LinearProjectDashboard> {
   const [projectRows, issueRows, proofRows] = await Promise.all([
     sql<LinearProjectSqlRow[]>`
@@ -233,6 +264,7 @@ export async function getLinearProjectDashboard(
   ]);
 
   return buildLinearProjectDashboard({
+    filters: options.filters,
     now: options.now ?? new Date(),
     projects: projectRows.map((row) => ({
       id: row.id,
@@ -270,35 +302,42 @@ export async function getLinearProjectDashboard(
 }
 
 export function buildLinearProjectDashboard(input: {
+  filters?: LinearProjectDashboardFilters;
   githubProof: LinearGithubProofRow[];
   issues: LinearDashboardIssueRow[];
   now: Date;
   projects: LinearDashboardProjectRow[];
 }): LinearProjectDashboard {
+  const activeFilters = normalizeDashboardFilters(input.filters);
   const proofByIdentifier = githubProofByIdentifier(input.githubProof, input.issues);
-  const issues = input.issues.map((row) => toIssue(row, proofByIdentifier.get(row.identifier) ?? [], input.now));
+  const allIssues = input.issues.map((row) => toIssue(row, proofByIdentifier.get(row.identifier) ?? [], input.now));
+  const filteredIssues = allIssues.filter((issue) => issueMatchesFilters(issue, activeFilters));
   const issuesByProject = new Map<string, LinearDashboardIssue[]>();
 
-  for (const issue of issues) {
+  for (const issue of filteredIssues) {
     issuesByProject.set(issue.projectId ?? "unassigned", [
       ...(issuesByProject.get(issue.projectId ?? "unassigned") ?? []),
       issue,
     ]);
   }
 
-  const projects = input.projects.map((project) => toProject(project, issuesByProject.get(project.id) ?? []));
+  const hasIssueScopedFilters = activeFilters.status !== undefined || activeFilters.priority !== undefined;
+  const projectRows = input.projects
+    .filter((project) => projectMatchesFilters(project, activeFilters))
+    .filter((project) => !hasIssueScopedFilters || (issuesByProject.get(project.id)?.length ?? 0) > 0);
+  const projects = projectRows.map((project) => toProject(project, issuesByProject.get(project.id) ?? []));
   const unassignedIssues = issuesByProject.get("unassigned") ?? [];
 
   if (unassignedIssues.length > 0) {
     projects.push(unassignedProject(unassignedIssues));
   }
 
-  const blockedIssues = issues.filter((issue) => issue.statusCategory === "blocked");
-  const doneIssues = issues.filter((issue) => issue.statusCategory === "done");
-  const highPriorityIssues = issues.filter((issue) => issue.isHighPriority);
-  const staleIssues = issues.filter((issue) => issue.isStale);
-  const unownedIssues = issues.filter((issue) => !issue.assignee);
-  const issuesMissingGithubProof = issues
+  const blockedIssues = filteredIssues.filter((issue) => issue.statusCategory === "blocked");
+  const doneIssues = filteredIssues.filter((issue) => issue.statusCategory === "done");
+  const highPriorityIssues = filteredIssues.filter((issue) => issue.isHighPriority);
+  const staleIssues = filteredIssues.filter((issue) => issue.isStale);
+  const unownedIssues = filteredIssues.filter((issue) => !issue.assignee);
+  const issuesMissingGithubProof = filteredIssues
     .filter((issue) => issue.statusCategory !== "canceled" && !issue.hasGithubProof)
     .sort(byPlanningPriority);
   const resumeWorthyCompletedIssues = doneIssues
@@ -306,6 +345,7 @@ export function buildLinearProjectDashboard(input: {
     .map((issue) => ({ issue, proof: issue.githubProof }));
 
   return {
+    activeFilters,
     blockedIssues: blockedIssues.slice(0, MAX_SIGNAL_ROWS),
     cycleProgress: projects.map((project) => ({
       projectId: project.id,
@@ -314,13 +354,14 @@ export function buildLinearProjectDashboard(input: {
       source: "linear_project_progress",
       state: project.progress === null ? "missing" : "tracked",
     })),
+    filterOptions: filterOptions(input.projects, allIssues),
     highPriorityIssues: highPriorityIssues.slice(0, MAX_SIGNAL_ROWS),
     issuesMissingGithubProof: issuesMissingGithubProof.slice(0, MAX_SIGNAL_ROWS),
-    planningCandidates: issues
+    planningCandidates: filteredIssues
       .filter((issue) => issue.statusCategory === "open" || issue.statusCategory === "blocked")
       .sort(byPlanningPriority)
       .slice(0, 10),
-    priorityDistribution: priorityDistribution(issues),
+    priorityDistribution: priorityDistribution(filteredIssues),
     projectGroups: projectGroups(projects),
     projects,
     resumeWorthyCompletedIssues: resumeWorthyCompletedIssues.slice(0, MAX_SIGNAL_ROWS),
@@ -329,16 +370,28 @@ export function buildLinearProjectDashboard(input: {
       blockedIssues: blockedIssues.length,
       doneIssues: doneIssues.length,
       highPriorityIssues: highPriorityIssues.length,
-      issues: issues.length,
+      issues: filteredIssues.length,
       missingGithubProof: issuesMissingGithubProof.length,
-      openIssues: issues.filter((issue) => issue.statusCategory === "open").length,
-      projects: input.projects.length,
+      openIssues: filteredIssues.filter((issue) => issue.statusCategory === "open").length,
+      projects: projects.filter((project) => project.id !== "unassigned").length,
       resumeWorthyCompletedIssues: resumeWorthyCompletedIssues.length,
       staleIssues: staleIssues.length,
       unownedIssues: unownedIssues.length,
     },
     unownedIssues: unownedIssues.slice(0, MAX_SIGNAL_ROWS),
   };
+}
+
+export function parseLinearProjectDashboardFilters(
+  input: Record<string, string | string[] | undefined>,
+): LinearProjectDashboardFilters {
+  return normalizeDashboardFilters({
+    priority: parsePriorityFilter(singleParam(input.priority)),
+    projectId: singleParam(input.project),
+    status: parseStatusFilter(singleParam(input.status)),
+    teamName: singleParam(input.team),
+    workspaceName: singleParam(input.workspace),
+  });
 }
 
 function toIssue(
@@ -473,6 +526,162 @@ function projectGroups(projects: LinearDashboardProject[]) {
       };
     })
     .sort((first, second) => first.workspaceName.localeCompare(second.workspaceName) || first.teamName.localeCompare(second.teamName));
+}
+
+function filterOptions(
+  projectRows: LinearDashboardProjectRow[],
+  issues: LinearDashboardIssue[],
+): LinearProjectDashboardFilterOptions {
+  const projectOptions = projectRows
+    .map((project) => ({
+      id: project.id,
+      name: sanitize(project.name) ?? "Unnamed project",
+      teamName: sanitize(project.teamName) || "Unknown team",
+      workspaceName: sanitize(project.workspaceName) || "Unknown workspace",
+    }))
+    .sort((first, second) =>
+      first.workspaceName.localeCompare(second.workspaceName) ||
+      first.teamName.localeCompare(second.teamName) ||
+      first.name.localeCompare(second.name)
+    );
+
+  return {
+    priorities: priorityDistribution(issues).map((item) => ({
+      count: item.count,
+      label: item.label,
+      value: item.priority,
+    })),
+    projects: projectOptions,
+    statuses: statusDistribution(issues),
+    teams: sortedUnique([
+      ...projectOptions.map((project) => project.teamName),
+      ...issues.map((issue) => issue.teamName),
+    ]),
+    workspaces: sortedUnique([
+      ...projectOptions.map((project) => project.workspaceName),
+      ...issues.map((issue) => issue.workspaceName),
+    ]),
+  };
+}
+
+function issueMatchesFilters(
+  issue: LinearDashboardIssue,
+  filters: LinearProjectDashboardFilters,
+): boolean {
+  if (filters.workspaceName && issue.workspaceName !== filters.workspaceName) {
+    return false;
+  }
+
+  if (filters.teamName && issue.teamName !== filters.teamName) {
+    return false;
+  }
+
+  if (filters.projectId && issue.projectId !== filters.projectId) {
+    return false;
+  }
+
+  if (filters.status && issue.statusCategory !== filters.status) {
+    return false;
+  }
+
+  if (filters.priority && issue.priority !== filters.priority) {
+    return false;
+  }
+
+  return true;
+}
+
+function projectMatchesFilters(
+  project: LinearDashboardProjectRow,
+  filters: LinearProjectDashboardFilters,
+): boolean {
+  if (filters.workspaceName && (sanitize(project.workspaceName) || "Unknown workspace") !== filters.workspaceName) {
+    return false;
+  }
+
+  if (filters.teamName && (sanitize(project.teamName) || "Unknown team") !== filters.teamName) {
+    return false;
+  }
+
+  if (filters.projectId && project.id !== filters.projectId) {
+    return false;
+  }
+
+  return true;
+}
+
+function statusDistribution(issues: LinearDashboardIssue[]): LinearProjectDashboardFilterOptions["statuses"] {
+  const counts = new Map<LinearIssueStatusCategory, number>();
+
+  for (const issue of issues) {
+    counts.set(issue.statusCategory, (counts.get(issue.statusCategory) ?? 0) + 1);
+  }
+
+  return (["open", "blocked", "done", "canceled"] satisfies LinearIssueStatusCategory[])
+    .map((status) => ({
+      count: counts.get(status) ?? 0,
+      label: status,
+      value: status,
+    }))
+    .filter((status) => status.count > 0);
+}
+
+function normalizeDashboardFilters(
+  filters: LinearProjectDashboardFilters | undefined,
+): LinearProjectDashboardFilters {
+  const workspaceName = normalizeFilterText(filters?.workspaceName);
+  const teamName = normalizeFilterText(filters?.teamName);
+  const projectId = normalizeFilterText(filters?.projectId);
+  const status = parseStatusFilter(filters?.status);
+  const priority = parsePriorityFilter(filters?.priority);
+
+  return {
+    ...(priority ? { priority } : {}),
+    ...(projectId ? { projectId } : {}),
+    ...(status ? { status } : {}),
+    ...(teamName ? { teamName } : {}),
+    ...(workspaceName ? { workspaceName } : {}),
+  };
+}
+
+function parseStatusFilter(value: string | undefined): LinearIssueStatusCategory | undefined {
+  switch (value) {
+    case "blocked":
+    case "canceled":
+    case "done":
+    case "open":
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function parsePriorityFilter(value: number | string | undefined): number | undefined {
+  if (typeof value === "number") {
+    return Number.isInteger(value) && value >= 1 && value <= 4 ? value : undefined;
+  }
+
+  if (!value) {
+    return undefined;
+  }
+
+  const priority = Number(value);
+
+  return Number.isInteger(priority) && priority >= 1 && priority <= 4 ? priority : undefined;
+}
+
+function normalizeFilterText(value: string | undefined): string | undefined {
+  const sanitized = sanitize(value?.slice(0, 120) ?? null);
+
+  return sanitized || undefined;
+}
+
+function singleParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function sortedUnique(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))].sort((first, second) => first.localeCompare(second));
 }
 
 function byPlanningPriority(first: LinearDashboardIssue, second: LinearDashboardIssue): number {

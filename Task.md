@@ -482,7 +482,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Verify Linear sync:
   - [ ] Backfill imports projects and issues.
   - [ ] Webhook updates project dashboard after issue changes.
-  - [ ] Project-wise dashboard can filter by workspace, team, project, status, and priority.
+  - [x] Project-wise dashboard can filter by workspace, team, project, status, and priority.
   - [ ] Linear failures are visible and do not silently break planning.
 
 ## 12. Vercel and Cloud Behavior
@@ -956,7 +956,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Push webhook updates repo activity.
 - [ ] Linear backfill imports teams, projects, issues, cycles, and project updates if Linear is enabled.
 - [ ] Linear webhook updates project dashboard if Linear is enabled.
-- [ ] Linear project dashboard filters by workspace, team, project, status, and priority if Linear is enabled.
+- [x] Linear project dashboard filters by workspace, team, project, status, and priority if Linear is enabled.
 - [ ] Score recomputation updates snapshots.
 - [ ] Slack daily message sends manually.
 - [ ] Slack daily message sends through cron inside the documented IST delivery window.
