@@ -90,6 +90,35 @@ create table if not exists github_pull_requests (
   synced_at timestamptz not null default now()
 );
 
+create table if not exists github_pr_files (
+  pull_request_id bigint not null references github_pull_requests(id) on delete cascade,
+  filename text not null,
+  status text not null,
+  additions integer not null default 0,
+  deletions integer not null default 0,
+  changes integer not null default 0,
+  previous_filename text,
+  synced_at timestamptz not null default now(),
+  primary key (pull_request_id, filename)
+);
+
+create index if not exists github_pr_files_pull_request_idx
+  on github_pr_files (pull_request_id);
+
+create table if not exists github_pr_reviews (
+  id bigint primary key,
+  pull_request_id bigint not null references github_pull_requests(id) on delete cascade,
+  reviewer_login text,
+  state text not null,
+  html_url text,
+  submitted_at timestamptz,
+  comment_count integer not null default 0,
+  synced_at timestamptz not null default now()
+);
+
+create index if not exists github_pr_reviews_pull_request_idx
+  on github_pr_reviews (pull_request_id);
+
 create table if not exists github_commits (
   repo_id bigint not null references github_repos(id) on delete cascade,
   sha text not null,

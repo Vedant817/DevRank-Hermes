@@ -151,7 +151,7 @@ export async function POST(request: Request) {
     await insertIngestionRun(sql, {
       source: "github_webhook",
       status: "success",
-      summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${written.pullRequests} pull request(s), ${written.commits} commit(s), ${written.repoProfiles} repo profile(s), and ${writtenEvidence} evidence item(s).`,
+      summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), ${written.repoProfiles} repo profile(s), and ${writtenEvidence} evidence item(s).`,
     });
 
     return jsonOk({

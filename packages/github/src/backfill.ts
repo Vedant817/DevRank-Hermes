@@ -3,13 +3,17 @@ import type {
   GithubBackfillOptions,
   GithubBackfillResult,
   GithubCommitSummary,
+  GithubPullRequestFileSummary,
+  GithubPullRequestReviewSummary,
   GithubRepoProfileSummary,
   GithubPullRequestSummary,
   GithubRepoSummary,
 } from "./types.js";
 
 export const DEFAULT_GITHUB_COMMIT_LIMIT_PER_REPO = 100;
+export const DEFAULT_GITHUB_PR_METADATA_LIMIT_PER_REPO = 25;
 const MAX_GITHUB_COMMIT_LIMIT_PER_REPO = 100;
+const MAX_GITHUB_PR_METADATA_LIMIT_PER_REPO = 100;
 const PROFILE_SCAN_PATHS = [
   "",
   ".github",
@@ -65,6 +69,8 @@ export async function backfillGithubUser(
   options: GithubBackfillOptions = {},
 ): Promise<GithubBackfillResult> {
   const commitLimit = normalizedCommitLimit(options.commitLimitPerRepo);
+  const prMetadataLimit = normalizedPrMetadataLimit(options.prMetadataLimitPerRepo);
+  const shouldScanPrMetadata = options.prMetadataScan ?? true;
   const shouldScanProfiles = options.profileScan ?? true;
   const repos = await octokit.paginate(octokit.repos.listForUser, {
     username,
@@ -74,6 +80,8 @@ export async function backfillGithubUser(
 
   const repoSummaries = repos.map(mapRepo);
   const commits: GithubCommitSummary[] = [];
+  const pullRequestFiles: GithubPullRequestFileSummary[] = [];
+  const pullRequestReviews: GithubPullRequestReviewSummary[] = [];
   const repoProfiles: GithubRepoProfileSummary[] = [];
   const pullRequests: GithubPullRequestSummary[] = [];
 
@@ -85,8 +93,7 @@ export async function backfillGithubUser(
       per_page: 100,
     });
 
-    pullRequests.push(
-      ...pulls.map((pull) => ({
+    const repoPullRequests = pulls.map((pull) => ({
         id: pull.id,
         repoFullName: repo.fullName,
         number: pull.number,
@@ -95,12 +102,21 @@ export async function backfillGithubUser(
         htmlUrl: pull.html_url,
         mergedAt: pull.merged_at,
         updatedAt: pull.updated_at,
-      })),
-    );
+    }));
+
+    pullRequests.push(...repoPullRequests);
 
     if (commitLimit > 0) {
       const repoCommits = await listRecentRepoCommits(octokit, repo, commitLimit);
       commits.push(...repoCommits);
+    }
+
+    if (shouldScanPrMetadata && prMetadataLimit > 0) {
+      for (const pullRequest of recentPullRequests(repoPullRequests, prMetadataLimit)) {
+        const metadata = await listPullRequestMetadata(octokit, repo, pullRequest);
+        pullRequestFiles.push(...metadata.files);
+        pullRequestReviews.push(...metadata.reviews);
+      }
     }
 
     if (shouldScanProfiles) {
@@ -110,10 +126,81 @@ export async function backfillGithubUser(
 
   return {
     commits,
+    pullRequestFiles,
+    pullRequestReviews,
     repoProfiles,
     repos: repoSummaries,
     pullRequests,
   };
+}
+
+async function listPullRequestMetadata(
+  octokit: Octokit,
+  repo: GithubRepoSummary,
+  pullRequest: GithubPullRequestSummary,
+): Promise<{
+  files: GithubPullRequestFileSummary[];
+  reviews: GithubPullRequestReviewSummary[];
+}> {
+  try {
+    const [files, reviews, reviewComments] = await Promise.all([
+      octokit.paginate(octokit.pulls.listFiles, {
+        owner: repo.owner,
+        pull_number: pullRequest.number,
+        repo: repo.name,
+        per_page: 100,
+      }),
+      octokit.paginate(octokit.pulls.listReviews, {
+        owner: repo.owner,
+        pull_number: pullRequest.number,
+        repo: repo.name,
+        per_page: 100,
+      }),
+      octokit.paginate(octokit.pulls.listReviewComments, {
+        owner: repo.owner,
+        pull_number: pullRequest.number,
+        repo: repo.name,
+        per_page: 100,
+      }),
+    ]);
+    const commentCounts = reviewCommentCounts(reviewComments);
+
+    return {
+      files: files.map((file) => ({
+        additions: file.additions,
+        changes: file.changes,
+        deletions: file.deletions,
+        filename: file.filename,
+        previousFilename: file.previous_filename ?? null,
+        pullRequestId: pullRequest.id,
+        pullRequestNumber: pullRequest.number,
+        repoFullName: repo.fullName,
+        status: file.status,
+      })),
+      reviews: reviews.map((review) => ({
+        commentCount: commentCounts.get(review.id) ?? 0,
+        htmlUrl: review.html_url ?? null,
+        id: review.id,
+        pullRequestId: pullRequest.id,
+        pullRequestNumber: pullRequest.number,
+        repoFullName: repo.fullName,
+        reviewerLogin: review.user?.login ?? null,
+        state: review.state,
+        submittedAt: review.submitted_at ?? null,
+      })),
+    };
+  } catch (error) {
+    const status = githubStatus(error);
+
+    if (status === 404 || status === 410) {
+      return {
+        files: [],
+        reviews: [],
+      };
+    }
+
+    throw error;
+  }
 }
 
 export async function profileGithubRepo(
@@ -196,10 +283,49 @@ function normalizedCommitLimit(value: number | undefined) {
   return Math.max(0, Math.min(Math.floor(value), MAX_GITHUB_COMMIT_LIMIT_PER_REPO));
 }
 
+function normalizedPrMetadataLimit(value: number | undefined) {
+  if (value === undefined) {
+    return DEFAULT_GITHUB_PR_METADATA_LIMIT_PER_REPO;
+  }
+
+  if (!Number.isFinite(value)) {
+    return DEFAULT_GITHUB_PR_METADATA_LIMIT_PER_REPO;
+  }
+
+  return Math.max(0, Math.min(Math.floor(value), MAX_GITHUB_PR_METADATA_LIMIT_PER_REPO));
+}
+
+function recentPullRequests(
+  pullRequests: GithubPullRequestSummary[],
+  limit: number,
+) {
+  return [...pullRequests]
+    .sort((first, second) =>
+      timestampValue(second.updatedAt ?? second.mergedAt) - timestampValue(first.updatedAt ?? first.mergedAt),
+    )
+    .slice(0, limit);
+}
+
+function timestampValue(value: string | null) {
+  return value ? new Date(value).getTime() : 0;
+}
+
 function githubStatus(error: unknown) {
   return typeof error === "object" && error !== null && "status" in error
     ? Number((error as { status?: unknown }).status)
     : undefined;
+}
+
+function reviewCommentCounts(comments: Array<{ pull_request_review_id?: number | null }>) {
+  const counts = new Map<number, number>();
+
+  for (const comment of comments) {
+    if (typeof comment.pull_request_review_id === "number") {
+      counts.set(comment.pull_request_review_id, (counts.get(comment.pull_request_review_id) ?? 0) + 1);
+    }
+  }
+
+  return counts;
 }
 
 interface RepoContentEntry {

@@ -25,6 +25,30 @@ export interface PersistableGithubPullRequest {
   updatedAt: string | null;
 }
 
+export interface PersistableGithubPullRequestFile {
+  additions: number;
+  changes: number;
+  deletions: number;
+  filename: string;
+  previousFilename: string | null;
+  pullRequestId: number;
+  pullRequestNumber: number;
+  repoFullName: string;
+  status: string;
+}
+
+export interface PersistableGithubPullRequestReview {
+  commentCount: number;
+  htmlUrl: string | null;
+  id: number;
+  pullRequestId: number;
+  pullRequestNumber: number;
+  repoFullName: string;
+  reviewerLogin: string | null;
+  state: string;
+  submittedAt: string | null;
+}
+
 export interface PersistableGithubCommit {
   authorLogin: string | null;
   branch: string | null;
@@ -50,6 +74,8 @@ export interface PersistableGithubRepoProfile {
 
 export interface PersistableGithubBackfill {
   commits?: PersistableGithubCommit[];
+  pullRequestFiles?: PersistableGithubPullRequestFile[];
+  pullRequestReviews?: PersistableGithubPullRequestReview[];
   repoProfiles?: PersistableGithubRepoProfile[];
   repos: PersistableGithubRepo[];
   pullRequests: PersistableGithubPullRequest[];
@@ -95,12 +121,16 @@ export async function upsertGithubBackfill(
   input: PersistableGithubBackfill,
 ): Promise<{
   commits: number;
+  pullRequestFiles: number;
+  pullRequestReviews: number;
   repoProfiles: number;
   pullRequests: number;
   repos: number;
 }> {
   const repoIdsByFullName = new Map<string, number>();
   let commits = 0;
+  let pullRequestFiles = 0;
+  let pullRequestReviews = 0;
   let repoProfiles = 0;
   let repos = 0;
   let pullRequests = 0;
@@ -191,6 +221,81 @@ export async function upsertGithubBackfill(
         synced_at = now()
     `;
     pullRequests += 1;
+  }
+
+  for (const file of input.pullRequestFiles ?? []) {
+    if (!await githubPullRequestExists(sql, file.pullRequestId)) {
+      continue;
+    }
+
+    await sql`
+      insert into github_pr_files (
+        pull_request_id,
+        filename,
+        status,
+        additions,
+        deletions,
+        changes,
+        previous_filename,
+        synced_at
+      )
+      values (
+        ${file.pullRequestId},
+        ${file.filename},
+        ${file.status},
+        ${file.additions},
+        ${file.deletions},
+        ${file.changes},
+        ${file.previousFilename},
+        now()
+      )
+      on conflict (pull_request_id, filename) do update set
+        status = excluded.status,
+        additions = excluded.additions,
+        deletions = excluded.deletions,
+        changes = excluded.changes,
+        previous_filename = excluded.previous_filename,
+        synced_at = now()
+    `;
+    pullRequestFiles += 1;
+  }
+
+  for (const review of input.pullRequestReviews ?? []) {
+    if (!await githubPullRequestExists(sql, review.pullRequestId)) {
+      continue;
+    }
+
+    await sql`
+      insert into github_pr_reviews (
+        id,
+        pull_request_id,
+        reviewer_login,
+        state,
+        html_url,
+        submitted_at,
+        comment_count,
+        synced_at
+      )
+      values (
+        ${review.id},
+        ${review.pullRequestId},
+        ${review.reviewerLogin},
+        ${review.state},
+        ${review.htmlUrl},
+        ${review.submittedAt},
+        ${review.commentCount},
+        now()
+      )
+      on conflict (id) do update set
+        pull_request_id = excluded.pull_request_id,
+        reviewer_login = excluded.reviewer_login,
+        state = excluded.state,
+        html_url = excluded.html_url,
+        submitted_at = excluded.submitted_at,
+        comment_count = excluded.comment_count,
+        synced_at = now()
+    `;
+    pullRequestReviews += 1;
   }
 
   for (const commit of input.commits ?? []) {
@@ -285,6 +390,8 @@ export async function upsertGithubBackfill(
 
   return {
     commits,
+    pullRequestFiles,
+    pullRequestReviews,
     repoProfiles,
     pullRequests,
     repos,
@@ -495,6 +602,20 @@ async function getGithubRepoIdByFullName(
   const id = rows[0]?.id;
 
   return id === undefined ? undefined : Number(id);
+}
+
+async function githubPullRequestExists(
+  sql: SqlClient,
+  pullRequestId: number,
+): Promise<boolean> {
+  const rows = await sql<Array<{ id: string | number }>>`
+    select id
+    from github_pull_requests
+    where id = ${pullRequestId}
+    limit 1
+  `;
+
+  return rows.length > 0;
 }
 
 function toIso(value: Date | string): string {

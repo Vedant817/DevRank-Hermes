@@ -163,8 +163,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `github_commits`
   - [x] `github_pull_requests`
   - [x] `github_webhook_events`
-  - [ ] `github_pr_files`
-  - [ ] `github_pr_reviews`
+  - [x] `github_pr_files`
+  - [x] `github_pr_reviews`
   - [ ] `github_issues`
   - [ ] `github_workflow_runs`
   - [ ] `github_code_scanning_alerts`
@@ -379,15 +379,15 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Languages.
   - [x] Commits.
   - [x] PRs.
-  - [ ] Changed files.
-  - [ ] Review comments.
-  - [ ] Merge time.
+  - [x] Changed files.
+  - [x] Review comments.
+  - [x] Merge time.
   - [ ] Issue activity.
-  - [ ] README quality.
-  - [ ] Test coverage signals.
+  - [x] README quality.
+  - [x] Test coverage signals.
   - [ ] CI status.
   - [ ] Security/code scanning alerts.
-  - [ ] Project complexity.
+  - [x] Project complexity.
 - [ ] Use GitHub REST APIs for:
   - [x] Listing pull requests.
   - [x] Listing recent default-branch commits.
@@ -407,10 +407,10 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Verify webhook signatures.
 - [x] Block GitHub webhook replay with persisted `x-github-delivery` IDs.
 - [x] Store PR metadata.
-- [ ] Fetch changed files.
+- [x] Fetch changed files.
 - [x] Fetch commits from backfill and push webhooks.
-- [ ] Fetch reviews.
-- [ ] Fetch comments.
+- [x] Fetch reviews.
+- [x] Fetch comments.
 - [ ] Run static analysis summary.
 - [ ] Classify PR type:
   - [ ] Feature.
@@ -419,10 +419,10 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Test.
   - [ ] Docs.
 - [ ] Classify PR complexity.
-- [ ] Classify PR risk.
-- [ ] Classify PR test quality.
-- [ ] Classify PR design quality.
-- [ ] Update PR dashboard.
+- [x] Classify PR risk.
+- [x] Classify PR test quality.
+- [x] Classify PR design quality.
+- [x] Update PR dashboard.
 - [ ] Update skill evidence.
 - [ ] Recompute SDE readiness score.
 - [x] Handle `pull_request.opened`.
@@ -620,19 +620,19 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] Commit consistency.
   - [x] PR quality.
   - [x] Project complexity.
-- [ ] Create Dashboard D: PR Review Dashboard.
-- [ ] PR Review Dashboard shows:
-  - [ ] Summary.
-  - [ ] Files changed.
-  - [ ] Risk level.
-  - [ ] Test quality.
-  - [ ] Review comments.
-  - [ ] Merge status.
-  - [ ] Architecture impact.
-  - [ ] Code smell score.
-  - [ ] Security issues.
-  - [ ] Learning extracted.
-  - [ ] Resume-worthy impact.
+- [x] Create Dashboard D: PR Review Dashboard.
+- [x] PR Review Dashboard shows:
+  - [x] Summary.
+  - [x] Files changed.
+  - [x] Risk level.
+  - [x] Test quality.
+  - [x] Review comments.
+  - [x] Merge status.
+  - [x] Architecture impact.
+  - [x] Code smell score.
+  - [x] Security issues.
+  - [x] Learning extracted.
+  - [x] Resume-worthy impact.
 - [ ] Create Dashboard E: Daily/Weekly Learning Plan Dashboard.
 - [ ] Daily/Weekly Learning Plan Dashboard shows:
   - [ ] Today's DSA questions.
@@ -677,13 +677,13 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] 7% AI Agent/Automation Skills.
   - [x] 5% Communication + Public Proof.
 - [ ] Implement PR quality score formula:
-  - [ ] 25% clarity of change.
-  - [ ] 20% test coverage.
-  - [ ] 15% code structure.
-  - [ ] 15% review response quality.
+  - [x] 25% clarity of change.
+  - [x] 20% test coverage.
+  - [x] 15% code structure.
+  - [x] 15% review response quality.
   - [ ] 10% CI health.
-  - [ ] 10% security/static analysis.
-  - [ ] 5% documentation.
+  - [x] 10% security/static analysis.
+  - [x] 5% documentation.
 - [ ] Implement AI-agent maturity score formula:
   - [ ] 25% ability to break tasks into plans.
   - [ ] 20% prompt quality.

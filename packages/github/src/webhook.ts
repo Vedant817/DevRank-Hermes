@@ -89,6 +89,8 @@ function githubWebhookBackfill(payload: unknown): GithubBackfillResult {
 
   return {
     commits,
+    pullRequestFiles: [],
+    pullRequestReviews: [],
     repoProfiles: [],
     repos: repo ? [repo] : [],
     pullRequests: pullRequest ? [pullRequest] : [],

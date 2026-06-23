@@ -211,7 +211,7 @@ const commands: CommandSpec[] = [
   {
     name: "github:backfill",
     description: "Backfill repository, pull request, and issue history through the GitHub package.",
-    usage: "devrank github:backfill --user <github-user> [--commit-limit <count>] [--dry-run]",
+    usage: "devrank github:backfill --user <github-user> [--commit-limit <count>] [--pr-metadata-limit <count>] [--dry-run]",
     moduleCandidates: ["@repo/github"],
     exportCandidates: ["backfillGithubUser", "backfillGitHub", "backfillGithub", "githubBackfill", "run"],
     envRequirements: [databaseRequirement, githubAuthRequirement],
@@ -220,6 +220,7 @@ const commands: CommandSpec[] = [
       authMode: firstPresentEnv(env, githubAuthRequirement) === "GITHUB_TOKEN" ? "token" : "github-app",
       databaseEnv: firstPresentEnv(env, databaseRequirement),
       dryRun: booleanOption(parsed, "dry-run"),
+      prMetadataLimit: numberOption(parsed, "pr-metadata-limit", 25),
       user: stringOption(parsed, "user"),
     }),
     invoke: invokeGithubBackfill,
@@ -823,6 +824,7 @@ async function invokeGithubBackfill(moduleExports: ModuleExports, context: Comma
     context,
     await backfillGithubUser(client, configString(context, "user"), {
       commitLimitPerRepo: configNumber(context, "commit-limit", 100),
+      prMetadataLimitPerRepo: configNumber(context, "prMetadataLimit", 25),
     }),
   );
 }
@@ -839,7 +841,7 @@ async function persistGithubBackfillResult(context: CommandContext, result: unkn
     await insertIngestionRun(sql, {
       source: "github_backfill",
       status: "success",
-      summary: `Imported ${written.repos} GitHub repo(s), ${written.pullRequests} pull request(s), ${written.commits} commit(s), and ${written.repoProfiles} repo profile(s).`,
+      summary: `Imported ${written.repos} GitHub repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), and ${written.repoProfiles} repo profile(s).`,
     });
 
     return {
@@ -1076,6 +1078,8 @@ function isGithubBackfillLike(value: unknown): value is Parameters<typeof upsert
   return Array.isArray(record.repos) &&
     Array.isArray(record.pullRequests) &&
     (record.commits === undefined || Array.isArray(record.commits)) &&
+    (record.pullRequestFiles === undefined || Array.isArray(record.pullRequestFiles)) &&
+    (record.pullRequestReviews === undefined || Array.isArray(record.pullRequestReviews)) &&
     (record.repoProfiles === undefined || Array.isArray(record.repoProfiles));
 }
 

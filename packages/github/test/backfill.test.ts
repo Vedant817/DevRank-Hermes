@@ -6,9 +6,13 @@ import { backfillGithubUser } from "../src/backfill.js";
 test("backfills repos, pull requests, and bounded default-branch commits", async () => {
   const listForUser = () => undefined;
   const listPulls = () => undefined;
+  const listFiles = () => undefined;
+  const listReviews = () => undefined;
+  const listReviewComments = () => undefined;
   const commitCalls: unknown[] = [];
+  const fileCalls: unknown[] = [];
   const octokit = {
-    paginate: async (method: unknown) => {
+    paginate: async (method: unknown, params: unknown) => {
       if (method === listForUser) {
         return [{
           id: 101,
@@ -36,10 +40,50 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
         }];
       }
 
+      if (method === listFiles) {
+        fileCalls.push(params);
+        return [{
+          additions: 30,
+          changes: 40,
+          deletions: 10,
+          filename: "apps/web/app/page.tsx",
+          previous_filename: undefined,
+          status: "modified",
+        }, {
+          additions: 15,
+          changes: 15,
+          deletions: 0,
+          filename: "apps/web/app/page.test.ts",
+          previous_filename: undefined,
+          status: "added",
+        }];
+      }
+
+      if (method === listReviews) {
+        return [{
+          html_url: "https://github.com/salescode/devrank-os/pull/7#pullrequestreview-303",
+          id: 303,
+          state: "APPROVED",
+          submitted_at: "2026-06-22T04:30:00Z",
+          user: { login: "reviewer" },
+        }];
+      }
+
+      if (method === listReviewComments) {
+        return [{
+          pull_request_review_id: 303,
+        }, {
+          pull_request_review_id: 303,
+        }];
+      }
+
       return [];
     },
     pulls: {
+      listFiles,
       list: listPulls,
+      listReviewComments,
+      listReviews,
     },
     repos: {
       getContent: async ({ path }: { path: string }) => ({
@@ -81,6 +125,38 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
 
   assert.equal(result.repos.length, 1);
   assert.equal(result.pullRequests.length, 1);
+  assert.deepEqual(result.pullRequestFiles, [{
+    additions: 30,
+    changes: 40,
+    deletions: 10,
+    filename: "apps/web/app/page.tsx",
+    previousFilename: null,
+    pullRequestId: 202,
+    pullRequestNumber: 7,
+    repoFullName: "salescode/devrank-os",
+    status: "modified",
+  }, {
+    additions: 15,
+    changes: 15,
+    deletions: 0,
+    filename: "apps/web/app/page.test.ts",
+    previousFilename: null,
+    pullRequestId: 202,
+    pullRequestNumber: 7,
+    repoFullName: "salescode/devrank-os",
+    status: "added",
+  }]);
+  assert.deepEqual(result.pullRequestReviews, [{
+    commentCount: 2,
+    htmlUrl: "https://github.com/salescode/devrank-os/pull/7#pullrequestreview-303",
+    id: 303,
+    pullRequestId: 202,
+    pullRequestNumber: 7,
+    repoFullName: "salescode/devrank-os",
+    reviewerLogin: "reviewer",
+    state: "APPROVED",
+    submittedAt: "2026-06-22T04:30:00Z",
+  }]);
   assert.deepEqual(result.repoProfiles[0], {
     evidencePaths: [
       "docs/architecture.md",
@@ -114,6 +190,12 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
     sha: "master",
     per_page: 25,
   });
+  assert.deepEqual(fileCalls[0], {
+    owner: "salescode",
+    pull_number: 7,
+    repo: "devrank-os",
+    per_page: 100,
+  });
 });
 
 test("skips empty repositories when GitHub reports no commits", async () => {
@@ -136,6 +218,9 @@ test("skips empty repositories when GitHub reports no commits", async () => {
       : [],
     pulls: {
       list: listPulls,
+      listFiles: async () => [],
+      listReviewComments: async () => [],
+      listReviews: async () => [],
     },
     repos: {
       getContent: async () => ({
