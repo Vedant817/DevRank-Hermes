@@ -16,7 +16,9 @@
   },
   "dependencies": {
     "@repo/db": "workspace:*",
-    "@repo/shared": "workspace:*"
+    "@repo/mastra": "workspace:*",
+    "@repo/shared": "workspace:*",
+    "@repo/vector-store": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

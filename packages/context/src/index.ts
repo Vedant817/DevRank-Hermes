@@ -1,4 +1,5 @@
 import { readRuntimeEnv, type RuntimeEnv } from "@repo/shared";
+import { searchQdrantContext, writeQdrantContext } from "./qdrant.js";
 import { searchSupabaseContext, writeSupabaseContext } from "./supabase.js";
 import { searchSupermemoryContext, writeSupermemoryContext } from "./supermemory.js";
 import type { ContextItem, ContextSearchInput, ContextWriteInput } from "./types.js";
@@ -7,6 +8,10 @@ export async function searchContext(
   input: ContextSearchInput,
   env: RuntimeEnv = readRuntimeEnv(),
 ): Promise<ContextItem[]> {
+  if (env.CONTEXT_PROVIDER === "qdrant") {
+    return searchQdrantContext(input, env);
+  }
+
   if (env.CONTEXT_PROVIDER === "supermemory") {
     return searchSupermemoryContext(input, env);
   }
@@ -27,6 +32,10 @@ export async function writeContext(
   input: ContextWriteInput,
   env: RuntimeEnv = readRuntimeEnv(),
 ): Promise<ContextItem> {
+  if (env.CONTEXT_PROVIDER === "qdrant") {
+    return writeQdrantContext(input);
+  }
+
   if (env.CONTEXT_PROVIDER === "supermemory") {
     return writeSupermemoryContext(input, env);
   }
@@ -40,6 +49,7 @@ export async function writeContext(
   return writeSupabaseContext(input);
 }
 
+export * from "./qdrant.js";
 export * from "./supermemory.js";
 export * from "./supabase.js";
 export * from "./types.js";
