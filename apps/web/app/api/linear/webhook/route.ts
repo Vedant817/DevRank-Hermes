@@ -9,9 +9,12 @@ import {
   sanitizeOperationalError,
 } from "../../_lib/route-utils";
 import {
+  claimLinearWebhookDelivery,
   closeSqlClient,
   createSqlClient,
   insertIngestionRun,
+  markLinearWebhookDeliveryFailed,
+  markLinearWebhookDeliveryProcessed,
   upsertEvidenceItems,
   upsertLinearBackfill,
 } from "@repo/db";
@@ -79,16 +82,43 @@ export async function POST(request: Request) {
   }
 
   const deliveryId = request.headers.get("linear-delivery")?.trim();
-  const eventType = typeof payload.value.type === "string" ? payload.value.type : undefined;
+  const eventType = request.headers.get("linear-event")?.trim()
+    || (typeof payload.value.type === "string" ? payload.value.type : undefined);
   const action = typeof payload.value.action === "string" ? payload.value.action : undefined;
+
+  if (deliveryId === undefined || deliveryId.length === 0) {
+    return jsonError(400, "linear_delivery_missing", "linear-delivery is required.");
+  }
+
   const ingestion = linearWebhookIngestion(payload.value);
   let sql: ReturnType<typeof createSqlClient> | undefined;
+  let deliveryClaimed = false;
 
   try {
     sql = createSqlClient();
+    deliveryClaimed = await claimLinearWebhookDelivery(sql, {
+      action,
+      deliveryId,
+      eventType,
+      webhookTimestamp: new Date(webhookTimestamp).toISOString(),
+    });
+
+    if (!deliveryClaimed) {
+      return jsonOk(
+        {
+          duplicate: true,
+          received: true,
+          eventType,
+          action,
+          deliveryId,
+        },
+        202,
+      );
+    }
+
     const written = await upsertLinearBackfill(sql, ingestion.backfill);
     const writtenEvidence = await upsertEvidenceItems(sql, [{
-      id: `linear:webhook:${eventType ?? "unknown"}:${deliveryId ?? String(webhookTimestamp)}`,
+      id: `linear:webhook:${eventType ?? "unknown"}:${deliveryId}`,
       source: "linear",
       title: `Linear ${eventType ?? "event"}${action ? ` ${action}` : ""}`,
       summary: [
@@ -106,6 +136,7 @@ export async function POST(request: Request) {
       },
     }]);
 
+    await markLinearWebhookDeliveryProcessed(sql, deliveryId);
     await insertIngestionRun(sql, {
       source: "linear_webhook",
       status: "success",
@@ -123,6 +154,14 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (sql) {
+      if (deliveryClaimed) {
+        await markLinearWebhookDeliveryFailed(
+          sql,
+          deliveryId,
+          sanitizeOperationalError(error, "linear_webhook_ingestion_failed"),
+        ).catch(() => undefined);
+      }
+
       await insertIngestionRun(sql, {
         source: "linear_webhook",
         status: "failed",

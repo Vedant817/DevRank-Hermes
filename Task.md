@@ -162,6 +162,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `github_repos`
   - [x] `github_commits`
   - [x] `github_pull_requests`
+  - [x] `github_webhook_events`
   - [ ] `github_pr_files`
   - [ ] `github_pr_reviews`
   - [ ] `github_issues`
@@ -173,7 +174,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `linear_issues`
   - [ ] `linear_cycles`
   - [ ] `linear_project_updates`
-  - [ ] `linear_webhook_events`
+  - [x] `linear_webhook_events`
   - [ ] `codex_cloud_imports`
   - [ ] `external_memory_providers`
   - [ ] `external_memory_links`
@@ -404,6 +405,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 - [x] Add endpoint `/api/github/webhook`.
 - [x] Verify webhook signatures.
+- [x] Block GitHub webhook replay with persisted `x-github-delivery` IDs.
 - [x] Store PR metadata.
 - [ ] Fetch changed files.
 - [x] Fetch commits from backfill and push webhooks.
@@ -440,8 +442,9 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Store Linear credentials securely:
   - [x] `LINEAR_API_KEY` for personal/local development if using a personal script.
   - [ ] OAuth credentials if building a reusable Linear app.
-  - [x] Webhook secret or verification settings according to Linear webhook setup.
+- [x] Webhook secret or verification settings according to Linear webhook setup.
 - [x] Add endpoint `/api/linear/webhook`.
+- [x] Block Linear webhook replay with persisted `linear-delivery` IDs and timestamp checks.
 - [x] Add Linear backfill command:
   - [x] `devrank linear:backfill`.
 - [ ] Sync Linear data:

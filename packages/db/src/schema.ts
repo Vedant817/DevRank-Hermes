@@ -239,4 +239,37 @@ export const migrations = [
         on github_commits (repo_id, committed_at desc);
     `,
   },
+  {
+    id: "008_webhook_events",
+    sql: `
+      create table if not exists github_webhook_events (
+        delivery_id text primary key,
+        event text not null,
+        action text,
+        status text not null default 'processing'
+          check (status in ('processing', 'processed', 'failed')),
+        error text,
+        received_at timestamptz not null default now(),
+        processed_at timestamptz
+      );
+
+      create index if not exists github_webhook_events_received_at_idx
+        on github_webhook_events (received_at desc);
+
+      create table if not exists linear_webhook_events (
+        delivery_id text primary key,
+        event_type text,
+        action text,
+        webhook_timestamp timestamptz,
+        status text not null default 'processing'
+          check (status in ('processing', 'processed', 'failed')),
+        error text,
+        received_at timestamptz not null default now(),
+        processed_at timestamptz
+      );
+
+      create index if not exists linear_webhook_events_received_at_idx
+        on linear_webhook_events (received_at desc);
+    `,
+  },
 ];

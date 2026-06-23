@@ -9,9 +9,12 @@ import {
   sanitizeOperationalError,
 } from "../../_lib/route-utils";
 import {
+  claimGithubWebhookDelivery,
   closeSqlClient,
   createSqlClient,
   insertIngestionRun,
+  markGithubWebhookDeliveryFailed,
+  markGithubWebhookDeliveryProcessed,
   upsertEvidenceItems,
   upsertGithubBackfill,
 } from "@repo/db";
@@ -70,7 +73,7 @@ export async function POST(request: Request) {
   const action = typeof payload.value.action === "string" ? payload.value.action : undefined;
 
   if (event === undefined || event.length === 0) {
-    return methodNotAllowed(["GitHub webhook POST with x-github-event"]);
+    return jsonError(400, "github_event_missing", "x-github-event is required.");
   }
 
   if (event === "ping") {
@@ -79,6 +82,10 @@ export async function POST(request: Request) {
       event,
       deliveryId,
     });
+  }
+
+  if (deliveryId === undefined || deliveryId.length === 0) {
+    return jsonError(400, "github_delivery_missing", "x-github-delivery is required.");
   }
 
   if (!isSupportedGithubWebhookEvent(event, action)) {
@@ -94,14 +101,34 @@ export async function POST(request: Request) {
     );
   }
 
-  const ingestion = githubWebhookIngestion(event, deliveryId ?? "unknown", payload.value);
+  const ingestion = githubWebhookIngestion(event, deliveryId, payload.value);
   let sql: ReturnType<typeof createSqlClient> | undefined;
+  let deliveryClaimed = false;
 
   try {
     sql = createSqlClient();
+    deliveryClaimed = await claimGithubWebhookDelivery(sql, {
+      action,
+      deliveryId,
+      event,
+    });
+
+    if (!deliveryClaimed) {
+      return jsonOk(
+        {
+          duplicate: true,
+          received: true,
+          event,
+          deliveryId,
+          action,
+        },
+        202,
+      );
+    }
+
     const written = await upsertGithubBackfill(sql, ingestion.backfill);
     const writtenEvidence = await upsertEvidenceItems(sql, [{
-      id: `github:webhook:${event}:${deliveryId ?? "unknown"}`,
+      id: `github:webhook:${event}:${deliveryId}`,
       source: "github",
       title: `GitHub ${event}${action ? ` ${action}` : ""}`,
       summary: [
@@ -120,6 +147,7 @@ export async function POST(request: Request) {
       },
     }]);
 
+    await markGithubWebhookDeliveryProcessed(sql, deliveryId);
     await insertIngestionRun(sql, {
       source: "github_webhook",
       status: "success",
@@ -137,6 +165,14 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (sql) {
+      if (deliveryClaimed) {
+        await markGithubWebhookDeliveryFailed(
+          sql,
+          deliveryId,
+          sanitizeOperationalError(error, "github_webhook_ingestion_failed"),
+        ).catch(() => undefined);
+      }
+
       await insertIngestionRun(sql, {
         source: "github_webhook",
         status: "failed",

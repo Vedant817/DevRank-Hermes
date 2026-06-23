@@ -64,6 +64,19 @@ export interface PersistableAiChatSession {
   title: string;
 }
 
+export interface GithubWebhookDelivery {
+  action?: string;
+  deliveryId: string;
+  event: string;
+}
+
+export interface LinearWebhookDelivery {
+  action?: string;
+  deliveryId: string;
+  eventType?: string;
+  webhookTimestamp?: string;
+}
+
 type MemoryItemRow = {
   id: string;
   source: string;
@@ -322,6 +335,141 @@ export async function insertIngestionRun(
   await sql`
     insert into ingestion_runs (source, status, summary, error, finished_at)
     values (${input.source}, ${input.status}, ${input.summary ?? null}, ${input.error ?? null}, now())
+  `;
+}
+
+export async function claimGithubWebhookDelivery(
+  sql: SqlClient,
+  input: GithubWebhookDelivery,
+): Promise<boolean> {
+  const rows = await sql<{ delivery_id: string }[]>`
+    insert into github_webhook_events (
+      delivery_id,
+      event,
+      action,
+      status,
+      error,
+      received_at,
+      processed_at
+    )
+    values (
+      ${input.deliveryId},
+      ${input.event},
+      ${input.action ?? null},
+      'processing',
+      null,
+      now(),
+      null
+    )
+    on conflict (delivery_id) do update set
+      event = excluded.event,
+      action = excluded.action,
+      status = 'processing',
+      error = null,
+      received_at = now(),
+      processed_at = null
+    where github_webhook_events.status = 'failed'
+    returning delivery_id
+  `;
+
+  return rows.length > 0;
+}
+
+export async function markGithubWebhookDeliveryProcessed(
+  sql: SqlClient,
+  deliveryId: string,
+): Promise<void> {
+  await sql`
+    update github_webhook_events
+    set
+      status = 'processed',
+      error = null,
+      processed_at = now()
+    where delivery_id = ${deliveryId}
+  `;
+}
+
+export async function markGithubWebhookDeliveryFailed(
+  sql: SqlClient,
+  deliveryId: string,
+  error: string,
+): Promise<void> {
+  await sql`
+    update github_webhook_events
+    set
+      status = 'failed',
+      error = ${error},
+      processed_at = now()
+    where delivery_id = ${deliveryId}
+  `;
+}
+
+export async function claimLinearWebhookDelivery(
+  sql: SqlClient,
+  input: LinearWebhookDelivery,
+): Promise<boolean> {
+  const rows = await sql<{ delivery_id: string }[]>`
+    insert into linear_webhook_events (
+      delivery_id,
+      event_type,
+      action,
+      webhook_timestamp,
+      status,
+      error,
+      received_at,
+      processed_at
+    )
+    values (
+      ${input.deliveryId},
+      ${input.eventType ?? null},
+      ${input.action ?? null},
+      ${input.webhookTimestamp ?? null},
+      'processing',
+      null,
+      now(),
+      null
+    )
+    on conflict (delivery_id) do update set
+      event_type = excluded.event_type,
+      action = excluded.action,
+      webhook_timestamp = excluded.webhook_timestamp,
+      status = 'processing',
+      error = null,
+      received_at = now(),
+      processed_at = null
+    where linear_webhook_events.status = 'failed'
+    returning delivery_id
+  `;
+
+  return rows.length > 0;
+}
+
+export async function markLinearWebhookDeliveryProcessed(
+  sql: SqlClient,
+  deliveryId: string,
+): Promise<void> {
+  await sql`
+    update linear_webhook_events
+    set
+      status = 'processed',
+      error = null,
+      processed_at = now()
+    where delivery_id = ${deliveryId}
+  `;
+}
+
+export async function markLinearWebhookDeliveryFailed(
+  sql: SqlClient,
+  deliveryId: string,
+  error: string,
+): Promise<void> {
+  await sql`
+    update linear_webhook_events
+    set
+      status = 'failed',
+      error = ${error},
+      processed_at = now()
+    where delivery_id = ${deliveryId}
   `;
 }
 
