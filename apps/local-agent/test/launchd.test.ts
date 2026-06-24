@@ -24,6 +24,10 @@ test("renders launchd plist for the local daemon", () => {
   assert.match(plist, /config &lt;private&gt;\.json/);
   assert.match(plist, /<key>RunAtLoad<\/key>\n  <true\/>/);
   assert.match(plist, /<key>KeepAlive<\/key>\n  <true\/>/);
+  assert.match(plist, /<key>DEVRANK_LOCAL_AGENT_LOG_PATH<\/key>/);
+  assert.match(plist, /<string>\/tmp\/devrank\/logs\/local-agent\.log<\/string>/);
+  assert.match(plist, /<key>StandardOutPath<\/key>\n  <string>\/dev\/null<\/string>/);
+  assert.match(plist, /<key>StandardErrorPath<\/key>\n  <string>\/dev\/null<\/string>/);
 });
 
 test("writes launchd plist to disk", async () => {

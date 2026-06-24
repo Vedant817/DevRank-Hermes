@@ -13,6 +13,10 @@ import {
   upsertEvidenceItems,
 } from "@repo/db";
 import { loadLocalAgentConfig, type LocalAgentPrivacyConfig } from "./config.js";
+import {
+  summarizeLocalAgentResult,
+  writeLocalAgentLog,
+} from "./logging.js";
 import { runWeeklySkillExtractionIfDue } from "./skill-extraction.js";
 
 export interface LocalAgentOptions {
@@ -75,8 +79,8 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
       config: config.automation.weeklySkillExtraction,
       persist,
     });
-  }, options.onWatchError ?? ((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
+  }, options.onWatchError ?? (() => {
+    void writeLocalAgentLog({ event: "watch_failed" });
   }));
 
   watcher.on("add", () => {
@@ -193,14 +197,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     watch,
   })
     .then((result) => {
-      console.log(JSON.stringify(result, null, 2));
+      return writeLocalAgentLog(summarizeLocalAgentResult(result));
     })
-    .catch((error: unknown) => {
-      console.error(error instanceof Error ? error.message : String(error));
+    .catch(async () => {
+      await writeLocalAgentLog({ event: "ingestion_failed" });
       process.exitCode = 1;
     });
 }
 
 export * from "./config.js";
 export * from "./launchd.js";
+export * from "./logging.js";
 export * from "./skill-extraction.js";

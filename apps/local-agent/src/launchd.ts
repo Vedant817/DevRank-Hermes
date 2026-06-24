@@ -46,6 +46,7 @@ export function renderLaunchdPlist(options: LaunchdAgentOptions = {}) {
     "--watch",
   ];
   const environmentVariables = {
+    DEVRANK_LOCAL_AGENT_LOG_PATH: join(resolved.logDirectory, "local-agent.log"),
     NODE_ENV: "production",
     ...(resolved.environmentVariables ?? {}),
   };
@@ -61,8 +62,8 @@ export function renderLaunchdPlist(options: LaunchdAgentOptions = {}) {
     keyDict("EnvironmentVariables", environmentVariables),
     keyBoolean("RunAtLoad", resolved.runAtLoad),
     keyBoolean("KeepAlive", resolved.keepAlive),
-    keyString("StandardOutPath", join(resolved.logDirectory, "local-agent.out.log")),
-    keyString("StandardErrorPath", join(resolved.logDirectory, "local-agent.err.log")),
+    keyString("StandardOutPath", "/dev/null"),
+    keyString("StandardErrorPath", "/dev/null"),
     "</dict>",
     "</plist>",
     "",
