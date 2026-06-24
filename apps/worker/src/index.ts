@@ -3,7 +3,7 @@ import "dotenv/config";
 
 import {
   closeSqlClient,
-  createSlackNotificationAttempt,
+  claimSlackNotificationAttempt,
   createSqlClient,
   getHighestPriorityLinearPlanningIssue,
   getLatestScoreSnapshot,
@@ -88,7 +88,8 @@ async function sendAuditedDailyPlanSlack(
   source: string,
   planDate: string,
 ) {
-  const notificationId = await createSlackNotificationAttempt(sql, {
+  const notification = await claimSlackNotificationAttempt(sql, {
+    deliveryKey: `daily-plan:${planDate}`,
     text,
     response: {
       planDate,
@@ -96,6 +97,17 @@ async function sendAuditedDailyPlanSlack(
       status: "pending",
     },
   });
+  const notificationId = notification.id;
+
+  if (!notification.claimed) {
+    return {
+      slackDelivered: notification.status === "delivered",
+      slackDuplicate: true,
+      slackNotificationId: notificationId,
+      slackNotificationRecorded: true,
+    };
+  }
+
   let slack: Awaited<ReturnType<typeof sendSlackMessage>>;
 
   try {

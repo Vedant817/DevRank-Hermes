@@ -81,8 +81,15 @@ export interface PersistableAiChatSession {
 
 export interface SlackNotificationAttempt {
   channel?: string;
+  deliveryKey?: string;
   response?: Record<string, unknown>;
   text: string;
+}
+
+export interface SlackNotificationClaim {
+  claimed: boolean;
+  id: string;
+  status: "delivered" | "failed" | "pending";
 }
 
 export interface GithubWebhookDelivery {
@@ -612,8 +619,24 @@ export async function createSlackNotificationAttempt(
 ): Promise<string> {
   const responseJson = JSON.stringify(input.response ?? { status: "pending" });
   const rows = await sql<{ id: string }[]>`
-    insert into slack_notifications (channel, text, delivered_at, response)
-    values (${input.channel ?? null}, ${input.text}, null, ${responseJson}::jsonb)
+    insert into slack_notifications (
+      delivery_key,
+      channel,
+      text,
+      status,
+      claimed_at,
+      delivered_at,
+      response
+    )
+    values (
+      ${input.deliveryKey ?? null},
+      ${input.channel ?? null},
+      ${input.text},
+      'pending',
+      now(),
+      null,
+      ${responseJson}::jsonb
+    )
     returning id::text
   `;
   const row = rows[0];
@@ -623,6 +646,81 @@ export async function createSlackNotificationAttempt(
   }
 
   return row.id;
+}
+
+export async function claimSlackNotificationAttempt(
+  sql: SqlClient,
+  input: SlackNotificationAttempt & { deliveryKey: string },
+): Promise<SlackNotificationClaim> {
+  const responseJson = JSON.stringify(input.response ?? { status: "pending" });
+  const claimedRows = await sql<{
+    id: string;
+    status: SlackNotificationClaim["status"];
+  }[]>`
+    insert into slack_notifications (
+      delivery_key,
+      channel,
+      text,
+      status,
+      claimed_at,
+      delivered_at,
+      response
+    )
+    values (
+      ${input.deliveryKey},
+      ${input.channel ?? null},
+      ${input.text},
+      'pending',
+      now(),
+      null,
+      ${responseJson}::jsonb
+    )
+    on conflict (delivery_key)
+      where delivery_key is not null
+    do update set
+      channel = excluded.channel,
+      text = excluded.text,
+      status = 'pending',
+      claimed_at = now(),
+      delivered_at = null,
+      response = excluded.response
+    where slack_notifications.status = 'failed'
+      or (
+        slack_notifications.status = 'pending'
+        and slack_notifications.claimed_at < now() - interval '10 minutes'
+      )
+    returning id::text, status
+  `;
+  const claimed = claimedRows[0];
+
+  if (claimed) {
+    return {
+      claimed: true,
+      id: claimed.id,
+      status: claimed.status,
+    };
+  }
+
+  const existingRows = await sql<{
+    id: string;
+    status: SlackNotificationClaim["status"];
+  }[]>`
+    select id::text, status
+    from slack_notifications
+    where delivery_key = ${input.deliveryKey}
+    limit 1
+  `;
+  const existing = existingRows[0];
+
+  if (!existing) {
+    throw new Error("Slack notification claim conflicted but no existing delivery was found.");
+  }
+
+  return {
+    claimed: false,
+    id: existing.id,
+    status: existing.status,
+  };
 }
 
 export async function markSlackNotificationDelivered(
@@ -638,6 +736,7 @@ export async function markSlackNotificationDelivered(
   await sql`
     update slack_notifications
     set
+      status = 'delivered',
       delivered_at = ${input.deliveredAt},
       response = ${responseJson}::jsonb
     where id = ${input.id}
@@ -661,7 +760,9 @@ export async function markSlackNotificationFailed(
 
   await sql`
     update slack_notifications
-    set response = ${responseJson}::jsonb
+    set
+      status = 'failed',
+      response = ${responseJson}::jsonb
     where id = ${input.id}
   `;
 }

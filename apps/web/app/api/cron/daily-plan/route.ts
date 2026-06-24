@@ -1,6 +1,6 @@
 import {
   closeSqlClient,
-  createSlackNotificationAttempt,
+  claimSlackNotificationAttempt,
   createSqlClient,
   getLinearPlanningSignal,
   getLatestScoreSnapshot,
@@ -79,7 +79,8 @@ export async function GET(request: Request) {
         return slackEnv.response;
       }
 
-      const notificationId = await createSlackNotificationAttempt(sql, {
+      const notification = await claimSlackNotificationAttempt(sql, {
+        deliveryKey: `daily-plan:${plan.date}`,
         text: slackText,
         response: {
           planDate: plan.date,
@@ -87,6 +88,23 @@ export async function GET(request: Request) {
           status: "pending",
         },
       });
+      const notificationId = notification.id;
+
+      if (!notification.claimed) {
+        return jsonOk({
+          plan,
+          cron: dailyPlanCronSchedule,
+          linearIssue: linearSignal.issue,
+          linearSyncHealth: linearSignal.syncHealth,
+          scoreSnapshotStatus: currentScore.status,
+          slackText,
+          slackDelivered: notification.status === "delivered",
+          slackDuplicate: true,
+          slackNotificationId: notificationId,
+          slackNotificationRecorded: true,
+        });
+      }
+
       let slack: Awaited<ReturnType<typeof sendSlackMessage>>;
       let notificationRecorded = true;
 

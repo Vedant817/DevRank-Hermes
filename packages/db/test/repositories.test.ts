@@ -5,6 +5,7 @@ import { deleteGithubRepositories } from "../src/github.js";
 import {
   claimGithubWebhookDelivery,
   claimLinearWebhookDelivery,
+  claimSlackNotificationAttempt,
   dailyTaskKey,
   deleteLinearEntities,
   getRecentScoreSnapshots,
@@ -130,6 +131,40 @@ test("GitHub repository deletion removes dependent pull requests before the repo
   assert.ok(calls.indexOf(pullRequestDelete) < calls.indexOf(repositoryDelete));
 });
 
+test("scheduled Slack delivery claims are idempotent and reclaim only failed or abandoned rows", async () => {
+  const claimed = recordingSqlSequence([
+    [{ id: "notification-1", status: "pending" }],
+  ]);
+  const duplicate = recordingSqlSequence([
+    [],
+    [{ id: "notification-1", status: "delivered" }],
+  ]);
+
+  const first = await claimSlackNotificationAttempt(claimed.sql, {
+    deliveryKey: "daily-plan:2026-06-25",
+    text: "Daily plan",
+  });
+  const second = await claimSlackNotificationAttempt(duplicate.sql, {
+    deliveryKey: "daily-plan:2026-06-25",
+    text: "Daily plan",
+  });
+  const claimCall = requiredCall(claimed.calls, "insert into slack_notifications");
+
+  assert.deepEqual(first, {
+    claimed: true,
+    id: "notification-1",
+    status: "pending",
+  });
+  assert.deepEqual(second, {
+    claimed: false,
+    id: "notification-1",
+    status: "delivered",
+  });
+  assert.match(normalizedSql(claimCall), /on conflict \(delivery_key\)/);
+  assert.match(normalizedSql(claimCall), /slack_notifications.status = 'failed'/);
+  assert.match(normalizedSql(claimCall), /claimed_at < now\(\) - interval '10 minutes'/);
+});
+
 test("loads a bounded score history in newest-first order", async () => {
   const { calls, sql } = recordingSql([
     {
@@ -164,6 +199,26 @@ function recordingSql(result: unknown[] = []) {
       values,
     });
 
+    return Promise.resolve(result);
+  }) as unknown as SqlClient;
+  Object.assign(sql, {
+    begin: async <T>(work: (transaction: SqlClient) => Promise<T>) => work(sql),
+  });
+
+  return { calls, sql };
+}
+
+function recordingSqlSequence(results: unknown[][]) {
+  const calls: SqlCall[] = [];
+  let index = 0;
+  const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
+    calls.push({
+      text: strings.join("?"),
+      values,
+    });
+
+    const result = results[index] ?? [];
+    index += 1;
     return Promise.resolve(result);
   }) as unknown as SqlClient;
   Object.assign(sql, {

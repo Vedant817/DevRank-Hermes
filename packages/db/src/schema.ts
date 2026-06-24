@@ -263,12 +263,20 @@ export const migrations = [
 
       create table if not exists slack_notifications (
         id uuid primary key default gen_random_uuid(),
+        delivery_key text,
         channel text,
         text text not null,
+        status text not null default 'pending'
+          check (status in ('pending', 'delivered', 'failed')),
+        claimed_at timestamptz not null default now(),
         delivered_at timestamptz,
         response jsonb,
         created_at timestamptz not null default now()
       );
+
+      create unique index if not exists slack_notifications_delivery_key_unique
+        on slack_notifications (delivery_key)
+        where delivery_key is not null;
 
       create table if not exists ingestion_runs (
         id uuid primary key default gen_random_uuid(),
@@ -493,6 +501,45 @@ export const migrations = [
 
       create index if not exists content_drafts_type_generated_idx
         on content_drafts (draft_type, generated_at desc);
+    `,
+  },
+  {
+    id: "013_slack_delivery_idempotency",
+    sql: `
+      alter table slack_notifications
+        add column if not exists delivery_key text,
+        add column if not exists status text,
+        add column if not exists claimed_at timestamptz;
+
+      update slack_notifications
+      set
+        status = case when delivered_at is null then 'failed' else 'delivered' end,
+        claimed_at = coalesce(claimed_at, created_at, now())
+      where status is null or claimed_at is null;
+
+      alter table slack_notifications
+        alter column status set default 'pending',
+        alter column status set not null,
+        alter column claimed_at set default now(),
+        alter column claimed_at set not null;
+
+      do $$
+      begin
+        if not exists (
+          select 1
+          from pg_constraint
+          where conname = 'slack_notifications_status_check'
+        ) then
+          alter table slack_notifications
+            add constraint slack_notifications_status_check
+            check (status in ('pending', 'delivered', 'failed'));
+        end if;
+      end
+      $$;
+
+      create unique index if not exists slack_notifications_delivery_key_unique
+        on slack_notifications (delivery_key)
+        where delivery_key is not null;
     `,
   },
 ];

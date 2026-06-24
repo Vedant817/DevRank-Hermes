@@ -7,7 +7,7 @@ import { join, resolve } from "node:path";
 import {
   checkVectorSupport,
   closeSqlClient,
-  createSlackNotificationAttempt,
+  claimSlackNotificationAttempt,
   createSqlClient,
   getLatestScoreSnapshot,
   insertDailyPlan,
@@ -613,9 +613,8 @@ async function handlePlannerDaily(context: CommandContext) {
       dryRun,
       plan,
       scoreSnapshotStatus,
-      slackDelivered: slackDelivery?.slackDelivered ?? false,
       ...(sendSlack && dryRun ? { slackSkippedReason: "dry_run" } : {}),
-      ...(slackDelivery ?? {}),
+      ...(slackDelivery ?? { slackDelivered: false }),
       slackText,
     };
   } finally {
@@ -633,7 +632,8 @@ async function sendAuditedCliSlack(
   source: string,
   planDate: string,
 ) {
-  const notificationId = await createSlackNotificationAttempt(sql, {
+  const notification = await claimSlackNotificationAttempt(sql, {
+    deliveryKey: `daily-plan:${planDate}`,
     text,
     response: {
       planDate,
@@ -641,6 +641,17 @@ async function sendAuditedCliSlack(
       status: "pending",
     },
   });
+  const notificationId = notification.id;
+
+  if (!notification.claimed) {
+    return {
+      slackDelivered: notification.status === "delivered",
+      slackDuplicate: true,
+      slackNotificationId: notificationId,
+      slackNotificationRecorded: true,
+    };
+  }
+
   let slack: Awaited<ReturnType<typeof sendSlackMessage>>;
 
   try {
