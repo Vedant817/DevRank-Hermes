@@ -51,14 +51,10 @@ export async function writeContext(
   }
 
   if (env.CONTEXT_PROVIDER === "combined") {
-    try {
-      const supermemory = await providers.writeSupermemoryContext(normalizedInput, env);
+    let supermemory: ContextItem;
 
-      return providers.writeSupabaseContext(withSupermemoryStatus(normalizedInput, {
-        id: supermemory.id,
-        source: supermemory.source,
-        status: "written",
-      }));
+    try {
+      supermemory = await providers.writeSupermemoryContext(normalizedInput, env);
     } catch (error) {
       await providers.writeSupabaseContext(withSupermemoryStatus(normalizedInput, {
         error: publicError(error),
@@ -66,6 +62,12 @@ export async function writeContext(
       }));
       throw error;
     }
+
+    return providers.writeSupabaseContext(withSupermemoryStatus(normalizedInput, {
+      id: supermemory.id,
+      source: supermemory.source,
+      status: "written",
+    }));
   }
 
   return providers.writeSupabaseContext(normalizedInput);

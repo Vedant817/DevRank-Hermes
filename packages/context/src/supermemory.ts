@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   fetchWithPolicy,
   readRuntimeEnv,
@@ -8,6 +9,10 @@ import type { ContextItem, ContextSearchInput, ContextWriteInput } from "./types
 
 const DEFAULT_CONTEXT_LIMIT = 10;
 const MAX_CONTEXT_LIMIT = 25;
+
+export interface SupermemoryRequestOptions {
+  fetch?: typeof fetch;
+}
 
 function baseHeaders(env: RuntimeEnv): HeadersInit {
   const { SUPERMEMORY_API_KEY } = requireEnv(
@@ -68,16 +73,19 @@ function clampLimit(limit: number | undefined) {
 export async function writeSupermemoryContext(
   input: ContextWriteInput,
   env: RuntimeEnv = readRuntimeEnv(),
+  options: SupermemoryRequestOptions = {},
 ): Promise<ContextItem> {
   const response = await fetchWithPolicy("https://api.supermemory.ai/v3/documents", {
     method: "POST",
     headers: baseHeaders(env),
     body: JSON.stringify({
-      title: input.title,
       content: input.content,
-      containerTags: input.containerTags,
-      metadata: input.metadata,
+      customId: supermemoryCustomId(input),
+      ...supermemoryContainer(input.containerTags),
+      metadata: supermemoryMetadata(input),
     }),
+  }, {
+    fetch: options.fetch,
   });
 
   if (!response.ok) {
@@ -93,4 +101,40 @@ export async function writeSupermemoryContext(
     source: "supermemory",
     metadata: input.metadata,
   };
+}
+
+export function supermemoryCustomId(input: ContextWriteInput) {
+  const identity = `${input.source}:${input.sourceId ?? input.title}`;
+
+  return `devrank-${createHash("sha256").update(identity).digest("hex").slice(0, 48)}`;
+}
+
+function supermemoryContainer(containerTags: string[] | undefined) {
+  if (!containerTags || containerTags.length === 0) {
+    return {};
+  }
+
+  return containerTags.length === 1
+    ? { containerTag: containerTags[0] }
+    : { containerTags };
+}
+
+function supermemoryMetadata(input: ContextWriteInput) {
+  const metadata: Record<string, string | number | boolean> = {
+    source: input.source,
+    sourceId: input.sourceId ?? "",
+    title: input.title,
+  };
+
+  for (const [key, value] of Object.entries(input.metadata ?? {})) {
+    if (
+      typeof value === "string"
+      || typeof value === "number"
+      || typeof value === "boolean"
+    ) {
+      metadata[key] = value;
+    }
+  }
+
+  return metadata;
 }

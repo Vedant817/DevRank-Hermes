@@ -1032,7 +1032,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Refresh PR files and reviews from GitHub webhook activity.
 - [x] Make GitHub backfill bounded, resumable, and rate-limit aware.
 - [x] Recursively profile monorepos with bounded Git tree traversal.
-- [ ] Make combined context writes idempotent across Supabase and Supermemory failures.
+- [x] Make combined context writes idempotent across Supabase and Supermemory failures.
 - [ ] Make context retrieval resilient and provider-scoped.
 - [ ] Replace process-local API rate limiting with production-safe distributed enforcement.
 - [ ] Enforce the supported single-user ownership boundary or implement tenant isolation.

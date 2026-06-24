@@ -113,6 +113,54 @@ test("combined context writes record Supermemory failure status before rethrowin
   assert.equal(supabaseInput.metadata?.externalContext?.supermemory?.error, "token=[REDACTED_SECRET] failed");
 });
 
+test("combined context retries reuse the same remote identity after a Supabase failure", async () => {
+  const remoteWrites: Array<{ sourceId?: string }> = [];
+  let supabaseAttempts = 0;
+  const providers = fakeProviders({
+    writeSupabase: async (input) => {
+      supabaseAttempts += 1;
+
+      if (supabaseAttempts === 1) {
+        throw new Error("Supabase unavailable");
+      }
+
+      return {
+        id: "supabase-1",
+        metadata: input.metadata,
+        source: input.source,
+        summary: input.content,
+        title: input.title,
+      };
+    },
+    writeSupermemory: async (input) => {
+      remoteWrites.push({ sourceId: input.sourceId });
+
+      return {
+        id: "supermemory-1",
+        source: "supermemory",
+        summary: input.content,
+        title: input.title,
+      };
+    },
+  });
+  const input = {
+    content: "Built idempotent context retries.",
+    source: "unit-test",
+    title: "Context retry",
+  };
+  const env = {
+    CONTEXT_PROVIDER: "combined",
+    SUPERMEMORY_API_KEY: "test-key",
+  };
+
+  await assert.rejects(writeContext(input, env, providers), /Supabase unavailable/);
+  await writeContext(input, env, providers);
+
+  assert.equal(remoteWrites.length, 2);
+  assert.equal(typeof remoteWrites[0]?.sourceId, "string");
+  assert.equal(remoteWrites[1]?.sourceId, remoteWrites[0]?.sourceId);
+});
+
 function fakeProviders(input: {
   writeSupabase: ContextProviders["writeSupabaseContext"];
   writeSupermemory: ContextProviders["writeSupermemoryContext"];
