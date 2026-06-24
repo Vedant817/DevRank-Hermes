@@ -70,6 +70,12 @@ export interface GithubRepoProfileSummary {
 }
 
 export interface GithubBackfillResult {
+  checkpoint?: {
+    complete: boolean;
+    nextRepoPage: number | null;
+    repoLimit: number;
+    repoPage: number;
+  };
   commits: GithubCommitSummary[];
   pullRequestFiles: GithubPullRequestFileSummary[];
   pullRequestReviews: GithubPullRequestReviewSummary[];
@@ -80,9 +86,14 @@ export interface GithubBackfillResult {
 
 export interface GithubBackfillOptions {
   commitLimitPerRepo?: number;
+  concurrency?: number;
+  minimumRateLimitRemaining?: number;
   prMetadataLimitPerRepo?: number;
   prMetadataScan?: boolean;
   profileScan?: boolean;
+  pullRequestLimitPerRepo?: number;
+  repoLimit?: number;
+  repoPage?: number;
 }
 
 export interface GithubWebhookResult {

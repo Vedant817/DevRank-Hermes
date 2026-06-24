@@ -97,16 +97,16 @@ pnpm devrank ingest:local-ai --codex-sessions-dir ~/.codex/sessions --store-embe
 pnpm devrank ingest:local-ai --codex-sessions-dir ~/.codex/sessions --upload-raw-chats
 pnpm devrank scores:recompute
 pnpm devrank planner:daily
-pnpm devrank github:backfill --user vedantmahajan271 --commit-limit 100
+pnpm devrank github:backfill --user vedantmahajan271 --repo-limit 10 --commit-limit 100
 pnpm devrank linear:backfill
 pnpm devrank slack:test
 pnpm devrank market:benchmark
 ```
 
-GitHub backfill imports repositories, pull requests, and up to 100 recent
-default-branch commits per repository by default. Use `--commit-limit 0` to
-skip commit import for a rate-limited run, or lower the value for very large
-accounts.
+GitHub backfill processes 10 repositories per run, returns a `nextRepoPage`
+checkpoint, checks the GitHub core rate limit before fan-out, and imports up to
+100 pull requests and 100 recent default-branch commits per repository. Resume
+with `--repo-page <nextRepoPage>`. Use `--commit-limit 0` to reduce API usage.
 
 ## Verification
 

@@ -1030,7 +1030,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Add deadlines and bounded retry policies to external HTTP calls.
 - [x] Paginate Linear backfill without silent truncation.
 - [x] Refresh PR files and reviews from GitHub webhook activity.
-- [ ] Make GitHub backfill bounded, resumable, and rate-limit aware.
+- [x] Make GitHub backfill bounded, resumable, and rate-limit aware.
 - [ ] Recursively profile monorepos with bounded Git tree traversal.
 - [ ] Make combined context writes idempotent across Supabase and Supermemory failures.
 - [ ] Make context retrieval resilient and provider-scoped.

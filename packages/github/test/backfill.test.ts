@@ -7,42 +7,15 @@ import {
 } from "../src/backfill.js";
 
 test("backfills repos, pull requests, and bounded default-branch commits", async () => {
-  const listForUser = () => undefined;
-  const listPulls = () => undefined;
   const listFiles = () => undefined;
   const listReviews = () => undefined;
   const listReviewComments = () => undefined;
   const commitCalls: unknown[] = [];
   const fileCalls: unknown[] = [];
+  const pullCalls: unknown[] = [];
+  const repoListCalls: unknown[] = [];
   const octokit = {
     paginate: async (method: unknown, params: unknown) => {
-      if (method === listForUser) {
-        return [{
-          id: 101,
-          owner: { login: "salescode" },
-          name: "devrank-os",
-          full_name: "salescode/devrank-os",
-          private: false,
-          default_branch: "master",
-          html_url: "https://github.com/salescode/devrank-os",
-          language: "TypeScript",
-          pushed_at: "2026-06-22T01:00:00Z",
-          updated_at: "2026-06-22T02:00:00Z",
-        }];
-      }
-
-      if (method === listPulls) {
-        return [{
-          id: 202,
-          number: 7,
-          title: "Persist GitHub commits",
-          state: "open",
-          html_url: "https://github.com/salescode/devrank-os/pull/7",
-          merged_at: null,
-          updated_at: "2026-06-22T03:00:00Z",
-        }];
-      }
-
       if (method === listFiles) {
         fileCalls.push(params);
         return [{
@@ -84,9 +57,35 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
     },
     pulls: {
       listFiles,
-      list: listPulls,
+      list: async (params: unknown) => {
+        pullCalls.push(params);
+
+        return {
+        data: [{
+          id: 202,
+          number: 7,
+          title: "Persist GitHub commits",
+          state: "open",
+          html_url: "https://github.com/salescode/devrank-os/pull/7",
+          merged_at: null,
+          updated_at: "2026-06-22T03:00:00Z",
+        }],
+        };
+      },
       listReviewComments,
       listReviews,
+    },
+    rateLimit: {
+      get: async () => ({
+        data: {
+          resources: {
+            core: {
+              remaining: 4_000,
+              reset: 1_800_000_000,
+            },
+          },
+        },
+      }),
     },
     repos: {
       getContent: async ({ path }: { path: string }) => ({
@@ -118,7 +117,27 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
           }],
         };
       },
-      listForUser,
+      listForUser: async (params: unknown) => {
+        repoListCalls.push(params);
+
+        return {
+        data: [{
+          id: 101,
+          owner: { login: "salescode" },
+          name: "devrank-os",
+          full_name: "salescode/devrank-os",
+          private: false,
+          default_branch: "master",
+          html_url: "https://github.com/salescode/devrank-os",
+          language: "TypeScript",
+          pushed_at: "2026-06-22T01:00:00Z",
+          updated_at: "2026-06-22T02:00:00Z",
+        }],
+        headers: {
+          link: '<https://api.github.com/users/salescode/repos?page=2>; rel="next"',
+        },
+        };
+      },
     },
   } as unknown as Octokit;
 
@@ -127,6 +146,12 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
   });
 
   assert.equal(result.repos.length, 1);
+  assert.deepEqual(result.checkpoint, {
+    complete: false,
+    nextRepoPage: 2,
+    repoLimit: 10,
+    repoPage: 1,
+  });
   assert.equal(result.pullRequests.length, 1);
   assert.deepEqual(result.pullRequestFiles, [{
     additions: 30,
@@ -193,6 +218,19 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
     sha: "master",
     per_page: 25,
   });
+  assert.deepEqual(repoListCalls[0], {
+    direction: "asc",
+    page: 1,
+    per_page: 10,
+    sort: "full_name",
+    username: "salescode",
+  });
+  assert.deepEqual(pullCalls[0], {
+    owner: "salescode",
+    per_page: 100,
+    repo: "devrank-os",
+    state: "all",
+  });
   assert.deepEqual(fileCalls[0], {
     owner: "salescode",
     pull_number: 7,
@@ -202,28 +240,25 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
 });
 
 test("skips empty repositories when GitHub reports no commits", async () => {
-  const listForUser = () => undefined;
-  const listPulls = () => undefined;
   const octokit = {
-    paginate: async (method: unknown) => method === listForUser
-      ? [{
-          id: 101,
-          owner: { login: "salescode" },
-          name: "empty",
-          full_name: "salescode/empty",
-          private: false,
-          default_branch: "main",
-          html_url: "https://github.com/salescode/empty",
-          language: null,
-          pushed_at: null,
-          updated_at: "2026-06-22T02:00:00Z",
-        }]
-      : [],
+    paginate: async () => [],
     pulls: {
-      list: listPulls,
+      list: async () => ({ data: [] }),
       listFiles: async () => [],
       listReviewComments: async () => [],
       listReviews: async () => [],
+    },
+    rateLimit: {
+      get: async () => ({
+        data: {
+          resources: {
+            core: {
+              remaining: 4_000,
+              reset: 1_800_000_000,
+            },
+          },
+        },
+      }),
     },
     repos: {
       getContent: async () => ({
@@ -234,7 +269,21 @@ test("skips empty repositories when GitHub reports no commits", async () => {
         error.status = 409;
         throw error;
       },
-      listForUser,
+      listForUser: async () => ({
+        data: [{
+          id: 101,
+          owner: { login: "salescode" },
+          name: "empty",
+          full_name: "salescode/empty",
+          private: false,
+          default_branch: "main",
+          html_url: "https://github.com/salescode/empty",
+          language: null,
+          pushed_at: null,
+          updated_at: "2026-06-22T02:00:00Z",
+        }],
+        headers: {},
+      }),
     },
   } as unknown as Octokit;
 
@@ -242,6 +291,39 @@ test("skips empty repositories when GitHub reports no commits", async () => {
 
   assert.equal(result.repos.length, 1);
   assert.deepEqual(result.commits, []);
+});
+
+test("fails before fan-out when the GitHub rate limit is below the configured floor", async () => {
+  let repoCalls = 0;
+  const octokit = {
+    rateLimit: {
+      get: async () => ({
+        data: {
+          resources: {
+            core: {
+              remaining: 9,
+              reset: 1_800_000_000,
+            },
+          },
+        },
+      }),
+    },
+    repos: {
+      listForUser: async () => {
+        repoCalls += 1;
+        return { data: [], headers: {} };
+      },
+    },
+  } as unknown as Octokit;
+
+  await assert.rejects(
+    backfillGithubUser(octokit, "salescode", {
+      minimumRateLimitRemaining: 10,
+      repoPage: 3,
+    }),
+    /Retry repo page 3 after/,
+  );
+  assert.equal(repoCalls, 0);
 });
 
 test("webhook metadata refresh does not treat hidden GitHub resources as empty", async () => {

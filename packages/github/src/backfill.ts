@@ -12,8 +12,15 @@ import type {
 
 export const DEFAULT_GITHUB_COMMIT_LIMIT_PER_REPO = 100;
 export const DEFAULT_GITHUB_PR_METADATA_LIMIT_PER_REPO = 25;
+export const DEFAULT_GITHUB_PULL_REQUEST_LIMIT_PER_REPO = 100;
+export const DEFAULT_GITHUB_REPO_LIMIT = 10;
 const MAX_GITHUB_COMMIT_LIMIT_PER_REPO = 100;
+const MAX_GITHUB_CONCURRENCY = 5;
 const MAX_GITHUB_PR_METADATA_LIMIT_PER_REPO = 100;
+const MAX_GITHUB_PULL_REQUEST_LIMIT_PER_REPO = 100;
+const MAX_GITHUB_REPO_LIMIT = 100;
+const DEFAULT_GITHUB_CONCURRENCY = 2;
+const DEFAULT_GITHUB_MINIMUM_RATE_LIMIT_REMAINING = 100;
 const PROFILE_SCAN_PATHS = [
   "",
   ".github",
@@ -69,31 +76,53 @@ export async function backfillGithubUser(
   options: GithubBackfillOptions = {},
 ): Promise<GithubBackfillResult> {
   const commitLimit = normalizedCommitLimit(options.commitLimitPerRepo);
+  const concurrency = normalizedBoundedPositiveInteger(
+    options.concurrency,
+    DEFAULT_GITHUB_CONCURRENCY,
+    MAX_GITHUB_CONCURRENCY,
+  );
+  const minimumRateLimitRemaining = normalizedNonNegativeInteger(
+    options.minimumRateLimitRemaining,
+    DEFAULT_GITHUB_MINIMUM_RATE_LIMIT_REMAINING,
+  );
   const prMetadataLimit = normalizedPrMetadataLimit(options.prMetadataLimitPerRepo);
+  const pullRequestLimit = normalizedBoundedPositiveInteger(
+    options.pullRequestLimitPerRepo,
+    DEFAULT_GITHUB_PULL_REQUEST_LIMIT_PER_REPO,
+    MAX_GITHUB_PULL_REQUEST_LIMIT_PER_REPO,
+  );
+  const repoLimit = normalizedBoundedPositiveInteger(
+    options.repoLimit,
+    DEFAULT_GITHUB_REPO_LIMIT,
+    MAX_GITHUB_REPO_LIMIT,
+  );
+  const repoPage = normalizedBoundedPositiveInteger(options.repoPage, 1, Number.MAX_SAFE_INTEGER);
   const shouldScanPrMetadata = options.prMetadataScan ?? true;
   const shouldScanProfiles = options.profileScan ?? true;
-  const repos = await octokit.paginate(octokit.repos.listForUser, {
+  await assertGithubRateLimit(octokit, minimumRateLimitRemaining, repoPage);
+  const repoResponse = await octokit.repos.listForUser({
+    direction: "asc",
+    page: repoPage,
+    per_page: repoLimit,
     username,
-    per_page: 100,
-    sort: "updated",
+    sort: "full_name",
   });
-
-  const repoSummaries = repos.map(mapRepo);
+  const repoSummaries = repoResponse.data.map(mapRepo);
   const commits: GithubCommitSummary[] = [];
   const pullRequestFiles: GithubPullRequestFileSummary[] = [];
   const pullRequestReviews: GithubPullRequestReviewSummary[] = [];
   const repoProfiles: GithubRepoProfileSummary[] = [];
   const pullRequests: GithubPullRequestSummary[] = [];
 
-  for (const repo of repoSummaries) {
-    const pulls = await octokit.paginate(octokit.pulls.list, {
+  const repoResults = await mapWithConcurrency(repoSummaries, concurrency, async (repo) => {
+    const pulls = await octokit.pulls.list({
       owner: repo.owner,
       repo: repo.name,
       state: "all",
-      per_page: 100,
+      per_page: pullRequestLimit,
     });
 
-    const repoPullRequests = pulls.map((pull) => ({
+    const repoPullRequests = pulls.data.map((pull) => ({
         id: pull.id,
         repoFullName: repo.fullName,
         number: pull.number,
@@ -104,27 +133,44 @@ export async function backfillGithubUser(
         updatedAt: pull.updated_at,
     }));
 
-    pullRequests.push(...repoPullRequests);
+    const repoCommits = commitLimit > 0
+      ? await listRecentRepoCommits(octokit, repo, commitLimit)
+      : [];
+    const metadata = shouldScanPrMetadata && prMetadataLimit > 0
+      ? await mapWithConcurrency(
+          recentPullRequests(repoPullRequests, prMetadataLimit),
+          concurrency,
+          (pullRequest) => fetchGithubPullRequestMetadata(octokit, repo, pullRequest),
+        )
+      : [];
+    const profile = shouldScanProfiles ? await profileGithubRepo(octokit, repo) : undefined;
 
-    if (commitLimit > 0) {
-      const repoCommits = await listRecentRepoCommits(octokit, repo, commitLimit);
-      commits.push(...repoCommits);
-    }
+    return {
+      commits: repoCommits,
+      files: metadata.flatMap((item) => item.files),
+      profile,
+      pullRequests: repoPullRequests,
+      reviews: metadata.flatMap((item) => item.reviews),
+    };
+  });
 
-    if (shouldScanPrMetadata && prMetadataLimit > 0) {
-      for (const pullRequest of recentPullRequests(repoPullRequests, prMetadataLimit)) {
-        const metadata = await fetchGithubPullRequestMetadata(octokit, repo, pullRequest);
-        pullRequestFiles.push(...metadata.files);
-        pullRequestReviews.push(...metadata.reviews);
-      }
-    }
-
-    if (shouldScanProfiles) {
-      repoProfiles.push(await profileGithubRepo(octokit, repo));
-    }
+  for (const result of repoResults) {
+    commits.push(...result.commits);
+    pullRequestFiles.push(...result.files);
+    pullRequestReviews.push(...result.reviews);
+    pullRequests.push(...result.pullRequests);
+    if (result.profile) repoProfiles.push(result.profile);
   }
 
+  const nextRepoPage = nextPageFromLink(repoResponse.headers.link);
+
   return {
+    checkpoint: {
+      complete: nextRepoPage === null,
+      nextRepoPage,
+      repoLimit,
+      repoPage,
+    },
     commits,
     pullRequestFiles,
     pullRequestReviews,
@@ -298,6 +344,26 @@ function normalizedPrMetadataLimit(value: number | undefined) {
   return Math.max(0, Math.min(Math.floor(value), MAX_GITHUB_PR_METADATA_LIMIT_PER_REPO));
 }
 
+function normalizedBoundedPositiveInteger(
+  value: number | undefined,
+  fallback: number,
+  maximum: number,
+) {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(1, Math.min(Math.floor(value ?? fallback), maximum));
+}
+
+function normalizedNonNegativeInteger(value: number | undefined, fallback: number) {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.floor(value ?? fallback));
+}
+
 function recentPullRequests(
   pullRequests: GithubPullRequestSummary[],
   limit: number,
@@ -317,6 +383,65 @@ function githubStatus(error: unknown) {
   return typeof error === "object" && error !== null && "status" in error
     ? Number((error as { status?: unknown }).status)
     : undefined;
+}
+
+async function assertGithubRateLimit(
+  octokit: Octokit,
+  minimumRemaining: number,
+  repoPage: number,
+) {
+  const response = await octokit.rateLimit.get();
+  const core = response.data.resources.core;
+
+  if (core.remaining >= minimumRemaining) {
+    return;
+  }
+
+  const resetAt = new Date(core.reset * 1_000).toISOString();
+  throw new Error(
+    `GitHub API rate limit has ${core.remaining} request(s) remaining; `
+    + `at least ${minimumRemaining} are required. Retry repo page ${repoPage} after ${resetAt}.`,
+  );
+}
+
+function nextPageFromLink(link: string | undefined) {
+  if (!link) {
+    return null;
+  }
+
+  for (const part of link.split(",")) {
+    if (!part.includes('rel="next"')) {
+      continue;
+    }
+
+    const match = part.match(/[?&]page=(\d+)/);
+    const page = match ? Number(match[1]) : NaN;
+
+    return Number.isInteger(page) && page > 0 ? page : null;
+  }
+
+  return null;
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length);
+  let nextIndex = 0;
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+      while (nextIndex < values.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await mapper(values[index] as T, index);
+      }
+    }),
+  );
+
+  return results;
 }
 
 function reviewCommentCounts(comments: Array<{ pull_request_review_id?: number | null }>) {

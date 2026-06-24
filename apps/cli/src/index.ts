@@ -210,7 +210,7 @@ const commands: CommandSpec[] = [
   {
     name: "github:backfill",
     description: "Backfill repository, pull request, and issue history through the GitHub package.",
-    usage: "devrank github:backfill --user <github-user> [--commit-limit <count>] [--pr-metadata-limit <count>] [--dry-run]",
+    usage: "devrank github:backfill --user <github-user> [--repo-page <page>] [--repo-limit <count>] [--concurrency <count>] [--pull-request-limit <count>] [--commit-limit <count>] [--pr-metadata-limit <count>] [--rate-limit-minimum <count>] [--dry-run]",
     moduleCandidates: ["@repo/github"],
     exportCandidates: ["backfillGithubUser", "backfillGitHub", "backfillGithub", "githubBackfill", "run"],
     envRequirements: [databaseRequirement, githubBackfillAuthRequirement],
@@ -389,9 +389,14 @@ export function buildGithubBackfillConfig(parsed: ParsedArgs, env: NodeJS.Proces
     authEnv: firstPresentEnv(env, githubBackfillAuthRequirement),
     authMode: "token",
     commitLimit: numberOption(parsed, "commit-limit", 100),
+    concurrency: numberOption(parsed, "concurrency", 2),
     databaseEnv: firstPresentEnv(env, databaseRequirement),
     dryRun: booleanOption(parsed, "dry-run"),
     prMetadataLimit: numberOption(parsed, "pr-metadata-limit", 25),
+    pullRequestLimit: numberOption(parsed, "pull-request-limit", 100),
+    rateLimitMinimum: numberOption(parsed, "rate-limit-minimum", 100),
+    repoLimit: numberOption(parsed, "repo-limit", 10),
+    repoPage: numberOption(parsed, "repo-page", 1),
     user: stringOption(parsed, "user"),
   };
 }
@@ -840,7 +845,12 @@ export async function invokeGithubBackfill(moduleExports: ModuleExports, context
     context,
     await backfillGithubUser(client, configString(context, "user"), {
       commitLimitPerRepo: configNumber(context, "commitLimit", 100),
+      concurrency: configNumber(context, "concurrency", 2),
+      minimumRateLimitRemaining: configNumber(context, "rateLimitMinimum", 100),
       prMetadataLimitPerRepo: configNumber(context, "prMetadataLimit", 25),
+      pullRequestLimitPerRepo: configNumber(context, "pullRequestLimit", 100),
+      repoLimit: configNumber(context, "repoLimit", 10),
+      repoPage: configNumber(context, "repoPage", 1),
     }),
   );
 }
