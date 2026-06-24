@@ -1031,7 +1031,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Paginate Linear backfill without silent truncation.
 - [x] Refresh PR files and reviews from GitHub webhook activity.
 - [x] Make GitHub backfill bounded, resumable, and rate-limit aware.
-- [ ] Recursively profile monorepos with bounded Git tree traversal.
+- [x] Recursively profile monorepos with bounded Git tree traversal.
 - [ ] Make combined context writes idempotent across Supabase and Supermemory failures.
 - [ ] Make context retrieval resilient and provider-scoped.
 - [ ] Replace process-local API rate limiting with production-safe distributed enforcement.

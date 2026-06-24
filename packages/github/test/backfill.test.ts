@@ -4,6 +4,7 @@ import type { Octokit } from "@octokit/rest";
 import {
   backfillGithubUser,
   fetchGithubPullRequestMetadata,
+  profileGithubRepo,
 } from "../src/backfill.js";
 
 test("backfills repos, pull requests, and bounded default-branch commits", async () => {
@@ -55,6 +56,21 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
 
       return [];
     },
+    git: {
+      getTree: async () => ({
+        data: {
+          tree: [
+            { path: "README.md", type: "blob" },
+            { path: "package.json", type: "blob" },
+            { path: "vercel.json", type: "blob" },
+            { path: "apps/api/src/index.ts", type: "blob" },
+            { path: "apps/api/test/index.test.ts", type: "blob" },
+            { path: "packages/platform/docs/architecture.md", type: "blob" },
+          ],
+          truncated: false,
+        },
+      }),
+    },
     pulls: {
       listFiles,
       list: async (params: unknown) => {
@@ -88,19 +104,6 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
       }),
     },
     repos: {
-      getContent: async ({ path }: { path: string }) => ({
-        data: path === ""
-          ? [
-              { name: "README.md", path: "README.md", type: "file" },
-              { name: "package.json", path: "package.json", type: "file" },
-              { name: "vercel.json", path: "vercel.json", type: "file" },
-              { name: "docs", path: "docs", type: "dir" },
-              { name: "tests", path: "tests", type: "dir" },
-            ]
-          : path === "docs"
-            ? [{ name: "architecture.md", path: "docs/architecture.md", type: "file" }]
-            : [],
-      }),
       listCommits: async (params: unknown) => {
         commitCalls.push(params);
 
@@ -187,10 +190,10 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
   }]);
   assert.deepEqual(result.repoProfiles[0], {
     evidencePaths: [
-      "docs/architecture.md",
+      "apps/api/test/index.test.ts",
       "package.json",
+      "packages/platform/docs/architecture.md",
       "README.md",
-      "tests",
       "vercel.json",
     ],
     hasArchitectureDiagram: true,
@@ -248,6 +251,14 @@ test("skips empty repositories when GitHub reports no commits", async () => {
       listReviewComments: async () => [],
       listReviews: async () => [],
     },
+    git: {
+      getTree: async () => ({
+        data: {
+          tree: [],
+          truncated: false,
+        },
+      }),
+    },
     rateLimit: {
       get: async () => ({
         data: {
@@ -261,9 +272,6 @@ test("skips empty repositories when GitHub reports no commits", async () => {
       }),
     },
     repos: {
-      getContent: async () => ({
-        data: [],
-      }),
       listCommits: async () => {
         const error = new Error("Git Repository is empty.") as Error & { status: number };
         error.status = 409;
@@ -291,6 +299,40 @@ test("skips empty repositories when GitHub reports no commits", async () => {
 
   assert.equal(result.repos.length, 1);
   assert.deepEqual(result.commits, []);
+});
+
+test("marks bounded recursive tree profiles as partial without discarding evidence", async () => {
+  const octokit = {
+    git: {
+      getTree: async () => ({
+        data: {
+          tree: [
+            { path: "packages/api/README.md", type: "blob" },
+            { path: "packages/api/test/service.test.ts", type: "blob" },
+          ],
+          truncated: true,
+        },
+      }),
+    },
+  } as unknown as Octokit;
+
+  const profile = await profileGithubRepo(octokit, {
+    defaultBranch: "main",
+    fullName: "salescode/monorepo",
+    htmlUrl: null,
+    id: 101,
+    language: "TypeScript",
+    name: "monorepo",
+    owner: "salescode",
+    private: false,
+    pushedAt: null,
+    updatedAt: null,
+  });
+
+  assert.equal(profile.scanStatus, "scanned");
+  assert.match(profile.scanError ?? "", /limited to 5000 entries/);
+  assert.equal(profile.hasReadme, true);
+  assert.equal(profile.hasTests, true);
 });
 
 test("fails before fan-out when the GitHub rate limit is below the configured floor", async () => {

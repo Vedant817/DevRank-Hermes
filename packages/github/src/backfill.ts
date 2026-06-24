@@ -21,21 +21,7 @@ const MAX_GITHUB_PULL_REQUEST_LIMIT_PER_REPO = 100;
 const MAX_GITHUB_REPO_LIMIT = 100;
 const DEFAULT_GITHUB_CONCURRENCY = 2;
 const DEFAULT_GITHUB_MINIMUM_RATE_LIMIT_REMAINING = 100;
-const PROFILE_SCAN_PATHS = [
-  "",
-  ".github",
-  ".github/workflows",
-  "app",
-  "apps",
-  "docs",
-  "documentation",
-  "infra",
-  "packages",
-  "src",
-  "spec",
-  "test",
-  "tests",
-];
+const MAX_GITHUB_PROFILE_TREE_ENTRIES = 5_000;
 
 function mapRepo(
   repo: Awaited<ReturnType<Octokit["repos"]["listForUser"]>>["data"][number],
@@ -257,12 +243,23 @@ export async function profileGithubRepo(
   repo: GithubRepoSummary,
 ): Promise<GithubRepoProfileSummary> {
   const scannedAt = new Date().toISOString();
-  const entries: RepoContentEntry[] = [];
+  let paths: string[];
+  let truncated = false;
 
   try {
-    for (const path of PROFILE_SCAN_PATHS) {
-      entries.push(...await listRepoDirectory(octokit, repo, path));
-    }
+    const response = await octokit.git.getTree({
+      owner: repo.owner,
+      recursive: "true",
+      repo: repo.name,
+      tree_sha: repo.defaultBranch ?? "HEAD",
+    });
+    truncated = response.data.truncated === true
+      || response.data.tree.length > MAX_GITHUB_PROFILE_TREE_ENTRIES;
+    paths = uniqueSorted(
+      response.data.tree
+        .slice(0, MAX_GITHUB_PROFILE_TREE_ENTRIES)
+        .map((entry) => entry.path ?? ""),
+    );
   } catch (error) {
     return {
       evidencePaths: [],
@@ -278,8 +275,6 @@ export async function profileGithubRepo(
     };
   }
 
-  const paths = uniqueSorted(entries.map((entry) => entry.path));
-
   return {
     evidencePaths: portfolioEvidencePaths(paths),
     hasArchitectureDiagram: hasArchitectureDiagram(paths),
@@ -287,7 +282,9 @@ export async function profileGithubRepo(
     hasReadme: hasReadme(paths),
     hasTests: hasTests(paths),
     repoFullName: repo.fullName,
-    scanError: null,
+    scanError: truncated
+      ? `GitHub tree scan was limited to ${MAX_GITHUB_PROFILE_TREE_ENTRIES} entries.`
+      : null,
     scannedAt,
     scanStatus: "scanned",
     techStack: normalizedTechStack([
@@ -454,55 +451,6 @@ function reviewCommentCounts(comments: Array<{ pull_request_review_id?: number |
   }
 
   return counts;
-}
-
-interface RepoContentEntry {
-  name: string;
-  path: string;
-  type: string;
-}
-
-async function listRepoDirectory(
-  octokit: Octokit,
-  repo: GithubRepoSummary,
-  path: string,
-): Promise<RepoContentEntry[]> {
-  try {
-    const response = await octokit.repos.getContent({
-      owner: repo.owner,
-      path,
-      repo: repo.name,
-      ...(repo.defaultBranch ? { ref: repo.defaultBranch } : {}),
-    });
-
-    if (!Array.isArray(response.data)) {
-      return [contentEntry(response.data)];
-    }
-
-    return response.data.map(contentEntry);
-  } catch (error) {
-    const status = githubStatus(error);
-
-    if (status === 404 || status === 409) {
-      return [];
-    }
-
-    throw error;
-  }
-}
-
-function contentEntry(value: unknown): RepoContentEntry {
-  const record = value as {
-    name?: unknown;
-    path?: unknown;
-    type?: unknown;
-  };
-
-  return {
-    name: typeof record.name === "string" ? record.name : "",
-    path: typeof record.path === "string" ? record.path : "",
-    type: typeof record.type === "string" ? record.type : "",
-  };
 }
 
 function hasReadme(paths: string[]) {
