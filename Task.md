@@ -1034,7 +1034,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Recursively profile monorepos with bounded Git tree traversal.
 - [x] Make combined context writes idempotent across Supabase and Supermemory failures.
 - [x] Make context retrieval resilient and provider-scoped.
-- [ ] Replace process-local API rate limiting with production-safe distributed enforcement.
+- [x] Replace process-local API rate limiting with production-safe distributed enforcement.
 - [ ] Enforce the supported single-user ownership boundary or implement tenant isolation.
 - [ ] Make readiness scoring monotonic for unrelated evidence and version the rubric.
 - [ ] Generate evidence-adaptive planner tasks instead of fixed templates.

@@ -20,7 +20,7 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const limitError = rateLimit(request, {
+  const limitError = await rateLimit(request, {
     key: "context_search",
     limit: 60,
     windowMs: 60_000,

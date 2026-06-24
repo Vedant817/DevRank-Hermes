@@ -24,7 +24,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const limitError = rateLimit(request, {
+  const limitError = await rateLimit(request, {
     key: "weekly_review_cron",
     limit: 5,
     windowMs: 60_000,
@@ -79,7 +79,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const limitError = rateLimit(request, {
+  const limitError = await rateLimit(request, {
     key: "weekly_review_preview",
     limit: 10,
     windowMs: 60_000,

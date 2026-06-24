@@ -35,7 +35,7 @@ type ScoreSnapshot = Parameters<typeof generateDailyPlan>[0];
 type ScoreBreakdown = ScoreSnapshot["breakdown"][number];
 
 export async function GET(request: Request) {
-  const limitError = rateLimit(request, {
+  const limitError = await rateLimit(request, {
     key: "daily_plan_cron",
     limit: 5,
     windowMs: 60_000,
@@ -160,7 +160,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const limitError = rateLimit(request, {
+  const limitError = await rateLimit(request, {
     key: "daily_plan_preview",
     limit: 20,
     windowMs: 60_000,

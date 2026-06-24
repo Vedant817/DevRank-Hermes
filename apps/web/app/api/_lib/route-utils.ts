@@ -1,4 +1,9 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import {
+  claimApiRateLimit,
+  closeSqlClient,
+  createSqlClient,
+} from "@repo/db";
 import { NextResponse } from "next/server";
 
 type JsonObject = Record<string, unknown>;
@@ -20,20 +25,24 @@ type ApiAuthOptions = {
   scopedEnvName?: string;
 };
 
+export type RateLimitStore = (input: {
+  bucketKey: string;
+  windowMs: number;
+}) => Promise<{
+  count: number;
+  resetAt: string;
+}>;
+
 type RateLimitOptions = {
   key: string;
   limit: number;
+  store?: RateLimitStore;
   windowMs: number;
-};
-
-type RateLimitBucket = {
-  count: number;
-  resetAt: number;
 };
 
 const DEFAULT_JSON_MAX_BYTES = 128 * 1024;
 const DEFAULT_RAW_MAX_BYTES = 512 * 1024;
-const RATE_LIMIT_BUCKETS_SYMBOL = Symbol.for("devrank.rateLimitBuckets");
+const RATE_LIMIT_STORE_SYMBOL = Symbol.for("devrank.rateLimitStore");
 
 export function jsonOk(payload: JsonObject = {}, status = 200) {
   return NextResponse.json({ ok: true, ...payload }, { status });
@@ -397,38 +406,74 @@ export function parseWebhookJson(rawBody: string) {
   return { ok: true as const, value: payload };
 }
 
-export function rateLimit(
+export async function rateLimit(
   request: Request,
   options: RateLimitOptions,
 ) {
-  const now = Date.now();
-  const buckets = getRateLimitBuckets();
   const identity = clientIdentity(request);
-  const key = `${options.key}:${identity}`;
-  const current = buckets.get(key);
-  const bucket =
-    current === undefined || current.resetAt <= now
-      ? { count: 0, resetAt: now + options.windowMs }
-      : current;
+  const store = options.store ?? configuredRateLimitStore();
+  let bucket: Awaited<ReturnType<RateLimitStore>>;
 
-  bucket.count += 1;
-  buckets.set(key, bucket);
-
-  if (buckets.size > 5_000) {
-    pruneExpiredRateLimits(buckets, now);
+  try {
+    bucket = await store({
+      bucketKey: `${options.key}:${identity}`,
+      windowMs: options.windowMs,
+    });
+  } catch {
+    return jsonError(
+      503,
+      "rate_limit_unavailable",
+      "Request enforcement is temporarily unavailable.",
+    );
   }
 
   if (bucket.count <= options.limit) {
     return null;
   }
 
-  const retryAfterSeconds = Math.max(1, Math.ceil((bucket.resetAt - now) / 1_000));
+  const retryAfterSeconds = Math.max(
+    1,
+    Math.ceil((new Date(bucket.resetAt).getTime() - Date.now()) / 1_000),
+  );
   const response = jsonError(429, "rate_limited", "Too many requests. Retry after the current rate limit window.", {
     retryAfterSeconds,
   });
   response.headers.set("Retry-After", String(retryAfterSeconds));
 
   return response;
+}
+
+export function setRateLimitStore(store: RateLimitStore | undefined) {
+  const globalScope = globalThis as typeof globalThis & {
+    [RATE_LIMIT_STORE_SYMBOL]?: RateLimitStore;
+  };
+  const previous = globalScope[RATE_LIMIT_STORE_SYMBOL];
+  globalScope[RATE_LIMIT_STORE_SYMBOL] = store;
+
+  return () => {
+    globalScope[RATE_LIMIT_STORE_SYMBOL] = previous;
+  };
+}
+
+function configuredRateLimitStore() {
+  const globalScope = globalThis as typeof globalThis & {
+    [RATE_LIMIT_STORE_SYMBOL]?: RateLimitStore;
+  };
+
+  return globalScope[RATE_LIMIT_STORE_SYMBOL] ?? distributedRateLimitStore;
+}
+
+async function distributedRateLimitStore(input: {
+  bucketKey: string;
+  windowMs: number;
+}) {
+  const sql = createSqlClient();
+
+  try {
+    return await claimApiRateLimit(sql, input);
+  } finally {
+    await closeSqlClient(sql);
+  }
 }
 
 export function containsLikelySecret(value: string) {
@@ -611,16 +656,6 @@ function getBearerToken(request: Request) {
   return token.trim();
 }
 
-function getRateLimitBuckets() {
-  const globalScope = globalThis as typeof globalThis & {
-    [RATE_LIMIT_BUCKETS_SYMBOL]?: Map<string, RateLimitBucket>;
-  };
-
-  globalScope[RATE_LIMIT_BUCKETS_SYMBOL] ??= new Map<string, RateLimitBucket>();
-
-  return globalScope[RATE_LIMIT_BUCKETS_SYMBOL];
-}
-
 function clientIdentity(request: Request) {
   const authorization = request.headers.get("authorization");
 
@@ -635,27 +670,20 @@ function clientIdentity(request: Request) {
   const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
 
   if (forwardedFor) {
-    return `ip:${forwardedFor}`;
+    return hashedClientIdentity("ip", forwardedFor);
   }
 
   const realIp = request.headers.get("x-real-ip")?.trim();
 
   if (realIp) {
-    return `ip:${realIp}`;
+    return hashedClientIdentity("ip", realIp);
   }
 
   return "anonymous";
 }
 
-function pruneExpiredRateLimits(
-  buckets: Map<string, RateLimitBucket>,
-  now: number,
-) {
-  for (const [key, bucket] of buckets) {
-    if (bucket.resetAt <= now) {
-      buckets.delete(key);
-    }
-  }
+function hashedClientIdentity(type: string, value: string) {
+  return `${type}:${createHash("sha256").update(value).digest("hex").slice(0, 24)}`;
 }
 
 function normalizeHexSignature(

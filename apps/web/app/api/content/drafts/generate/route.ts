@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const limitError = rateLimit(request, {
+  const limitError = await rateLimit(request, {
     key: "content_drafts_generate",
     limit: 10,
     windowMs: 60_000,

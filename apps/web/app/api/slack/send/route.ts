@@ -25,7 +25,7 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const limitError = rateLimit(request, {
+  const limitError = await rateLimit(request, {
     key: "slack_send",
     limit: 20,
     windowMs: 60_000,

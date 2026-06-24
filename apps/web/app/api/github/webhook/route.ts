@@ -37,7 +37,7 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const limitError = rateLimit(request, {
+  const limitError = await rateLimit(request, {
     key: "github_webhook",
     limit: 120,
     windowMs: 60_000,

@@ -52,7 +52,7 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const limitError = rateLimit(request, {
+  const limitError = await rateLimit(request, {
     key: "local_ai_ingest",
     limit: 10,
     windowMs: 60_000,

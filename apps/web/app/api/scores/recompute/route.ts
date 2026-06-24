@@ -38,7 +38,7 @@ export function GET() {
 }
 
 export async function POST(request: Request) {
-  const limitError = rateLimit(request, {
+  const limitError = await rateLimit(request, {
     key: "score_recompute",
     limit: 20,
     windowMs: 60_000,

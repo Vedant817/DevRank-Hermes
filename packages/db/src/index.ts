@@ -7,5 +7,6 @@ export * from "./github-pr-review.js";
 export * from "./learning-plan.js";
 export * from "./linear-dashboard.js";
 export * from "./migrate.js";
+export * from "./rate-limit.js";
 export * from "./repositories.js";
 export * from "./schema.js";

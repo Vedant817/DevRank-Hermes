@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { POST } from "../app/api/context/search/route";
+import { setRateLimitStore } from "../app/api/_lib/route-utils";
 
 test("context search rejects one-character queries as client errors", async () => {
   const previousToken = process.env.DEVRANK_CONTEXT_READ_TOKEN;
   process.env.DEVRANK_CONTEXT_READ_TOKEN = "read-token";
+  const restoreRateLimitStore = setRateLimitStore(async ({ windowMs }) => ({
+    count: 1,
+    resetAt: new Date(Date.now() + windowMs).toISOString(),
+  }));
 
   try {
     const response = await POST(new Request("https://devrank.example/api/context/search", {
@@ -20,6 +25,7 @@ test("context search rejects one-character queries as client errors", async () =
     assert.equal(response.status, 400);
     assert.equal(body.error?.code, "query_too_short");
   } finally {
+    restoreRateLimitStore();
     if (previousToken === undefined) {
       delete process.env.DEVRANK_CONTEXT_READ_TOKEN;
     } else {
