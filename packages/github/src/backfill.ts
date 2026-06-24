@@ -113,7 +113,7 @@ export async function backfillGithubUser(
 
     if (shouldScanPrMetadata && prMetadataLimit > 0) {
       for (const pullRequest of recentPullRequests(repoPullRequests, prMetadataLimit)) {
-        const metadata = await listPullRequestMetadata(octokit, repo, pullRequest);
+        const metadata = await fetchGithubPullRequestMetadata(octokit, repo, pullRequest);
         pullRequestFiles.push(...metadata.files);
         pullRequestReviews.push(...metadata.reviews);
       }
@@ -134,10 +134,13 @@ export async function backfillGithubUser(
   };
 }
 
-async function listPullRequestMetadata(
+export async function fetchGithubPullRequestMetadata(
   octokit: Octokit,
   repo: GithubRepoSummary,
   pullRequest: GithubPullRequestSummary,
+  options: {
+    ignoreMissing?: boolean;
+  } = {},
 ): Promise<{
   files: GithubPullRequestFileSummary[];
   reviews: GithubPullRequestReviewSummary[];
@@ -192,7 +195,7 @@ async function listPullRequestMetadata(
   } catch (error) {
     const status = githubStatus(error);
 
-    if (status === 404 || status === 410) {
+    if ((status === 404 || status === 410) && options.ignoreMissing !== false) {
       return {
         files: [],
         reviews: [],

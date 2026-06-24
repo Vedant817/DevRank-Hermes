@@ -13,6 +13,7 @@ import {
   closeSqlClient,
   createSqlClient,
   deleteGithubRepositories,
+  deleteGithubPullRequestMetadata,
   insertIngestionRun,
   markGithubWebhookDeliveryFailed,
   markGithubWebhookDeliveryProcessed,
@@ -21,6 +22,8 @@ import {
   upsertGithubBackfill,
 } from "@repo/db";
 import {
+  createGithubClient,
+  fetchGithubPullRequestMetadata,
   githubWebhookIngestion,
   isSupportedGithubWebhookEvent,
   verifyGithubWebhook,
@@ -128,10 +131,28 @@ export async function POST(request: Request) {
       );
     }
 
+    const pullRequest = ingestion.backfill.pullRequests[0];
+    const repo = ingestion.backfill.repos[0];
+
+    if (shouldRefreshPullRequestMetadata(event) && pullRequest && repo) {
+      const metadata = await fetchGithubPullRequestMetadata(
+        createGithubClient(),
+        repo,
+        pullRequest,
+        { ignoreMissing: false },
+      );
+      ingestion.backfill.pullRequestFiles = metadata.files;
+      ingestion.backfill.pullRequestReviews = metadata.reviews;
+    }
+
     const persisted = await runInTransaction(sql, async (transaction) => {
       const deletedRepositories = await deleteGithubRepositories(
         transaction,
         ingestion.deletions.repositoryIds,
+      );
+      const replacedMetadata = await deleteGithubPullRequestMetadata(
+        transaction,
+        ingestion.backfill.pullRequests.map((item) => item.id),
       );
       const written = await upsertGithubBackfill(transaction, ingestion.backfill);
       const writtenEvidence = await upsertEvidenceItems(transaction, [{
@@ -161,7 +182,7 @@ export async function POST(request: Request) {
         summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${deletedRepositories} deleted repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), ${written.repoProfiles} repo profile(s), and ${writtenEvidence} evidence item(s).`,
       });
 
-      return { deletedRepositories, written, writtenEvidence };
+      return { deletedRepositories, replacedMetadata, written, writtenEvidence };
     });
 
     return jsonOk({
@@ -195,4 +216,10 @@ export async function POST(request: Request) {
       await closeSqlClient(sql);
     }
   }
+}
+
+function shouldRefreshPullRequestMetadata(event: string) {
+  return event === "pull_request"
+    || event === "pull_request_review"
+    || event === "pull_request_review_comment";
 }

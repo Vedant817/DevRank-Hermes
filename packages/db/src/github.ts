@@ -421,6 +421,35 @@ export async function deleteGithubRepositories(
   return deleted;
 }
 
+export async function deleteGithubPullRequestMetadata(
+  sql: SqlClient,
+  pullRequestIds: number[],
+): Promise<{
+  files: number;
+  reviews: number;
+}> {
+  let files = 0;
+  let reviews = 0;
+
+  for (const pullRequestId of new Set(pullRequestIds)) {
+    const deletedFiles = await sql<{ pull_request_id: number }[]>`
+      delete from github_pr_files
+      where pull_request_id = ${pullRequestId}
+      returning pull_request_id
+    `;
+    const deletedReviews = await sql<{ id: number }[]>`
+      delete from github_pr_reviews
+      where pull_request_id = ${pullRequestId}
+      returning id
+    `;
+
+    files += deletedFiles.length;
+    reviews += deletedReviews.length;
+  }
+
+  return { files, reviews };
+}
+
 export async function listGithubRepoEvidence(
   sql: SqlClient,
   repoFullName: string | undefined,

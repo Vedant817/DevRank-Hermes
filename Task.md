@@ -1029,7 +1029,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Make local watch ingestion incremental with persisted checkpoints and resource limits.
 - [x] Add deadlines and bounded retry policies to external HTTP calls.
 - [x] Paginate Linear backfill without silent truncation.
-- [ ] Refresh PR files and reviews from GitHub webhook activity.
+- [x] Refresh PR files and reviews from GitHub webhook activity.
 - [ ] Make GitHub backfill bounded, resumable, and rate-limit aware.
 - [ ] Recursively profile monorepos with bounded Git tree traversal.
 - [ ] Make combined context writes idempotent across Supabase and Supermemory failures.

@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Octokit } from "@octokit/rest";
-import { backfillGithubUser } from "../src/backfill.js";
+import {
+  backfillGithubUser,
+  fetchGithubPullRequestMetadata,
+} from "../src/backfill.js";
 
 test("backfills repos, pull requests, and bounded default-branch commits", async () => {
   const listForUser = () => undefined;
@@ -239,4 +242,48 @@ test("skips empty repositories when GitHub reports no commits", async () => {
 
   assert.equal(result.repos.length, 1);
   assert.deepEqual(result.commits, []);
+});
+
+test("webhook metadata refresh does not treat hidden GitHub resources as empty", async () => {
+  const error = Object.assign(new Error("Not Found"), { status: 404 });
+  const octokit = {
+    paginate: async () => {
+      throw error;
+    },
+    pulls: {
+      listFiles: () => undefined,
+      listReviewComments: () => undefined,
+      listReviews: () => undefined,
+    },
+  } as unknown as Octokit;
+
+  await assert.rejects(
+    fetchGithubPullRequestMetadata(
+      octokit,
+      {
+        defaultBranch: "main",
+        fullName: "salescode/private",
+        htmlUrl: null,
+        id: 101,
+        language: null,
+        name: "private",
+        owner: "salescode",
+        private: true,
+        pushedAt: null,
+        updatedAt: null,
+      },
+      {
+        htmlUrl: null,
+        id: 202,
+        mergedAt: null,
+        number: 7,
+        repoFullName: "salescode/private",
+        state: "open",
+        title: "Private change",
+        updatedAt: null,
+      },
+      { ignoreMissing: false },
+    ),
+    error,
+  );
 });

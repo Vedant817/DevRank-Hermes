@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SqlClient } from "../src/client.js";
-import { deleteGithubRepositories } from "../src/github.js";
+import {
+  deleteGithubPullRequestMetadata,
+  deleteGithubRepositories,
+} from "../src/github.js";
 import {
   claimGithubWebhookDelivery,
   claimLinearWebhookDelivery,
@@ -129,6 +132,22 @@ test("GitHub repository deletion removes dependent pull requests before the repo
   assert.equal(pullRequestDelete.values[0], 101);
   assert.equal(repositoryDelete.values[0], 101);
   assert.ok(calls.indexOf(pullRequestDelete) < calls.indexOf(repositoryDelete));
+});
+
+test("GitHub pull request metadata replacement clears stale files and reviews", async () => {
+  const { calls, sql } = recordingSqlSequence([
+    [{ pull_request_id: 202 }, { pull_request_id: 202 }],
+    [{ id: 301 }],
+  ]);
+
+  const deleted = await deleteGithubPullRequestMetadata(sql, [202, 202]);
+
+  const fileDelete = requiredCall(calls, "delete from github_pr_files");
+  const reviewDelete = requiredCall(calls, "delete from github_pr_reviews");
+  assert.deepEqual(deleted, { files: 2, reviews: 1 });
+  assert.equal(fileDelete.values[0], 202);
+  assert.equal(reviewDelete.values[0], 202);
+  assert.equal(calls.filter((call) => normalizedSql(call).includes("delete from github_pr_files")).length, 1);
 });
 
 test("scheduled Slack delivery claims are idempotent and reclaim only failed or abandoned rows", async () => {
