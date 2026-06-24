@@ -166,6 +166,9 @@ function recordingSql(result: unknown[] = []) {
 
     return Promise.resolve(result);
   }) as unknown as SqlClient;
+  Object.assign(sql, {
+    begin: async <T>(work: (transaction: SqlClient) => Promise<T>) => work(sql),
+  });
 
   return { calls, sql };
 }

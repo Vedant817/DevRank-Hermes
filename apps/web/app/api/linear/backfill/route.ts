@@ -3,6 +3,7 @@ import {
   closeSqlClient,
   createSqlClient,
   insertIngestionRun,
+  runInTransaction,
   upsertLinearBackfill,
 } from "@repo/db";
 import {
@@ -61,11 +62,15 @@ export async function POST(request: Request) {
     let written = { issues: 0, projects: 0 };
 
     try {
-      written = await upsertLinearBackfill(sql, result);
-      await insertIngestionRun(sql, {
-        source: "linear_backfill",
-        status: "success",
-        summary: `Imported ${written.projects} Linear project(s) and ${written.issues} issue(s).`,
+      written = await runInTransaction(sql, async (transaction) => {
+        const persisted = await upsertLinearBackfill(transaction, result);
+        await insertIngestionRun(transaction, {
+          source: "linear_backfill",
+          status: "success",
+          summary: `Imported ${persisted.projects} Linear project(s) and ${persisted.issues} issue(s).`,
+        });
+
+        return persisted;
       });
     } finally {
       await closeSqlClient(sql);

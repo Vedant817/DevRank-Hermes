@@ -10,6 +10,7 @@ import {
   type WeeklyPlan,
 } from "@repo/shared";
 import type { SqlClient } from "./client.js";
+import { runInTransaction } from "./client.js";
 import {
   listGithubCommitEvidence,
   listGithubPullRequestEvidence,
@@ -475,6 +476,15 @@ export function buildLinearSyncHealth(run?: LinearSyncRunStatus): LinearSyncHeal
 }
 
 export async function insertDailyPlan(
+  sql: SqlClient,
+  plan: DailyPlan,
+): Promise<void> {
+  await runInTransaction(sql, async (transaction) => {
+    await persistDailyPlan(transaction, plan);
+  });
+}
+
+async function persistDailyPlan(
   sql: SqlClient,
   plan: DailyPlan,
 ): Promise<void> {

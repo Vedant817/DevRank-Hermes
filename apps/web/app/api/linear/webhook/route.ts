@@ -18,6 +18,7 @@ import {
   markLinearWebhookDeliveryFailed,
   markLinearWebhookDeliveryProcessed,
   reclaimLinearWebhookDelivery,
+  runInTransaction,
   upsertEvidenceItems,
   upsertLinearBackfill,
 } from "@repo/db";
@@ -118,32 +119,36 @@ export async function POST(request: Request) {
     }
 
     const ingestion = linearWebhookIngestion(payload.value);
-    const deleted = await deleteLinearEntities(sql, ingestion.deletions);
-    const written = await upsertLinearBackfill(sql, ingestion.backfill);
-    const writtenEvidence = await upsertEvidenceItems(sql, [{
-      id: `linear:webhook:${eventType ?? "unknown"}:${deliveryId}`,
-      source: "linear",
-      title: `Linear ${eventType ?? "event"}${action ? ` ${action}` : ""}`,
-      summary: [
-        `Linear webhook ${eventType ?? "event"} was received.`,
-        action ? `Action: ${action}.` : "",
-        ingestion.summary.url ? `URL: ${ingestion.summary.url}.` : "",
-      ].filter(Boolean).join(" "),
-      occurredAt: new Date(webhookTimestamp).toISOString(),
-      metadata: {
-        action,
-        deliveryId,
-        eventType,
-        organizationId: ingestion.summary.organizationId,
-        url: ingestion.summary.url,
-      },
-    }]);
+    const persisted = await runInTransaction(sql, async (transaction) => {
+      const deleted = await deleteLinearEntities(transaction, ingestion.deletions);
+      const written = await upsertLinearBackfill(transaction, ingestion.backfill);
+      const writtenEvidence = await upsertEvidenceItems(transaction, [{
+        id: `linear:webhook:${eventType ?? "unknown"}:${deliveryId}`,
+        source: "linear",
+        title: `Linear ${eventType ?? "event"}${action ? ` ${action}` : ""}`,
+        summary: [
+          `Linear webhook ${eventType ?? "event"} was received.`,
+          action ? `Action: ${action}.` : "",
+          ingestion.summary.url ? `URL: ${ingestion.summary.url}.` : "",
+        ].filter(Boolean).join(" "),
+        occurredAt: new Date(webhookTimestamp).toISOString(),
+        metadata: {
+          action,
+          deliveryId,
+          eventType,
+          organizationId: ingestion.summary.organizationId,
+          url: ingestion.summary.url,
+        },
+      }]);
 
-    await markLinearWebhookDeliveryProcessed(sql, deliveryId);
-    await insertIngestionRun(sql, {
-      source: "linear_webhook",
-      status: "success",
-      summary: `Processed Linear ${eventType ?? "event"} webhook with ${written.projects} project(s), ${written.issues} issue(s), ${deleted.projects} deleted project(s), ${deleted.issues} deleted issue(s), and ${writtenEvidence} evidence item(s).`,
+      await markLinearWebhookDeliveryProcessed(transaction, deliveryId);
+      await insertIngestionRun(transaction, {
+        source: "linear_webhook",
+        status: "success",
+        summary: `Processed Linear ${eventType ?? "event"} webhook with ${written.projects} project(s), ${written.issues} issue(s), ${deleted.projects} deleted project(s), ${deleted.issues} deleted issue(s), and ${writtenEvidence} evidence item(s).`,
+      });
+
+      return { deleted, written, writtenEvidence };
     });
 
     return jsonOk({
@@ -152,9 +157,7 @@ export async function POST(request: Request) {
       action,
       deliveryId,
       summary: ingestion.summary,
-      written,
-      deleted,
-      writtenEvidence,
+      ...persisted,
     });
   } catch (error) {
     if (sql) {

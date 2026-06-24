@@ -15,6 +15,7 @@ import {
   insertScoreSnapshot,
   listEvidenceItems,
   listScoringEvidence,
+  runInTransaction,
   runDbMigrations,
   upsertAiChatSessions,
   upsertGithubBackfill,
@@ -841,11 +842,15 @@ async function persistGithubBackfillResult(context: CommandContext, result: unkn
   const sql = createSqlClient();
 
   try {
-    const written = await upsertGithubBackfill(sql, result);
-    await insertIngestionRun(sql, {
-      source: "github_backfill",
-      status: "success",
-      summary: `Imported ${written.repos} GitHub repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), and ${written.repoProfiles} repo profile(s).`,
+    const written = await runInTransaction(sql, async (transaction) => {
+      const persisted = await upsertGithubBackfill(transaction, result);
+      await insertIngestionRun(transaction, {
+        source: "github_backfill",
+        status: "success",
+        summary: `Imported ${persisted.repos} GitHub repo(s), ${persisted.pullRequests} pull request(s), ${persisted.pullRequestFiles} PR file(s), ${persisted.pullRequestReviews} PR review(s), ${persisted.commits} commit(s), and ${persisted.repoProfiles} repo profile(s).`,
+      });
+
+      return persisted;
     });
 
     return {
@@ -883,11 +888,15 @@ async function persistLinearBackfillResult(context: CommandContext, result: unkn
   const sql = createSqlClient();
 
   try {
-    const written = await upsertLinearBackfill(sql, result);
-    await insertIngestionRun(sql, {
-      source: "linear_backfill",
-      status: "success",
-      summary: `Imported ${written.projects} Linear project(s) and ${written.issues} issue(s).`,
+    const written = await runInTransaction(sql, async (transaction) => {
+      const persisted = await upsertLinearBackfill(transaction, result);
+      await insertIngestionRun(transaction, {
+        source: "linear_backfill",
+        status: "success",
+        summary: `Imported ${persisted.projects} Linear project(s) and ${persisted.issues} issue(s).`,
+      });
+
+      return persisted;
     });
 
     return {
@@ -1028,24 +1037,26 @@ async function persistIngestionResult(context: CommandContext, result: unknown, 
   const sql = createSqlClient();
 
   try {
-    const writtenEvidence = await upsertEvidenceItems(sql, result.evidence);
-    const writtenEmbeddings = Array.isArray(result.embeddings)
-      ? await upsertEvidenceEmbeddings(sql, result.embeddings)
-      : 0;
-    const writtenTranscripts = Array.isArray(result.transcripts)
-      ? await upsertAiChatSessions(sql, result.transcripts)
-      : 0;
-    await insertIngestionRun(sql, {
-      source,
-      status: "success",
-      summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), ${writtenEmbeddings} embedding(s), and ${writtenTranscripts} transcript(s).`,
+    const written = await runInTransaction(sql, async (transaction) => {
+      const writtenEvidence = await upsertEvidenceItems(transaction, result.evidence);
+      const writtenEmbeddings = Array.isArray(result.embeddings)
+        ? await upsertEvidenceEmbeddings(transaction, result.embeddings)
+        : 0;
+      const writtenTranscripts = Array.isArray(result.transcripts)
+        ? await upsertAiChatSessions(transaction, result.transcripts)
+        : 0;
+      await insertIngestionRun(transaction, {
+        source,
+        status: "success",
+        summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), ${writtenEmbeddings} embedding(s), and ${writtenTranscripts} transcript(s).`,
+      });
+
+      return { writtenEmbeddings, writtenEvidence, writtenTranscripts };
     });
 
     return {
       ...result,
-      writtenEmbeddings,
-      writtenEvidence,
-      writtenTranscripts,
+      ...written,
     };
   } catch (error) {
     await insertIngestionRun(sql, {

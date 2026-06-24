@@ -1023,7 +1023,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 - [x] Accept delayed Linear webhook retries only for persisted failed or abandoned delivery IDs.
 - [x] Reconcile deleted GitHub and Linear records.
-- [ ] Make multi-table persistence operations transactional.
+- [x] Make multi-table persistence operations transactional.
 - [ ] Add an idempotency boundary for scheduled Slack delivery.
 - [ ] Stop local daemon logs from writing complete session results and configure bounded retention.
 - [ ] Make local watch ingestion incremental with persisted checkpoints and resource limits.

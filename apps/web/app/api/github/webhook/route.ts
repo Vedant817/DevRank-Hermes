@@ -16,6 +16,7 @@ import {
   insertIngestionRun,
   markGithubWebhookDeliveryFailed,
   markGithubWebhookDeliveryProcessed,
+  runInTransaction,
   upsertEvidenceItems,
   upsertGithubBackfill,
 } from "@repo/db";
@@ -127,36 +128,40 @@ export async function POST(request: Request) {
       );
     }
 
-    const deletedRepositories = await deleteGithubRepositories(
-      sql,
-      ingestion.deletions.repositoryIds,
-    );
-    const written = await upsertGithubBackfill(sql, ingestion.backfill);
-    const writtenEvidence = await upsertEvidenceItems(sql, [{
-      id: `github:webhook:${event}:${deliveryId}`,
-      source: "github",
-      title: `GitHub ${event}${action ? ` ${action}` : ""}`,
-      summary: [
-        `GitHub webhook ${event} was received.`,
-        ingestion.summary.repository ? `Repository: ${ingestion.summary.repository}.` : "",
-        ingestion.summary.pullRequestNumber ? `Pull request: #${ingestion.summary.pullRequestNumber}.` : "",
-        action ? `Action: ${action}.` : "",
-      ].filter(Boolean).join(" "),
-      occurredAt: new Date().toISOString(),
-      metadata: {
-        action,
-        deliveryId,
-        event,
-        repository: ingestion.summary.repository,
-        pullRequestNumber: ingestion.summary.pullRequestNumber,
-      },
-    }]);
+    const persisted = await runInTransaction(sql, async (transaction) => {
+      const deletedRepositories = await deleteGithubRepositories(
+        transaction,
+        ingestion.deletions.repositoryIds,
+      );
+      const written = await upsertGithubBackfill(transaction, ingestion.backfill);
+      const writtenEvidence = await upsertEvidenceItems(transaction, [{
+        id: `github:webhook:${event}:${deliveryId}`,
+        source: "github",
+        title: `GitHub ${event}${action ? ` ${action}` : ""}`,
+        summary: [
+          `GitHub webhook ${event} was received.`,
+          ingestion.summary.repository ? `Repository: ${ingestion.summary.repository}.` : "",
+          ingestion.summary.pullRequestNumber ? `Pull request: #${ingestion.summary.pullRequestNumber}.` : "",
+          action ? `Action: ${action}.` : "",
+        ].filter(Boolean).join(" "),
+        occurredAt: new Date().toISOString(),
+        metadata: {
+          action,
+          deliveryId,
+          event,
+          repository: ingestion.summary.repository,
+          pullRequestNumber: ingestion.summary.pullRequestNumber,
+        },
+      }]);
 
-    await markGithubWebhookDeliveryProcessed(sql, deliveryId);
-    await insertIngestionRun(sql, {
-      source: "github_webhook",
-      status: "success",
-      summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${deletedRepositories} deleted repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), ${written.repoProfiles} repo profile(s), and ${writtenEvidence} evidence item(s).`,
+      await markGithubWebhookDeliveryProcessed(transaction, deliveryId);
+      await insertIngestionRun(transaction, {
+        source: "github_webhook",
+        status: "success",
+        summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${deletedRepositories} deleted repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), ${written.repoProfiles} repo profile(s), and ${writtenEvidence} evidence item(s).`,
+      });
+
+      return { deletedRepositories, written, writtenEvidence };
     });
 
     return jsonOk({
@@ -165,9 +170,7 @@ export async function POST(request: Request) {
       deliveryId,
       action,
       summary: ingestion.summary,
-      written,
-      deletedRepositories,
-      writtenEvidence,
+      ...persisted,
     });
   } catch (error) {
     if (sql) {

@@ -7,6 +7,7 @@ import {
   closeSqlClient,
   createSqlClient,
   insertIngestionRun,
+  runInTransaction,
   upsertAiChatSessions,
   upsertEvidenceEmbeddings,
   upsertEvidenceItems,
@@ -114,13 +115,15 @@ async function ingestAndMaybePersist(input: {
   const sql = createSqlClient();
 
   try {
-    await upsertEvidenceItems(sql, result.evidence);
-    const writtenEmbeddings = await upsertEvidenceEmbeddings(sql, result.embeddings);
-    const writtenTranscripts = await upsertAiChatSessions(sql, result.transcripts);
-    await insertIngestionRun(sql, {
-      source: `local_session:${input.codexSessionsDir}`,
-      status: "success",
-      summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), ${writtenEmbeddings} embedding(s), and ${writtenTranscripts} transcript(s).`,
+    await runInTransaction(sql, async (transaction) => {
+      await upsertEvidenceItems(transaction, result.evidence);
+      const writtenEmbeddings = await upsertEvidenceEmbeddings(transaction, result.embeddings);
+      const writtenTranscripts = await upsertAiChatSessions(transaction, result.transcripts);
+      await insertIngestionRun(transaction, {
+        source: `local_session:${input.codexSessionsDir}`,
+        status: "success",
+        summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), ${writtenEmbeddings} embedding(s), and ${writtenTranscripts} transcript(s).`,
+      });
     });
   } catch (error) {
     await insertIngestionRun(sql, {

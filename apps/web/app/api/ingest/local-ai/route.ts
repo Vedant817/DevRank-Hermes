@@ -5,6 +5,7 @@ import {
   closeSqlClient,
   createSqlClient,
   insertIngestionRun,
+  runInTransaction,
   upsertAiChatSessions,
   upsertEvidenceEmbeddings,
   upsertEvidenceItems,
@@ -128,14 +129,21 @@ export async function POST(request: Request) {
     let writtenTranscripts = 0;
 
     try {
-      writtenEvidence = await upsertEvidenceItems(sql, result.evidence);
-      writtenEmbeddings = await upsertEvidenceEmbeddings(sql, result.embeddings);
-      writtenTranscripts = await upsertAiChatSessions(sql, result.transcripts);
-      await insertIngestionRun(sql, {
-        source: `local_session:${validatedPath.value}`,
-        status: "success",
-        summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), ${writtenEmbeddings} embedding(s), and ${writtenTranscripts} transcript(s).`,
+      const written = await runInTransaction(sql, async (transaction) => {
+        const evidence = await upsertEvidenceItems(transaction, result.evidence);
+        const embeddings = await upsertEvidenceEmbeddings(transaction, result.embeddings);
+        const transcripts = await upsertAiChatSessions(transaction, result.transcripts);
+        await insertIngestionRun(transaction, {
+          source: `local_session:${validatedPath.value}`,
+          status: "success",
+          summary: `Imported ${result.sessions.length} session(s), ${result.evidence.length} evidence item(s), ${embeddings} embedding(s), and ${transcripts} transcript(s).`,
+        });
+
+        return { embeddings, evidence, transcripts };
       });
+      writtenEvidence = written.evidence;
+      writtenEmbeddings = written.embeddings;
+      writtenTranscripts = written.transcripts;
     } finally {
       await closeSqlClient(sql);
     }
@@ -201,13 +209,19 @@ async function ingestEvidenceExport(
     let writtenEvidence = 0;
 
     try {
-      writtenEvidence = await upsertEvidenceItems(sql, evidence);
-      writtenEmbeddings = await upsertEvidenceEmbeddings(sql, embeddings);
-      await insertIngestionRun(sql, {
-        source: `${sourceType}:${getOptionalString(body, "sourceName") ?? "request"}`,
-        status: "success",
-        summary: `Imported ${evidence.length} evidence item(s) and ${writtenEmbeddings} embedding(s) from ${sourceType}.`,
+      const written = await runInTransaction(sql, async (transaction) => {
+        const evidenceCount = await upsertEvidenceItems(transaction, evidence);
+        const embeddingCount = await upsertEvidenceEmbeddings(transaction, embeddings);
+        await insertIngestionRun(transaction, {
+          source: `${sourceType}:${getOptionalString(body, "sourceName") ?? "request"}`,
+          status: "success",
+          summary: `Imported ${evidence.length} evidence item(s) and ${embeddingCount} embedding(s) from ${sourceType}.`,
+        });
+
+        return { embeddingCount, evidenceCount };
       });
+      writtenEvidence = written.evidenceCount;
+      writtenEmbeddings = written.embeddingCount;
     } finally {
       await closeSqlClient(sql);
     }
