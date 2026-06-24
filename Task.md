@@ -1022,7 +1022,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 ## 27. Full Production Deployment Audit
 
 - [x] Accept delayed Linear webhook retries only for persisted failed or abandoned delivery IDs.
-- [ ] Reconcile deleted GitHub and Linear records.
+- [x] Reconcile deleted GitHub and Linear records.
 - [ ] Make multi-table persistence operations transactional.
 - [ ] Add an idempotency boundary for scheduled Slack delivery.
 - [ ] Stop local daemon logs from writing complete session results and configure bounded retention.

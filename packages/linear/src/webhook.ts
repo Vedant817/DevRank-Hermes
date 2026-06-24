@@ -54,9 +54,20 @@ export function summarizeLinearWebhook(payload: unknown): LinearWebhookResult {
 }
 
 export function linearWebhookIngestion(payload: unknown): LinearWebhookIngestion {
+  const record = asRecord(payload);
+  const action = stringValue(record.action);
+  const type = stringValue(record.type);
+  const entityId = stringValue(asRecord(record.data).id);
+
   return {
     summary: summarizeLinearWebhook(payload),
-    backfill: linearWebhookBackfill(payload),
+    backfill: action === "remove"
+      ? { projects: [], issues: [] }
+      : linearWebhookBackfill(payload),
+    deletions: {
+      issueIds: action === "remove" && type === "Issue" && entityId ? [entityId] : [],
+      projectIds: action === "remove" && type === "Project" && entityId ? [entityId] : [],
+    },
   };
 }
 

@@ -1129,6 +1129,47 @@ export async function upsertLinearBackfill(
   };
 }
 
+export async function deleteLinearEntities(
+  sql: SqlClient,
+  input: {
+    issueIds: string[];
+    projectIds: string[];
+  },
+): Promise<{
+  issues: number;
+  projects: number;
+}> {
+  let issues = 0;
+  let projects = 0;
+
+  for (const issueId of new Set(input.issueIds)) {
+    const rows = await sql<{ id: string }[]>`
+      delete from linear_issues
+      where id = ${issueId}
+      returning id
+    `;
+
+    issues += rows.length;
+  }
+
+  for (const projectId of new Set(input.projectIds)) {
+    await sql`
+      update linear_issues
+      set project_id = null
+      where project_id = ${projectId}
+    `;
+    const rows = await sql<{ id: string }[]>`
+      delete from linear_projects
+      where id = ${projectId}
+      returning id
+    `;
+
+    projects += rows.length;
+  }
+
+  return { issues, projects };
+}
+
 function collectLinearWorkspace(
   workspaces: Map<string, { name: string; urlKey: string | null }>,
   input: {

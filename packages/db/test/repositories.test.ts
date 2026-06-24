@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SqlClient } from "../src/client.js";
+import { deleteGithubRepositories } from "../src/github.js";
 import {
   claimGithubWebhookDelivery,
   claimLinearWebhookDelivery,
   dailyTaskKey,
+  deleteLinearEntities,
   getRecentScoreSnapshots,
   insertDailyPlan,
   reclaimLinearWebhookDelivery,
@@ -95,6 +97,37 @@ test("stale Linear retries only reclaim known failed or abandoned deliveries", a
   assert.match(statement, /status = 'failed'/);
   assert.match(statement, /received_at < now\(\) - interval '30 seconds'/);
   assert.equal(reclaim.values.at(-1), "linear-delivery");
+});
+
+test("Linear project deletion detaches surviving issues before deleting the project", async () => {
+  const { calls, sql } = recordingSql();
+
+  await deleteLinearEntities(sql, {
+    issueIds: ["issue-1"],
+    projectIds: ["project-1"],
+  });
+
+  const issueDelete = requiredCall(calls, "delete from linear_issues");
+  const projectDetach = requiredCall(calls, "update linear_issues");
+  const projectDelete = requiredCall(calls, "delete from linear_projects");
+
+  assert.equal(issueDelete.values[0], "issue-1");
+  assert.equal(projectDetach.values[0], "project-1");
+  assert.equal(projectDelete.values[0], "project-1");
+  assert.ok(calls.indexOf(projectDetach) < calls.indexOf(projectDelete));
+});
+
+test("GitHub repository deletion removes dependent pull requests before the repository", async () => {
+  const { calls, sql } = recordingSql();
+
+  await deleteGithubRepositories(sql, [101]);
+
+  const pullRequestDelete = requiredCall(calls, "delete from github_pull_requests");
+  const repositoryDelete = requiredCall(calls, "delete from github_repos");
+
+  assert.equal(pullRequestDelete.values[0], 101);
+  assert.equal(repositoryDelete.values[0], 101);
+  assert.ok(calls.indexOf(pullRequestDelete) < calls.indexOf(repositoryDelete));
 });
 
 test("loads a bounded score history in newest-first order", async () => {

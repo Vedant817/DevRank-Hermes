@@ -398,6 +398,29 @@ export async function upsertGithubBackfill(
   };
 }
 
+export async function deleteGithubRepositories(
+  sql: SqlClient,
+  repositoryIds: number[],
+): Promise<number> {
+  let deleted = 0;
+
+  for (const repositoryId of new Set(repositoryIds)) {
+    await sql`
+      delete from github_pull_requests
+      where repo_id = ${repositoryId}
+    `;
+    const rows = await sql<{ id: number }[]>`
+      delete from github_repos
+      where id = ${repositoryId}
+      returning id
+    `;
+
+    deleted += rows.length;
+  }
+
+  return deleted;
+}
+
 export async function listGithubRepoEvidence(
   sql: SqlClient,
   repoFullName: string | undefined,

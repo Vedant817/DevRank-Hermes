@@ -12,6 +12,7 @@ import {
   claimGithubWebhookDelivery,
   closeSqlClient,
   createSqlClient,
+  deleteGithubRepositories,
   insertIngestionRun,
   markGithubWebhookDeliveryFailed,
   markGithubWebhookDeliveryProcessed,
@@ -126,6 +127,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const deletedRepositories = await deleteGithubRepositories(
+      sql,
+      ingestion.deletions.repositoryIds,
+    );
     const written = await upsertGithubBackfill(sql, ingestion.backfill);
     const writtenEvidence = await upsertEvidenceItems(sql, [{
       id: `github:webhook:${event}:${deliveryId}`,
@@ -151,7 +156,7 @@ export async function POST(request: Request) {
     await insertIngestionRun(sql, {
       source: "github_webhook",
       status: "success",
-      summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), ${written.repoProfiles} repo profile(s), and ${writtenEvidence} evidence item(s).`,
+      summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${deletedRepositories} deleted repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), ${written.repoProfiles} repo profile(s), and ${writtenEvidence} evidence item(s).`,
     });
 
     return jsonOk({
@@ -161,6 +166,7 @@ export async function POST(request: Request) {
       action,
       summary: ingestion.summary,
       written,
+      deletedRepositories,
       writtenEvidence,
     });
   } catch (error) {

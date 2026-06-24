@@ -95,5 +95,8 @@ export interface GithubWebhookResult {
 
 export interface GithubWebhookIngestion {
   backfill: GithubBackfillResult;
+  deletions: {
+    repositoryIds: number[];
+  };
   summary: GithubWebhookResult;
 }

@@ -44,7 +44,7 @@ export async function verifyGithubWebhook(
 
 export function isSupportedGithubWebhookEvent(eventName: string, action?: string): boolean {
   if (eventName === "repository") {
-    return action === "created";
+    return action === "created" || action === "deleted";
   }
 
   return SUPPORTED_WEBHOOK_EVENTS.has(eventName);
@@ -75,9 +75,32 @@ export function githubWebhookIngestion(
   deliveryId: string,
   payload: unknown,
 ): GithubWebhookIngestion {
+  const record = asRecord(payload);
+  const repository = asRecord(record.repository);
+  const action = stringValue(record.action);
+  const deletedRepositoryId = eventName === "repository" && action === "deleted"
+    ? numberValue(repository.id)
+    : undefined;
+
   return {
     summary: summarizeGithubWebhook(eventName, deliveryId, payload),
-    backfill: githubWebhookBackfill(payload),
+    backfill: deletedRepositoryId === undefined
+      ? githubWebhookBackfill(payload)
+      : emptyGithubBackfill(),
+    deletions: {
+      repositoryIds: deletedRepositoryId === undefined ? [] : [deletedRepositoryId],
+    },
+  };
+}
+
+function emptyGithubBackfill(): GithubBackfillResult {
+  return {
+    commits: [],
+    pullRequestFiles: [],
+    pullRequestReviews: [],
+    repoProfiles: [],
+    repos: [],
+    pullRequests: [],
   };
 }
 

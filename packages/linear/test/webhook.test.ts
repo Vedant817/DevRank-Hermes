@@ -65,6 +65,38 @@ test("extracts project rows from Linear project webhook payload", () => {
   assert.deepEqual(ingestion.backfill.issues, []);
 });
 
+test("emits Linear issue and project deletions without re-upserting removed data", () => {
+  const issue = linearWebhookIngestion({
+    action: "remove",
+    type: "Issue",
+    data: {
+      id: "issue-removed",
+      identifier: "DEV-99",
+      title: "Removed issue",
+      url: "https://linear.app/devrank/issue/DEV-99",
+    },
+  });
+  const project = linearWebhookIngestion({
+    action: "remove",
+    type: "Project",
+    data: {
+      id: "project-removed",
+      name: "Removed project",
+    },
+  });
+
+  assert.deepEqual(issue.deletions, {
+    issueIds: ["issue-removed"],
+    projectIds: [],
+  });
+  assert.deepEqual(issue.backfill, { issues: [], projects: [] });
+  assert.deepEqual(project.deletions, {
+    issueIds: [],
+    projectIds: ["project-removed"],
+  });
+  assert.deepEqual(project.backfill, { issues: [], projects: [] });
+});
+
 test("summarizes sparse Linear payloads without throwing", () => {
   assert.deepEqual(summarizeLinearWebhook({}), {
     action: undefined,

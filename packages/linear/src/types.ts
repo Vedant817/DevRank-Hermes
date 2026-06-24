@@ -44,5 +44,9 @@ export interface LinearWebhookResult {
 
 export interface LinearWebhookIngestion {
   backfill: LinearBackfillResult;
+  deletions: {
+    issueIds: string[];
+    projectIds: string[];
+  };
   summary: LinearWebhookResult;
 }

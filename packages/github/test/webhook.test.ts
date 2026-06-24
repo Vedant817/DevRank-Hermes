@@ -83,7 +83,8 @@ test("extracts push webhook commits", () => {
 
 test("supports repository.created without accepting every repository action", () => {
   assert.equal(isSupportedGithubWebhookEvent("repository", "created"), true);
-  assert.equal(isSupportedGithubWebhookEvent("repository", "deleted"), false);
+  assert.equal(isSupportedGithubWebhookEvent("repository", "deleted"), true);
+  assert.equal(isSupportedGithubWebhookEvent("repository", "archived"), false);
 
   const ingestion = githubWebhookIngestion("repository", "delivery-4", {
     action: "created",
@@ -112,6 +113,23 @@ test("supports repository.created without accepting every repository action", ()
   assert.equal(ingestion.backfill.repos[0]?.fullName, "salescode/new-service");
   assert.deepEqual(ingestion.backfill.pullRequests, []);
   assert.deepEqual(ingestion.backfill.commits, []);
+  assert.deepEqual(ingestion.deletions.repositoryIds, []);
+});
+
+test("emits a repository deletion instead of re-upserting deleted GitHub data", () => {
+  const ingestion = githubWebhookIngestion("repository", "delivery-5", {
+    action: "deleted",
+    repository: {
+      id: 303,
+      full_name: "salescode/removed-service",
+      name: "removed-service",
+      owner: { login: "salescode" },
+    },
+  });
+
+  assert.deepEqual(ingestion.deletions.repositoryIds, [303]);
+  assert.deepEqual(ingestion.backfill.repos, []);
+  assert.deepEqual(ingestion.backfill.pullRequests, []);
 });
 
 test("summarizes sparse payloads without throwing", () => {

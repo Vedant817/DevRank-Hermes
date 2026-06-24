@@ -13,6 +13,7 @@ import {
   claimLinearWebhookDelivery,
   closeSqlClient,
   createSqlClient,
+  deleteLinearEntities,
   insertIngestionRun,
   markLinearWebhookDeliveryFailed,
   markLinearWebhookDeliveryProcessed,
@@ -117,6 +118,7 @@ export async function POST(request: Request) {
     }
 
     const ingestion = linearWebhookIngestion(payload.value);
+    const deleted = await deleteLinearEntities(sql, ingestion.deletions);
     const written = await upsertLinearBackfill(sql, ingestion.backfill);
     const writtenEvidence = await upsertEvidenceItems(sql, [{
       id: `linear:webhook:${eventType ?? "unknown"}:${deliveryId}`,
@@ -141,7 +143,7 @@ export async function POST(request: Request) {
     await insertIngestionRun(sql, {
       source: "linear_webhook",
       status: "success",
-      summary: `Processed Linear ${eventType ?? "event"} webhook with ${written.projects} project(s), ${written.issues} issue(s), and ${writtenEvidence} evidence item(s).`,
+      summary: `Processed Linear ${eventType ?? "event"} webhook with ${written.projects} project(s), ${written.issues} issue(s), ${deleted.projects} deleted project(s), ${deleted.issues} deleted issue(s), and ${writtenEvidence} evidence item(s).`,
     });
 
     return jsonOk({
@@ -151,6 +153,7 @@ export async function POST(request: Request) {
       deliveryId,
       summary: ingestion.summary,
       written,
+      deleted,
       writtenEvidence,
     });
   } catch (error) {
