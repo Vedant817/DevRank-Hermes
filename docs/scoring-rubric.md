@@ -24,6 +24,25 @@ dashboards or daily planning. When the rubric changes, the app refreshes stale
 snapshots from persisted scoring evidence instead of continuing to show legacy
 lanes.
 
+## GitHub Portfolio Dashboard Signals
+
+The current repository dashboard uses a bounded 100-point evidence signal while
+the complete Repo Portfolio Score rubric is still being implemented:
+
+- README present: 15 points
+- Test files present: 15 points
+- Deployment configuration present: 10 points
+- Architecture documentation present: 10 points
+- Imported commit depth: 15 points
+- Commit recency: 10 points
+- Imported pull request depth: 15 points
+- Technology breadth: 10 points
+
+This score is deterministic, capped at 100, and based only on persisted GitHub
+profile metadata. It does not claim to measure real-world problem clarity,
+deployed-demo health, code coverage, or uniqueness until those evidence sources
+are collected.
+
 ## Current Flow
 
 1. Ingest redacted local AI sessions into evidence items.

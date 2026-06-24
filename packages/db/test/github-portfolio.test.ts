@@ -70,7 +70,10 @@ test("builds GitHub portfolio dashboard from persisted repo profile evidence", (
   assert.equal(dashboard.totals.profiledRepos, 2);
   assert.equal(dashboard.totals.unavailableProfiles, 1);
   assert.equal(dashboard.bestRepos[0]?.fullName, "salescode/devrank-os");
+  assert.equal(dashboard.bestRepos[0]?.portfolioScore, 93);
   assert.equal(dashboard.weakRepos[0]?.fullName, "salescode/tutorial-api");
+  assert.ok(dashboard.bestRepos.every((repo) => repo.portfolioScore <= 100));
+  assert.ok(dashboard.weakRepos.every((repo) => repo.portfolioScore >= 0));
   assert.deepEqual(dashboard.needsReadme.map((repo) => repo.fullName), ["salescode/tutorial-api"]);
   assert.deepEqual(dashboard.needsTests.map((repo) => repo.fullName), ["salescode/tutorial-api"]);
   assert.deepEqual(dashboard.needsDeployment.map((repo) => repo.fullName), ["salescode/tutorial-api"]);
@@ -80,4 +83,58 @@ test("builds GitHub portfolio dashboard from persisted repo profile evidence", (
   assert.equal(dashboard.prQuality[0]?.repoFullName, "salescode/devrank-os");
   assert.equal(dashboard.projectComplexity[0]?.band, "high");
   assert.match(dashboard.weakRepos[1]?.reasons.join(" ") ?? "", /contents access unavailable/i);
+});
+
+test("bounds portfolio dashboard scores to the explicit 100-point budget", () => {
+  const dashboard = buildGithubPortfolioDashboard({
+    now: new Date("2026-06-24T00:00:00.000Z"),
+    rows: [
+      {
+        commits: 1_000,
+        commitsLast30Days: 1_000,
+        commitsLast90Days: 1_000,
+        fullName: "vedant/max-signals",
+        hasArchitectureDiagram: true,
+        hasDeploymentConfig: true,
+        hasReadme: true,
+        hasTests: true,
+        htmlUrl: "https://github.com/vedant/max-signals",
+        language: "TypeScript",
+        lastCommitAt: "2026-06-24T00:00:00.000Z",
+        mergedPullRequests: 1_000,
+        openPullRequests: 0,
+        profileScannedAt: "2026-06-24T00:00:00.000Z",
+        pullRequests: 1_000,
+        scanStatus: "scanned",
+        techStack: ["TypeScript", "Next.js", "Postgres", "Vercel", "Redis"],
+      },
+      {
+        commits: Number.NaN,
+        commitsLast30Days: 0,
+        commitsLast90Days: 0,
+        fullName: "vedant/no-signals",
+        hasArchitectureDiagram: false,
+        hasDeploymentConfig: false,
+        hasReadme: false,
+        hasTests: false,
+        htmlUrl: null,
+        language: null,
+        lastCommitAt: null,
+        mergedPullRequests: 0,
+        openPullRequests: 0,
+        profileScannedAt: "2026-06-24T00:00:00.000Z",
+        pullRequests: -5,
+        scanStatus: "scanned",
+        techStack: [],
+      },
+    ],
+  });
+
+  const scores = new Map(
+    dashboard.bestRepos.map((repo) => [repo.fullName, repo.portfolioScore]),
+  );
+
+  assert.equal(scores.get("vedant/max-signals"), 100);
+  assert.equal(scores.get("vedant/no-signals"), 0);
+  assert.ok([...scores.values()].every((score) => Number.isFinite(score)));
 });

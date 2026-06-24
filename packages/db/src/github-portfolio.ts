@@ -1,6 +1,18 @@
 import type { SqlClient } from "./client.js";
 
 const RECENT_WINDOW_DAYS = 30;
+const PORTFOLIO_SIGNAL_POINTS = {
+  architecture: 10,
+  commits: 15,
+  deployment: 10,
+  pullRequests: 15,
+  readme: 15,
+  recency: 10,
+  techStack: 10,
+  tests: 15,
+} as const;
+const MAX_PORTFOLIO_SCORE = Object.values(PORTFOLIO_SIGNAL_POINTS)
+  .reduce((total, points) => total + points, 0);
 
 export interface GithubPortfolioDashboard {
   totals: {
@@ -260,16 +272,23 @@ function toPortfolioRepo(row: GithubPortfolioRepoRow, now: Date): GithubPortfoli
 
 function scorePortfolio(row: GithubPortfolioRepoRow, now: Date) {
   const profileScore =
-    booleanPoints(row.hasReadme, 18) +
-    booleanPoints(row.hasTests, 18) +
-    booleanPoints(row.hasDeploymentConfig, 14) +
-    booleanPoints(row.hasArchitectureDiagram, 10);
-  const commitScore = Math.min(row.commits, 40) / 40 * 16;
-  const recentScore = row.lastCommitAt && daysSince(row.lastCommitAt, now) <= RECENT_WINDOW_DAYS ? 8 : 0;
-  const prScore = Math.min(row.pullRequests, 12) / 12 * 12;
-  const stackScore = Math.min((row.techStack.length || (row.language ? 1 : 0)), 4) / 4 * 14;
+    booleanPoints(row.hasReadme, PORTFOLIO_SIGNAL_POINTS.readme) +
+    booleanPoints(row.hasTests, PORTFOLIO_SIGNAL_POINTS.tests) +
+    booleanPoints(row.hasDeploymentConfig, PORTFOLIO_SIGNAL_POINTS.deployment) +
+    booleanPoints(row.hasArchitectureDiagram, PORTFOLIO_SIGNAL_POINTS.architecture);
+  const commitScore = boundedRatio(row.commits, 40) * PORTFOLIO_SIGNAL_POINTS.commits;
+  const recentScore =
+    row.lastCommitAt && daysSince(row.lastCommitAt, now) <= RECENT_WINDOW_DAYS
+      ? PORTFOLIO_SIGNAL_POINTS.recency
+      : 0;
+  const prScore =
+    boundedRatio(row.pullRequests, 12) * PORTFOLIO_SIGNAL_POINTS.pullRequests;
+  const stackSignals = row.techStack.length || (row.language ? 1 : 0);
+  const stackScore =
+    boundedRatio(stackSignals, 4) * PORTFOLIO_SIGNAL_POINTS.techStack;
+  const rawScore = profileScore + commitScore + recentScore + prScore + stackScore;
 
-  return Math.round(profileScore + commitScore + recentScore + prScore + stackScore);
+  return Math.max(0, Math.min(MAX_PORTFOLIO_SCORE, Math.round(rawScore)));
 }
 
 function portfolioReasons(
@@ -309,6 +328,14 @@ function portfolioReasons(
 
 function booleanPoints(value: boolean | null, points: number) {
   return value === true ? points : 0;
+}
+
+function boundedRatio(value: number, maximum: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+
+  return Math.min(value, maximum) / maximum;
 }
 
 function commitConsistencyStatus(row: GithubPortfolioRepoRow, now: Date) {

@@ -1017,3 +1017,4 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Return client errors for invalid short context search queries instead of `503`.
 - [x] Align `github:backfill` CLI auth validation and `--commit-limit` behavior with runtime support.
 - [x] Skip malformed Antigravity artifacts without aborting valid local ingestion.
+- [x] Bound GitHub portfolio dashboard signal scores to `0-100` with an explicit 100-point weight budget.
