@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   normalizeContextWriteInput,
+  searchContext,
   writeContext,
   type ContextProviders,
 } from "../src/index.js";
@@ -20,6 +21,76 @@ test("normalizes context writes with a stable source id", () => {
   assert.equal(
     normalizeContextWriteInput({ ...input, sourceId: "explicit-id" }).sourceId,
     "explicit-id",
+  );
+});
+
+test("combined context search returns the healthy provider and removes duplicate content", async () => {
+  const providers = fakeProviders({
+    searchSupabase: async () => [{
+      id: "supabase-1",
+      score: 0.7,
+      source: "supabase",
+      summary: "Shared context",
+      title: "Context",
+    }],
+    searchSupermemory: async () => [{
+      id: "supermemory-1",
+      score: 0.9,
+      source: "supermemory",
+      summary: "Shared context",
+      title: "Context",
+    }],
+    writeSupabase: async () => {
+      throw new Error("unused");
+    },
+    writeSupermemory: async () => {
+      throw new Error("unused");
+    },
+  });
+
+  const deduplicated = await searchContext(
+    { query: "context" },
+    { CONTEXT_PROVIDER: "combined" },
+    providers,
+  );
+  providers.searchSupermemoryContext = async () => {
+    throw new Error("Supermemory unavailable");
+  };
+  const fallback = await searchContext(
+    { query: "context" },
+    { CONTEXT_PROVIDER: "combined" },
+    providers,
+  );
+
+  assert.equal(deduplicated.length, 1);
+  assert.equal(deduplicated[0]?.source, "supermemory");
+  assert.equal(fallback.length, 1);
+  assert.equal(fallback[0]?.source, "supabase");
+});
+
+test("combined context search fails when every provider fails", async () => {
+  const providers = fakeProviders({
+    searchSupabase: async () => {
+      throw new Error("Supabase unavailable");
+    },
+    searchSupermemory: async () => {
+      throw new Error("Supermemory unavailable");
+    },
+    writeSupabase: async () => {
+      throw new Error("unused");
+    },
+    writeSupermemory: async () => {
+      throw new Error("unused");
+    },
+  });
+
+  await assert.rejects(
+    searchContext(
+      { query: "context" },
+      { CONTEXT_PROVIDER: "combined" },
+      providers,
+    ),
+    /All configured context providers failed/,
   );
 });
 
@@ -162,12 +233,14 @@ test("combined context retries reuse the same remote identity after a Supabase f
 });
 
 function fakeProviders(input: {
+  searchSupabase?: ContextProviders["searchSupabaseContext"];
+  searchSupermemory?: ContextProviders["searchSupermemoryContext"];
   writeSupabase: ContextProviders["writeSupabaseContext"];
   writeSupermemory: ContextProviders["writeSupermemoryContext"];
 }): ContextProviders {
   return {
-    searchSupabaseContext: async () => [],
-    searchSupermemoryContext: async () => [],
+    searchSupabaseContext: input.searchSupabase ?? (async () => []),
+    searchSupermemoryContext: input.searchSupermemory ?? (async () => []),
     writeSupabaseContext: input.writeSupabase,
     writeSupermemoryContext: input.writeSupermemory,
   };

@@ -31,17 +31,54 @@ export async function searchSupermemoryContext(
   input: ContextSearchInput,
   env: RuntimeEnv = readRuntimeEnv(),
 ): Promise<ContextItem[]> {
-  const url = new URL("https://api.supermemory.ai/v3/search");
-  url.searchParams.set("q", input.query);
-  url.searchParams.set("limit", String(clampLimit(input.limit)));
+  const tags = [...new Set(input.containerTags ?? [])];
+  const scopedResults = tags.length > 0
+    ? await Promise.all(tags.map((containerTag) =>
+        searchSupermemoryScope(input, env, containerTag)))
+    : [await searchSupermemoryScope(input, env)];
 
-  for (const tag of input.containerTags ?? []) {
-    url.searchParams.append("containerTags", tag);
+  if (scopedResults.length === 1) {
+    return scopedResults[0] ?? [];
   }
 
-  const response = await fetchWithPolicy(url, {
-    method: "GET",
+  const requiredScopes = scopedResults.length;
+  const matches = new Map<string, { count: number; item: ContextItem }>();
+
+  for (const results of scopedResults) {
+    for (const item of results) {
+      const existing = matches.get(item.id);
+      matches.set(item.id, {
+        count: (existing?.count ?? 0) + 1,
+        item: existing && (existing.item.score ?? 0) >= (item.score ?? 0)
+          ? existing.item
+          : item,
+      });
+    }
+  }
+
+  return [...matches.values()]
+    .filter((match) => match.count === requiredScopes)
+    .map((match) => match.item)
+    .sort(compareContextScore)
+    .slice(0, clampLimit(input.limit));
+}
+
+async function searchSupermemoryScope(
+  input: ContextSearchInput,
+  env: RuntimeEnv,
+  containerTag?: string,
+) {
+  const response = await fetchWithPolicy("https://api.supermemory.ai/v4/search", {
+    method: "POST",
     headers: baseHeaders(env),
+    body: JSON.stringify({
+      q: input.query,
+      limit: clampLimit(input.limit),
+      searchMode: "hybrid",
+      ...(containerTag ? { containerTag } : {}),
+    }),
+  }, {
+    retry: true,
   });
 
   if (!response.ok) {
@@ -51,23 +88,31 @@ export async function searchSupermemoryContext(
   const json = await response.json() as {
     results?: Array<{
       id?: string;
-      score?: number;
-      memory?: { content?: string; title?: string };
-      chunk?: { content?: string; documentId?: string };
+      similarity?: number;
+      memory?: string;
+      chunk?: string;
+      documents?: Array<{ id?: string; summary?: string | null; title?: string | null }>;
     }>;
   };
 
   return (json.results ?? []).map((result, index) => ({
-    id: result.id ?? result.chunk?.documentId ?? `supermemory-${index}`,
-    title: result.memory?.title ?? "Supermemory result",
-    summary: result.memory?.content ?? result.chunk?.content ?? "",
+    id: result.id ?? result.documents?.[0]?.id ?? `supermemory-${index}`,
+    title: result.documents?.[0]?.title ?? "Supermemory result",
+    summary: result.memory
+      ?? result.documents?.[0]?.summary
+      ?? result.chunk
+      ?? "",
     source: "supermemory",
-    score: result.score,
+    score: result.similarity,
   }));
 }
 
 function clampLimit(limit: number | undefined) {
   return Math.max(1, Math.min(limit ?? DEFAULT_CONTEXT_LIMIT, MAX_CONTEXT_LIMIT));
+}
+
+function compareContextScore(left: ContextItem, right: ContextItem) {
+  return (right.score ?? 0) - (left.score ?? 0);
 }
 
 export async function writeSupermemoryContext(

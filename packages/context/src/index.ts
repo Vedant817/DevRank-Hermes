@@ -28,15 +28,47 @@ export async function searchContext(
   }
 
   if (env.CONTEXT_PROVIDER === "combined") {
-    const [supabase, supermemory] = await Promise.all([
+    const [supabase, supermemory] = await Promise.allSettled([
       providers.searchSupabaseContext(input),
       providers.searchSupermemoryContext(input, env),
     ]);
 
-    return [...supabase, ...supermemory].slice(0, input.limit ?? 10);
+    if (supabase.status === "rejected" && supermemory.status === "rejected") {
+      throw new AggregateError(
+        [supabase.reason, supermemory.reason],
+        "All configured context providers failed.",
+      );
+    }
+
+    return mergeContextResults(
+      supabase.status === "fulfilled" ? supabase.value : [],
+      supermemory.status === "fulfilled" ? supermemory.value : [],
+      input.limit ?? 10,
+    );
   }
 
   return providers.searchSupabaseContext(input);
+}
+
+function mergeContextResults(
+  supabase: ContextItem[],
+  supermemory: ContextItem[],
+  limit: number,
+) {
+  const results = new Map<string, ContextItem>();
+
+  for (const item of [...supabase, ...supermemory]) {
+    const key = `${item.title.trim().toLowerCase()}\u0000${item.summary.trim().toLowerCase()}`;
+    const existing = results.get(key);
+
+    if (!existing || (item.score ?? 0) > (existing.score ?? 0)) {
+      results.set(key, item);
+    }
+  }
+
+  return [...results.values()]
+    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0))
+    .slice(0, Math.max(1, limit));
 }
 
 export async function writeContext(
