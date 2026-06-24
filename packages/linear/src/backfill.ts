@@ -7,7 +7,7 @@ interface LinearBackfillQuery {
     name?: string | null;
     urlKey?: string | null;
   } | null;
-  projects: {
+  projects?: {
     nodes: Array<{
       id: string;
       name: string;
@@ -16,8 +16,9 @@ interface LinearBackfillQuery {
       url?: string | null;
       team?: { id?: string | null; key?: string | null; name?: string | null } | null;
     }>;
-  };
-  issues: {
+    pageInfo: LinearPageInfo;
+  } | null;
+  issues?: {
     nodes: Array<{
       id: string;
       identifier: string;
@@ -30,17 +31,38 @@ interface LinearBackfillQuery {
       project?: { id?: string | null } | null;
       team?: { id?: string | null; key?: string | null; name?: string | null } | null;
     }>;
-  };
+    pageInfo: LinearPageInfo;
+  } | null;
 }
 
+interface LinearPageInfo {
+  endCursor?: string | null;
+  hasNextPage: boolean;
+}
+
+export type LinearGraphqlExecutor = <T>(
+  query: string,
+  variables: Record<string, unknown>,
+) => Promise<T>;
+
+const MAX_LINEAR_PAGE_SIZE = 100;
+const MAX_LINEAR_BACKFILL_PAGES = 1_000;
+
 const backfillQuery = `
-  query DevRankLinearBackfill($first: Int!) {
+  query DevRankLinearBackfill(
+    $first: Int!
+    $includeIssues: Boolean!
+    $includeProjects: Boolean!
+    $issuesAfter: String
+    $projectsAfter: String
+  ) {
     organization {
       id
       name
       urlKey
     }
-    projects(first: $first, orderBy: updatedAt) {
+    projects(first: $first, after: $projectsAfter, orderBy: updatedAt)
+      @include(if: $includeProjects) {
       nodes {
         id
         name
@@ -49,8 +71,10 @@ const backfillQuery = `
         url
         team { id key name }
       }
+      pageInfo { endCursor hasNextPage }
     }
-    issues(first: $first, orderBy: updatedAt) {
+    issues(first: $first, after: $issuesAfter, orderBy: updatedAt)
+      @include(if: $includeIssues) {
       nodes {
         id
         identifier
@@ -63,15 +87,43 @@ const backfillQuery = `
         project { id }
         team { id key name }
       }
+      pageInfo { endCursor hasNextPage }
     }
   }
 `;
 
-export async function backfillLinear(first = 100): Promise<LinearBackfillResult> {
-  const data = await linearGraphql<LinearBackfillQuery>(backfillQuery, { first });
+export async function backfillLinear(
+  first = MAX_LINEAR_PAGE_SIZE,
+  graphql: LinearGraphqlExecutor = linearGraphql,
+): Promise<LinearBackfillResult> {
+  const pageSize = normalizePageSize(first);
+  const projectRows = new Map<string, LinearBackfillResult["projects"][number]>();
+  const issueRows = new Map<string, LinearBackfillResult["issues"][number]>();
+  let includeProjects = true;
+  let includeIssues = true;
+  let projectsAfter: string | null = null;
+  let issuesAfter: string | null = null;
+  let organization: LinearBackfillQuery["organization"];
+  let pages = 0;
 
-  return {
-    projects: data.projects.nodes.map((project) => ({
+  while (includeProjects || includeIssues) {
+    pages += 1;
+
+    if (pages > MAX_LINEAR_BACKFILL_PAGES) {
+      throw new Error(`Linear backfill exceeded ${MAX_LINEAR_BACKFILL_PAGES} pages.`);
+    }
+
+    const data = await graphql<LinearBackfillQuery>(backfillQuery, {
+      first: pageSize,
+      includeIssues,
+      includeProjects,
+      issuesAfter,
+      projectsAfter,
+    });
+    organization ??= data.organization;
+
+    for (const project of data.projects?.nodes ?? []) {
+      projectRows.set(project.id, {
       id: project.id,
       name: project.name,
       state: project.state ?? null,
@@ -80,11 +132,14 @@ export async function backfillLinear(first = 100): Promise<LinearBackfillResult>
       teamKey: project.team?.key ?? null,
       teamId: project.team?.id ?? null,
       teamName: project.team?.name ?? null,
-      workspaceId: data.organization?.id ?? null,
-      workspaceName: data.organization?.name ?? null,
-      workspaceUrlKey: data.organization?.urlKey ?? null,
-    })),
-    issues: data.issues.nodes.map((issue) => ({
+      workspaceId: organization?.id ?? null,
+      workspaceName: organization?.name ?? null,
+      workspaceUrlKey: organization?.urlKey ?? null,
+      });
+    }
+
+    for (const issue of data.issues?.nodes ?? []) {
+      issueRows.set(issue.id, {
       id: issue.id,
       identifier: issue.identifier,
       title: issue.title,
@@ -97,9 +152,50 @@ export async function backfillLinear(first = 100): Promise<LinearBackfillResult>
       teamId: issue.team?.id ?? null,
       teamName: issue.team?.name ?? null,
       updatedAt: issue.updatedAt ?? null,
-      workspaceId: data.organization?.id ?? null,
-      workspaceName: data.organization?.name ?? null,
-      workspaceUrlKey: data.organization?.urlKey ?? null,
-    })),
+      workspaceId: organization?.id ?? null,
+      workspaceName: organization?.name ?? null,
+      workspaceUrlKey: organization?.urlKey ?? null,
+      });
+    }
+
+    if (includeProjects) {
+      const next = nextCursor(data.projects?.pageInfo, "projects");
+      includeProjects = next.hasNextPage;
+      projectsAfter = next.endCursor;
+    }
+
+    if (includeIssues) {
+      const next = nextCursor(data.issues?.pageInfo, "issues");
+      includeIssues = next.hasNextPage;
+      issuesAfter = next.endCursor;
+    }
+  }
+
+  return {
+    projects: [...projectRows.values()],
+    issues: [...issueRows.values()],
   };
+}
+
+function nextCursor(pageInfo: LinearPageInfo | null | undefined, connection: string) {
+  if (!pageInfo) {
+    throw new Error(`Linear backfill response omitted ${connection} pageInfo.`);
+  }
+
+  if (pageInfo.hasNextPage && !pageInfo.endCursor) {
+    throw new Error(`Linear backfill ${connection} page has no end cursor.`);
+  }
+
+  return {
+    endCursor: pageInfo.endCursor ?? null,
+    hasNextPage: pageInfo.hasNextPage,
+  };
+}
+
+function normalizePageSize(value: number) {
+  if (!Number.isFinite(value)) {
+    return MAX_LINEAR_PAGE_SIZE;
+  }
+
+  return Math.max(1, Math.min(Math.floor(value), MAX_LINEAR_PAGE_SIZE));
 }

@@ -235,7 +235,7 @@ const commands: CommandSpec[] = [
   {
     name: "linear:backfill",
     description: "Backfill Linear workspaces, projects, cycles, and issues through the Linear package.",
-    usage: "devrank linear:backfill [--first <count>] [--workspace <workspace>] [--dry-run]",
+    usage: "devrank linear:backfill [--first <page-size>] [--workspace <workspace>] [--dry-run]",
     moduleCandidates: ["@repo/linear"],
     exportCandidates: ["backfillLinear", "linearBackfill", "run"],
     envRequirements: [databaseRequirement, linearAuthRequirement],

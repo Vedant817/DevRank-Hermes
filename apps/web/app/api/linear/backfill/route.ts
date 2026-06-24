@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     return body.response;
   }
 
-  const first = getOptionalInteger(body.value, "first", 100, 1, 500);
+  const first = getOptionalInteger(body.value, "first", 100, 1, 100);
 
   if (!first.ok) {
     return first.response;
