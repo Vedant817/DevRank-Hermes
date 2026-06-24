@@ -785,6 +785,34 @@ export async function claimLinearWebhookDelivery(
   return rows.length > 0;
 }
 
+export async function reclaimLinearWebhookDelivery(
+  sql: SqlClient,
+  input: LinearWebhookDelivery,
+): Promise<boolean> {
+  const rows = await sql<{ delivery_id: string }[]>`
+    update linear_webhook_events
+    set
+      event_type = ${input.eventType ?? null},
+      action = ${input.action ?? null},
+      webhook_timestamp = ${input.webhookTimestamp ?? null},
+      status = 'processing',
+      error = null,
+      received_at = now(),
+      processed_at = null
+    where delivery_id = ${input.deliveryId}
+      and (
+        status = 'failed'
+        or (
+          status = 'processing'
+          and received_at < now() - interval '30 seconds'
+        )
+      )
+    returning delivery_id
+  `;
+
+  return rows.length > 0;
+}
+
 export async function markLinearWebhookDeliveryProcessed(
   sql: SqlClient,
   deliveryId: string,

@@ -7,6 +7,7 @@ import {
   dailyTaskKey,
   getRecentScoreSnapshots,
   insertDailyPlan,
+  reclaimLinearWebhookDelivery,
 } from "../src/repositories.js";
 
 type SqlCall = {
@@ -74,6 +75,26 @@ test("webhook delivery claims reclaim stale processing rows", async () => {
   assert.match(normalizedSql(linearClaim), /linear_webhook_events.status = 'failed'/);
   assert.match(normalizedSql(linearClaim), /linear_webhook_events.status = 'processing'/);
   assert.match(normalizedSql(linearClaim), /received_at < now\(\) - interval '10 minutes'/);
+});
+
+test("stale Linear retries only reclaim known failed or abandoned deliveries", async () => {
+  const { calls, sql } = recordingSql();
+
+  await reclaimLinearWebhookDelivery(sql, {
+    action: "update",
+    deliveryId: "linear-delivery",
+    eventType: "Issue",
+    webhookTimestamp: "2026-06-23T00:00:00.000Z",
+  });
+
+  const reclaim = requiredCall(calls, "update linear_webhook_events");
+  const statement = normalizedSql(reclaim);
+
+  assert.doesNotMatch(statement, /insert into linear_webhook_events/);
+  assert.match(statement, /where delivery_id =/);
+  assert.match(statement, /status = 'failed'/);
+  assert.match(statement, /received_at < now\(\) - interval '30 seconds'/);
+  assert.equal(reclaim.values.at(-1), "linear-delivery");
 });
 
 test("loads a bounded score history in newest-first order", async () => {

@@ -1018,3 +1018,27 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Align `github:backfill` CLI auth validation and `--commit-limit` behavior with runtime support.
 - [x] Skip malformed Antigravity artifacts without aborting valid local ingestion.
 - [x] Bound GitHub portfolio dashboard signal scores to `0-100` with an explicit 100-point weight budget.
+
+## 27. Full Production Deployment Audit
+
+- [x] Accept delayed Linear webhook retries only for persisted failed or abandoned delivery IDs.
+- [ ] Reconcile deleted GitHub and Linear records.
+- [ ] Make multi-table persistence operations transactional.
+- [ ] Add an idempotency boundary for scheduled Slack delivery.
+- [ ] Stop local daemon logs from writing complete session results and configure bounded retention.
+- [ ] Make local watch ingestion incremental with persisted checkpoints and resource limits.
+- [ ] Add deadlines and bounded retry policies to external HTTP calls.
+- [ ] Paginate Linear backfill without silent truncation.
+- [ ] Refresh PR files and reviews from GitHub webhook activity.
+- [ ] Make GitHub backfill bounded, resumable, and rate-limit aware.
+- [ ] Recursively profile monorepos with bounded Git tree traversal.
+- [ ] Make combined context writes idempotent across Supabase and Supermemory failures.
+- [ ] Make context retrieval resilient and provider-scoped.
+- [ ] Replace process-local API rate limiting with production-safe distributed enforcement.
+- [ ] Enforce the supported single-user ownership boundary or implement tenant isolation.
+- [ ] Make readiness scoring monotonic for unrelated evidence and version the rubric.
+- [ ] Generate evidence-adaptive planner tasks instead of fixed templates.
+- [ ] Serialize migrations with transactions and a Postgres advisory lock.
+- [ ] Apply Linear dashboard filters and counts before pagination limits.
+- [ ] Align the supported Node runtime with Next.js requirements.
+- [ ] Honor CLI workspace options and provider-aware context readiness.

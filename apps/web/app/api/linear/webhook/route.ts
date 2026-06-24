@@ -16,6 +16,7 @@ import {
   insertIngestionRun,
   markLinearWebhookDeliveryFailed,
   markLinearWebhookDeliveryProcessed,
+  reclaimLinearWebhookDelivery,
   upsertEvidenceItems,
   upsertLinearBackfill,
 } from "@repo/db";
@@ -73,33 +74,34 @@ export async function POST(request: Request) {
     return jsonError(400, "linear_timestamp_missing", "webhookTimestamp must be present in the Linear payload.");
   }
 
-  const ageMs = Math.abs(Date.now() - webhookTimestamp);
-
-  if (ageMs > MAX_WEBHOOK_AGE_MS) {
-    return jsonError(401, "linear_timestamp_stale", "Linear webhook timestamp is outside the allowed replay window.", {
-      maxAgeMs: MAX_WEBHOOK_AGE_MS,
-      observedAgeMs: ageMs,
-    });
-  }
-
   const deliveryId = request.headers.get("linear-delivery")?.trim()
     || linearReplayKey(payload.value, rawBody.text);
   const eventType = request.headers.get("linear-event")?.trim()
     || (typeof payload.value.type === "string" ? payload.value.type : undefined);
   const action = typeof payload.value.action === "string" ? payload.value.action : undefined;
-
-  const ingestion = linearWebhookIngestion(payload.value);
+  const ageMs = Math.abs(Date.now() - webhookTimestamp);
   let sql: ReturnType<typeof createSqlClient> | undefined;
   let deliveryClaimed = false;
 
   try {
     sql = createSqlClient();
-    deliveryClaimed = await claimLinearWebhookDelivery(sql, {
+    const delivery = {
       action,
       deliveryId,
       eventType,
       webhookTimestamp: new Date(webhookTimestamp).toISOString(),
-    });
+    };
+
+    deliveryClaimed = ageMs <= MAX_WEBHOOK_AGE_MS
+      ? await claimLinearWebhookDelivery(sql, delivery)
+      : await reclaimLinearWebhookDelivery(sql, delivery);
+
+    if (ageMs > MAX_WEBHOOK_AGE_MS && !deliveryClaimed) {
+      return jsonError(401, "linear_timestamp_stale", "Linear webhook timestamp is outside the allowed replay window.", {
+        maxAgeMs: MAX_WEBHOOK_AGE_MS,
+        observedAgeMs: ageMs,
+      });
+    }
 
     if (!deliveryClaimed) {
       return jsonOk(
@@ -114,6 +116,7 @@ export async function POST(request: Request) {
       );
     }
 
+    const ingestion = linearWebhookIngestion(payload.value);
     const written = await upsertLinearBackfill(sql, ingestion.backfill);
     const writtenEvidence = await upsertEvidenceItems(sql, [{
       id: `linear:webhook:${eventType ?? "unknown"}:${deliveryId}`,
