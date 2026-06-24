@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { redactSecrets } from "./redaction.js";
 import type { ChatMessage, ParsedSession } from "./types.js";
@@ -8,11 +7,12 @@ import {
   extractText,
   fileTimestamp,
   findFiles,
+  readTextFile,
   stableId,
 } from "./utils.js";
 
 export async function parseClaudeSessionFile(filePath: string): Promise<ParsedSession> {
-  const raw = await readFile(filePath, "utf8");
+  const raw = await readTextFile(filePath);
   const redacted = redactSecrets(raw);
   const messages: ChatMessage[] = [];
   const toolCalls = new Set<string>();
@@ -114,4 +114,12 @@ export async function ingestClaudeSessions(roots: string[] | string): Promise<Pa
   }
 
   return sessions;
+}
+
+export async function ingestClaudeFiles(files: string[]): Promise<ParsedSession[]> {
+  return Promise.all(
+    files
+      .filter((filePath) => filePath.endsWith(".jsonl"))
+      .map((filePath) => parseClaudeSessionFile(filePath)),
+  );
 }

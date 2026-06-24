@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import {
   closeSqlClient,
   createSqlClient,
@@ -12,6 +12,12 @@ import { extractSkillEvidence } from "@repo/hermes";
 import type { LocalAgentWeeklySkillExtractionConfig } from "./config.js";
 
 export interface LocalAgentState {
+  ingestion?: {
+    files?: Record<string, {
+      mtimeMs: number;
+      size: number;
+    }>;
+  };
   weeklySkillExtraction?: {
     lastEvidenceCount?: number;
     lastRunAt?: string;
@@ -133,7 +139,17 @@ export async function readLocalAgentState(statePath: string): Promise<LocalAgent
 
 export async function writeLocalAgentState(statePath: string, state: LocalAgentState) {
   await mkdir(dirname(statePath), { recursive: true });
-  await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  const temporaryPath = join(
+    dirname(statePath),
+    `.${basename(statePath)}.${process.pid}.${Date.now()}.tmp`,
+  );
+
+  await writeFile(temporaryPath, `${JSON.stringify(state, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+  await rename(temporaryPath, statePath);
+  await chmod(statePath, 0o600);
 }
 
 function skippedResult(statePath: string, reason: string): WeeklySkillExtractionResult {
@@ -149,10 +165,25 @@ function skippedResult(statePath: string, reason: string): WeeklySkillExtraction
 
 function normalizeState(value: unknown): LocalAgentState {
   const record = asRecord(value);
+  const ingestion = asRecord(record.ingestion);
+  const files = asRecord(ingestion.files);
   const weeklySkillExtraction = asRecord(record.weeklySkillExtraction);
   const lastRunAt = weeklySkillExtraction.lastRunAt;
 
   return {
+    ingestion: {
+      files: Object.fromEntries(
+        Object.entries(files).flatMap(([filePath, checkpoint]) => {
+          const checkpointRecord = asRecord(checkpoint);
+          const mtimeMs = numberValue(checkpointRecord.mtimeMs);
+          const size = numberValue(checkpointRecord.size);
+
+          return mtimeMs === undefined || size === undefined
+            ? []
+            : [[filePath, { mtimeMs, size }]];
+        }),
+      ),
+    },
     weeklySkillExtraction: {
       lastEvidenceCount: numberValue(weeklySkillExtraction.lastEvidenceCount),
       lastRunAt: typeof lastRunAt === "string" ? lastRunAt : undefined,

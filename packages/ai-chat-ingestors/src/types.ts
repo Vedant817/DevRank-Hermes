@@ -72,5 +72,6 @@ export interface LocalAiIngestionOptions {
   enabledAdapters?: Array<"codex" | "claude" | "opencode" | "antigravity">;
   rawStorageEnabled?: boolean;
   redactSecrets?: boolean;
+  sourceFiles?: string[];
   storeEmbeddings?: boolean;
 }

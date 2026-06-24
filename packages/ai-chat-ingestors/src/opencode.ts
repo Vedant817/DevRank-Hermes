@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { redactSecrets } from "./redaction.js";
 import type { ChatMessage, ParsedSession } from "./types.js";
@@ -7,6 +7,7 @@ import {
   extractText,
   fileTimestamp,
   findFiles,
+  readTextFile,
   stableId,
 } from "./utils.js";
 
@@ -30,7 +31,7 @@ export async function parseOpenCodeSessionDir(sessionDir: string): Promise<Parse
   let startedAt: string | undefined;
 
   for (const file of files.sort()) {
-    const raw = await readFile(file, "utf8");
+    const raw = await readTextFile(file);
     const redacted = redactSecrets(raw);
     redacted.redactions.forEach((redaction) => redactions.add(redaction));
     const parsed = safeJsonParse(redacted.text);
@@ -101,6 +102,39 @@ export async function ingestOpenCodeSessions(roots: string[] | string): Promise<
   return sessions;
 }
 
+export async function ingestOpenCodeFiles(
+  files: string[],
+  roots: string[],
+): Promise<ParsedSession[]> {
+  const sessionDirectories = new Set<string>();
+
+  for (const filePath of files.filter((candidate) => candidate.endsWith(".json"))) {
+    const location = openCodeStorageLocation(filePath);
+
+    if (location?.kind === "message") {
+      sessionDirectories.add(path.dirname(filePath));
+      continue;
+    }
+
+    if (location?.kind === "part") {
+      const messageId = path.basename(path.dirname(filePath));
+
+      for (const root of roots) {
+        const messageFiles = await findFiles(
+          path.join(root, "storage", "message"),
+          (candidate) => path.basename(candidate) === `${messageId}.json`,
+        );
+
+        messageFiles.forEach((messageFile) => sessionDirectories.add(path.dirname(messageFile)));
+      }
+    }
+  }
+
+  return Promise.all(
+    [...sessionDirectories].map((sessionDir) => parseOpenCodeSessionDir(sessionDir)),
+  );
+}
+
 interface OpenCodePartResult extends Array<{ text: string }> {
   redactions: string[];
 }
@@ -117,7 +151,7 @@ async function readOpenCodeParts(sessionDir: string, messageId: string | undefin
   const files = await findFiles(partDir, (filePath) => filePath.endsWith(".json"));
 
   for (const file of files.sort()) {
-    const redacted = redactSecrets(await readFile(file, "utf8"));
+    const redacted = redactSecrets(await readTextFile(file));
     parts.redactions.push(...redacted.redactions);
 
     const parsed = safeJsonParse(redacted.text);
@@ -143,4 +177,16 @@ function safeJsonParse(text: string): unknown | undefined {
   } catch {
     return undefined;
   }
+}
+
+function openCodeStorageLocation(filePath: string) {
+  const segments = path.normalize(filePath).split(path.sep);
+  const storageIndex = segments.lastIndexOf("storage");
+  const kind = segments[storageIndex + 1];
+
+  if (storageIndex < 0 || (kind !== "message" && kind !== "part")) {
+    return undefined;
+  }
+
+  return { kind };
 }

@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { redactSecrets } from "./redaction.js";
 import type { ParsedSession } from "./types.js";
@@ -7,11 +6,12 @@ import {
   extractText,
   fileTimestamp,
   findFiles,
+  readTextFile,
   stableId,
 } from "./utils.js";
 
 export async function parseAntigravityArtifact(filePath: string): Promise<ParsedSession> {
-  const raw = await readFile(filePath, "utf8");
+  const raw = await readTextFile(filePath);
   const redacted = redactSecrets(raw);
   const isJson = filePath.endsWith(".json");
   const record = isJson ? asRecord(JSON.parse(redacted.text)) : {};
@@ -83,4 +83,24 @@ export async function ingestAntigravitySessions(roots: string[] | string): Promi
   }
 
   return sessions;
+}
+
+export async function ingestAntigravityFiles(files: string[]): Promise<ParsedSession[]> {
+  const sessions: ParsedSession[] = [];
+
+  for (const filePath of files.filter(isSupportedAntigravityFile)) {
+    try {
+      sessions.push(await parseAntigravityArtifact(filePath));
+    } catch {
+      continue;
+    }
+  }
+
+  return sessions;
+}
+
+function isSupportedAntigravityFile(filePath: string) {
+  return filePath.endsWith(".metadata.json")
+    || filePath.endsWith(".jsonl")
+    || filePath.endsWith(".log");
 }

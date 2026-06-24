@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { redactSecrets } from "./redaction.js";
 import type { ParsedSession } from "./types.js";
@@ -8,11 +7,12 @@ import {
   extractText,
   fileTimestamp,
   findFiles,
+  readTextFile,
   stableId,
 } from "./utils.js";
 
 export async function parseCodexSessionFile(filePath: string): Promise<ParsedSession> {
-  const raw = await readFile(filePath, "utf8");
+  const raw = await readTextFile(filePath);
   const redacted = redactSecrets(raw);
   const messages = [];
   const toolCalls = new Set<string>();
@@ -103,4 +103,12 @@ export async function ingestCodexSessions(roots: string[] | string): Promise<Par
   }
 
   return sessions;
+}
+
+export async function ingestCodexFiles(files: string[]): Promise<ParsedSession[]> {
+  return Promise.all(
+    files
+      .filter((filePath) => filePath.endsWith(".jsonl"))
+      .map((filePath) => parseCodexSessionFile(filePath)),
+  );
 }

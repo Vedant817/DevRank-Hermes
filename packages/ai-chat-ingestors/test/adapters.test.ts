@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ingestAntigravitySessions, parseAntigravityArtifact } from "../src/antigravity.js";
@@ -8,6 +8,7 @@ import { parseClaudeSessionFile } from "../src/claude.js";
 import { parseCodexSessionFile } from "../src/codex.js";
 import { ingestLocalAiChats } from "../src/index.js";
 import { parseOpenCodeSessionDir } from "../src/opencode.js";
+import { MAX_LOCAL_AI_FILE_BYTES } from "../src/utils.js";
 
 test("parses Codex jsonl sessions", async () => {
   const root = await mkdtemp(join(tmpdir(), "devrank-codex-"));
@@ -144,6 +145,67 @@ test("ingests through the adapter registry", async () => {
     uploadRawChats: false,
     storeEmbeddings: false,
   });
+});
+
+test("incremental ingestion parses only the changed source file", async () => {
+  const root = await mkdtemp(join(tmpdir(), "devrank-incremental-"));
+  const changed = join(root, "changed.jsonl");
+  const unchanged = join(root, "unchanged.jsonl");
+  await writeFile(changed, JSON.stringify({ role: "user", message: "Changed session" }));
+  await writeFile(unchanged, JSON.stringify({ role: "user", message: "Unchanged session" }));
+
+  const result = await ingestLocalAiChats({
+    enabledAdapters: ["codex"],
+    sourceFiles: [changed],
+    sourceRoots: [root],
+  });
+
+  assert.equal(result.sessions.length, 1);
+  assert.equal(result.sessions[0]?.sourcePath, changed);
+  assert.equal(result.adapterCounts.codex, 1);
+});
+
+test("incremental OpenCode part ingestion resolves the owning session", async () => {
+  const root = await mkdtemp(join(tmpdir(), "devrank-opencode-incremental-"));
+  const sessionDir = join(root, "storage", "message", "ses_1");
+  const partDir = join(root, "storage", "part", "msg_1");
+  const partFile = join(partDir, "part_1.json");
+  await mkdir(sessionDir, { recursive: true });
+  await mkdir(partDir, { recursive: true });
+  await writeFile(join(sessionDir, "msg_1.json"), JSON.stringify({
+    id: "msg_1",
+    sessionID: "ses_1",
+    role: "assistant",
+  }));
+  await writeFile(partFile, JSON.stringify({
+    messageID: "msg_1",
+    type: "text",
+    text: "Changed OpenCode part",
+  }));
+
+  const result = await ingestLocalAiChats({
+    enabledAdapters: ["opencode"],
+    sourceFiles: [partFile],
+    sourceRoots: [root],
+  });
+
+  assert.equal(result.sessions.length, 1);
+  assert.match(result.sessions[0]?.messages[0]?.content ?? "", /Changed OpenCode part/);
+});
+
+test("full scans skip files above the local ingestion size limit", async () => {
+  const root = await mkdtemp(join(tmpdir(), "devrank-oversized-"));
+  const file = join(root, "oversized.jsonl");
+  await writeFile(file, "");
+  await truncate(file, MAX_LOCAL_AI_FILE_BYTES + 1);
+
+  const result = await ingestLocalAiChats({
+    enabledAdapters: ["codex"],
+    sourceRoots: [root],
+  });
+
+  assert.equal(result.sessions.length, 0);
+  assert.equal(result.adapterCounts.codex, 0);
 });
 
 test("rejects unsafe privacy modes instead of ignoring flags", async () => {

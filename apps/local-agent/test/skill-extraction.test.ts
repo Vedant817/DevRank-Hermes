@@ -56,6 +56,14 @@ test("local agent state round trips through disk", async () => {
   const root = await mkdtemp(join(tmpdir(), "devrank-local-agent-state-"));
   const statePath = join(root, "state.json");
   await writeLocalAgentState(statePath, {
+    ingestion: {
+      files: {
+        "/tmp/session.jsonl": {
+          mtimeMs: 123,
+          size: 456,
+        },
+      },
+    },
     weeklySkillExtraction: {
       lastEvidenceCount: 10,
       lastRunAt: "2026-01-08T00:00:00.000Z",
@@ -67,6 +75,7 @@ test("local agent state round trips through disk", async () => {
   const state = await readLocalAgentState(statePath);
 
   assert.match(raw, /lastEvidenceCount/);
+  assert.equal(state.ingestion?.files?.["/tmp/session.jsonl"]?.size, 456);
   assert.equal(state.weeklySkillExtraction?.lastRunAt, "2026-01-08T00:00:00.000Z");
   assert.equal(state.weeklySkillExtraction?.lastSkillCount, 3);
 });

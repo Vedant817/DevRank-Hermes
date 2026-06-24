@@ -1026,7 +1026,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Make multi-table persistence operations transactional.
 - [x] Add an idempotency boundary for scheduled Slack delivery.
 - [x] Stop local daemon logs from writing complete session results and configure bounded retention.
-- [ ] Make local watch ingestion incremental with persisted checkpoints and resource limits.
+- [x] Make local watch ingestion incremental with persisted checkpoints and resource limits.
 - [ ] Add deadlines and bounded retry policies to external HTTP calls.
 - [ ] Paginate Linear backfill without silent truncation.
 - [ ] Refresh PR files and reviews from GitHub webhook activity.

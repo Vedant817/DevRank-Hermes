@@ -14,10 +14,18 @@ import {
 } from "@repo/db";
 import { loadLocalAgentConfig, type LocalAgentPrivacyConfig } from "./config.js";
 import {
+  drainPendingSourceFiles,
+  inspectChangedSourceFiles,
+  persistSourceFileCheckpoints,
+} from "./checkpoints.js";
+import {
   summarizeLocalAgentResult,
   writeLocalAgentLog,
 } from "./logging.js";
-import { runWeeklySkillExtractionIfDue } from "./skill-extraction.js";
+import {
+  readLocalAgentState,
+  runWeeklySkillExtractionIfDue,
+} from "./skill-extraction.js";
 
 export interface LocalAgentOptions {
   codexSessionsDir?: string;
@@ -67,14 +75,36 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
     ignoreInitial: true,
     persistent: true,
   });
+  const pendingSourceFiles = new Set<string>();
+  const statePath = config.automation.weeklySkillExtraction.statePath;
 
   const reingest = createSingleFlightRunner(async () => {
-    await ingestAndMaybePersist({
-      codexSessionsDir,
-      persist,
-      privacy: config.privacy,
-      sourceRoots,
-    });
+    while (pendingSourceFiles.size > 0) {
+      const batch = drainPendingSourceFiles(pendingSourceFiles);
+
+      try {
+        const changed = await inspectChangedSourceFiles(
+          batch,
+          await readLocalAgentState(statePath),
+        );
+
+        if (changed.sourceFiles.length > 0) {
+          await ingestAndMaybePersist({
+            codexSessionsDir,
+            persist,
+            privacy: config.privacy,
+            sourceFiles: changed.sourceFiles,
+            sourceRoots,
+          });
+        }
+
+        await persistSourceFileCheckpoints(statePath, changed.checkpoints);
+      } catch (error) {
+        batch.forEach((filePath) => pendingSourceFiles.add(filePath));
+        throw error;
+      }
+    }
+
     await runWeeklySkillExtractionIfDue({
       config: config.automation.weeklySkillExtraction,
       persist,
@@ -83,10 +113,12 @@ export async function runLocalAgent(options: LocalAgentOptions = {}) {
     void writeLocalAgentLog({ event: "watch_failed" });
   }));
 
-  watcher.on("add", () => {
+  watcher.on("add", (filePath) => {
+    pendingSourceFiles.add(filePath);
     void reingest();
   });
-  watcher.on("change", () => {
+  watcher.on("change", (filePath) => {
+    pendingSourceFiles.add(filePath);
     void reingest();
   });
 
@@ -102,12 +134,14 @@ async function ingestAndMaybePersist(input: {
   codexSessionsDir: string;
   persist: boolean;
   privacy: LocalAgentPrivacyConfig;
+  sourceFiles?: string[];
   sourceRoots: string[];
 }) {
   const result = await ingestLocalAiChats({
     codexSessionsDir: input.codexSessionsDir,
     rawStorageEnabled: input.privacy.uploadRawChats,
     redactSecrets: input.privacy.redactSecrets,
+    sourceFiles: input.sourceFiles,
     sourceRoots: input.sourceRoots,
     storeEmbeddings: input.privacy.storeEmbeddings,
   });
@@ -206,6 +240,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 
 export * from "./config.js";
+export * from "./checkpoints.js";
 export * from "./launchd.js";
 export * from "./logging.js";
 export * from "./skill-extraction.js";

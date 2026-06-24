@@ -18,7 +18,10 @@ export async function ingestLocalAiChats(options: LocalAiIngestionOptions = {}):
     }
 
     const roots = rootsForAdapter(adapter.name, options);
-    const adapterSessions = await adapter.ingest(roots);
+    const sourceFiles = filesForAdapter(adapter.name, options);
+    const adapterSessions = sourceFiles === undefined
+      ? await adapter.ingest(roots)
+      : await adapter.ingestFiles(sourceFiles, roots);
     adapterCounts[adapter.name] = adapterSessions.length;
     sessions.push(...adapterSessions);
   }
@@ -140,6 +143,21 @@ function rootMatchesAdapter(
   return normalized.includes("antigravity");
 }
 
+function filesForAdapter(
+  adapterName: typeof localChatAdapters[number]["name"],
+  options: LocalAiIngestionOptions,
+) {
+  if (options.sourceFiles === undefined) {
+    return undefined;
+  }
+
+  if (options.enabledAdapters?.length === 1) {
+    return options.sourceFiles;
+  }
+
+  return options.sourceFiles.filter((filePath) => rootMatchesAdapter(adapterName, filePath));
+}
+
 export * from "./adapters.js";
 export * from "./antigravity.js";
 export * from "./claude.js";
@@ -148,3 +166,7 @@ export * from "./opencode.js";
 export * from "./redaction.js";
 export * from "./summarize.js";
 export * from "./types.js";
+export {
+  MAX_LOCAL_AI_DISCOVERED_FILES,
+  MAX_LOCAL_AI_FILE_BYTES,
+} from "./utils.js";

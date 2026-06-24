@@ -3,6 +3,9 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type { ChatMessage, MessageRole } from "./types.js";
 
+export const MAX_LOCAL_AI_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_LOCAL_AI_DISCOVERED_FILES = 2_000;
+
 export interface UnknownRecord {
   [key: string]: unknown;
 }
@@ -64,7 +67,7 @@ export async function fileTimestamp(filePath: string): Promise<string> {
 }
 
 export async function readJsonlRecords(filePath: string): Promise<UnknownRecord[]> {
-  const raw = await readFile(filePath, "utf8");
+  const raw = await readTextFile(filePath);
   const records: UnknownRecord[] = [];
 
   for (const line of raw.split("\n")) {
@@ -83,15 +86,24 @@ export async function findFiles(
   predicate: (filePath: string) => boolean,
   options: {
     excludeDirectoryNames?: string[];
+    maxFileBytes?: number;
     maxFiles?: number;
   } = {},
 ): Promise<string[]> {
+  const rootStats = await stat(root).catch(() => undefined);
+  const maxFiles = options.maxFiles ?? MAX_LOCAL_AI_DISCOVERED_FILES;
+  const maxFileBytes = options.maxFileBytes ?? MAX_LOCAL_AI_FILE_BYTES;
+
+  if (rootStats?.isFile()) {
+    return predicate(root) && rootStats.size <= maxFileBytes ? [root] : [];
+  }
+
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
   const files: string[] = [];
   const excluded = new Set(options.excludeDirectoryNames ?? []);
 
   for (const entry of entries) {
-    if (options.maxFiles !== undefined && files.length >= options.maxFiles) {
+    if (files.length >= maxFiles) {
       break;
     }
 
@@ -104,14 +116,35 @@ export async function findFiles(
 
       files.push(...(await findFiles(fullPath, predicate, {
         ...options,
-        maxFiles: options.maxFiles === undefined ? undefined : options.maxFiles - files.length,
+        maxFiles: maxFiles - files.length,
       })));
     } else if (entry.isFile() && predicate(fullPath)) {
-      files.push(fullPath);
+      const fileStats = await stat(fullPath).catch(() => undefined);
+
+      if (fileStats && fileStats.size <= maxFileBytes) {
+        files.push(fullPath);
+      }
     }
   }
 
   return files;
+}
+
+export async function readTextFile(
+  filePath: string,
+  maxBytes = MAX_LOCAL_AI_FILE_BYTES,
+): Promise<string> {
+  const fileStats = await stat(filePath);
+
+  if (!fileStats.isFile()) {
+    throw new Error("Local AI source path is not a regular file.");
+  }
+
+  if (fileStats.size > maxBytes) {
+    throw new Error(`Local AI source file exceeds the ${maxBytes}-byte limit.`);
+  }
+
+  return readFile(filePath, "utf8");
 }
 
 export function messageFromRecord(
