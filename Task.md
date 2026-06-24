@@ -704,7 +704,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Explain every score with evidence.
 - [x] Detect stale score snapshots when the scoring rubric changes.
 - [x] Refresh stale score snapshots from persisted evidence before dashboard and daily planning use.
-- [ ] Show score changes in dashboards.
+- [x] Show score changes in dashboards.
 
 ## 16. Portfolio Generation Logic
 

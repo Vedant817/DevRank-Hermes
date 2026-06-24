@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  computeScoreTrend,
   computeSdeReadinessSnapshot,
   isCurrentSdeReadinessSnapshot,
 } from "../src/index.js";
@@ -80,4 +81,98 @@ test("scores frontend evidence without requiring backend evidence", () => {
 
   assert.equal(frontendLane?.evidenceCount, 1);
   assert.equal(backendLane?.evidenceCount, 0);
+});
+
+test("computes overall and lane score changes from the latest comparable snapshot", () => {
+  const current = computeSdeReadinessSnapshot(
+    [
+      {
+        id: "current",
+        source: "manual",
+        title: "Backend testing deployment",
+        summary: "Built an API with tests and deployed it.",
+        occurredAt: "2026-06-24T00:00:00.000Z",
+      },
+    ],
+    "2026-06-24T00:00:00.000Z",
+  );
+  const previous = computeSdeReadinessSnapshot(
+    [
+      {
+        id: "previous",
+        source: "manual",
+        title: "Backend API",
+        summary: "Built an API.",
+        occurredAt: "2026-06-23T00:00:00.000Z",
+      },
+    ],
+    "2026-06-23T00:00:00.000Z",
+  );
+  const trend = computeScoreTrend(current, [current, previous]);
+
+  assert.ok(trend);
+  assert.equal(trend.previousGeneratedAt, previous.generatedAt);
+  assert.equal(trend.overallChange, current.overall - previous.overall);
+  assert.equal(
+    trend.lanes.find((lane) => lane.label === "Code Quality + Testing")?.change,
+    68,
+  );
+  assert.equal(
+    trend.lanes.find((lane) => lane.label === "Backend/API")?.change,
+    0,
+  );
+});
+
+test("does not compare snapshots written with a different rubric", () => {
+  const current = computeSdeReadinessSnapshot(
+    [],
+    "2026-06-24T00:00:00.000Z",
+  );
+  const incompatible = {
+    overall: 80,
+    generatedAt: "2026-06-23T00:00:00.000Z",
+    breakdown: [
+      {
+        label: "Legacy combined lane",
+        score: 80,
+        weight: 1,
+        evidenceCount: 1,
+        explanation: "Legacy rubric.",
+      },
+    ],
+  };
+
+  assert.equal(computeScoreTrend(current, [incompatible]), undefined);
+});
+
+test("uses the newest compatible prior snapshot regardless of input order", () => {
+  const current = computeSdeReadinessSnapshot(
+    [],
+    "2026-06-24T00:00:00.000Z",
+  );
+  const older = computeSdeReadinessSnapshot(
+    [],
+    "2026-06-20T00:00:00.000Z",
+  );
+  older.overall = 10;
+  const newestCompatible = computeSdeReadinessSnapshot(
+    [],
+    "2026-06-23T00:00:00.000Z",
+  );
+  newestCompatible.overall = 20;
+  const newerIncompatible = {
+    overall: 100,
+    generatedAt: "2026-06-23T12:00:00.000Z",
+    breakdown: [],
+  };
+
+  const trend = computeScoreTrend(current, [
+    older,
+    newerIncompatible,
+    newestCompatible,
+  ]);
+
+  assert.ok(trend);
+  assert.equal(trend.previousGeneratedAt, newestCompatible.generatedAt);
+  assert.equal(trend.overallChange, -20);
 });

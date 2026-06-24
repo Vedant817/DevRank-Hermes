@@ -5,6 +5,7 @@ import {
   claimGithubWebhookDelivery,
   claimLinearWebhookDelivery,
   dailyTaskKey,
+  getRecentScoreSnapshots,
   insertDailyPlan,
 } from "../src/repositories.js";
 
@@ -75,7 +76,33 @@ test("webhook delivery claims reclaim stale processing rows", async () => {
   assert.match(normalizedSql(linearClaim), /received_at < now\(\) - interval '10 minutes'/);
 });
 
-function recordingSql() {
+test("loads a bounded score history in newest-first order", async () => {
+  const { calls, sql } = recordingSql([
+    {
+      breakdown: JSON.stringify([
+        {
+          evidenceCount: 2,
+          explanation: "Matched evidence.",
+          label: "Backend/API",
+          score: 70,
+          weight: 0.15,
+        },
+      ]),
+      created_at: new Date("2026-06-24T00:00:00.000Z"),
+      overall: "64",
+    },
+  ]);
+
+  const snapshots = await getRecentScoreSnapshots(sql, 1_000);
+  const query = requiredCall(calls, "from score_snapshots");
+
+  assert.equal(query.values[0], 100);
+  assert.equal(snapshots[0]?.overall, 64);
+  assert.equal(snapshots[0]?.generatedAt, "2026-06-24T00:00:00.000Z");
+  assert.equal(snapshots[0]?.breakdown[0]?.label, "Backend/API");
+});
+
+function recordingSql(result: unknown[] = []) {
   const calls: SqlCall[] = [];
   const sql = ((strings: TemplateStringsArray, ...values: unknown[]) => {
     calls.push({
@@ -83,7 +110,7 @@ function recordingSql() {
       values,
     });
 
-    return Promise.resolve([]);
+    return Promise.resolve(result);
   }) as unknown as SqlClient;
 
   return { calls, sql };

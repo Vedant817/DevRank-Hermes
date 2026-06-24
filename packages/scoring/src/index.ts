@@ -1,6 +1,20 @@
 import type { EvidenceItem, ScoreBreakdown, ScoreSnapshot } from "@repo/shared";
 import { evidenceText, sdeReadinessRubric } from "./rubrics.js";
 
+export interface ScoreTrend {
+  currentGeneratedAt: string;
+  lanes: ScoreTrendLane[];
+  overallChange: number;
+  previousGeneratedAt: string;
+}
+
+export interface ScoreTrendLane {
+  change: number;
+  currentScore: number;
+  label: string;
+  previousScore: number;
+}
+
 function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -75,6 +89,45 @@ export function isCurrentSdeReadinessSnapshot(snapshot: ScoreSnapshot): boolean 
   return true;
 }
 
+export function computeScoreTrend(
+  current: ScoreSnapshot,
+  recentSnapshots: ScoreSnapshot[],
+): ScoreTrend | undefined {
+  const currentTimestamp = timestampValue(current.generatedAt);
+  const previous = recentSnapshots
+    .filter((candidate) =>
+      timestampValue(candidate.generatedAt) < currentTimestamp &&
+      scoreSnapshotsAreComparable(current, candidate),
+    )
+    .sort((first, second) =>
+      timestampValue(second.generatedAt) - timestampValue(first.generatedAt),
+    )[0];
+
+  if (!previous) {
+    return undefined;
+  }
+
+  const previousByLabel = new Map(
+    previous.breakdown.map((lane) => [lane.label, lane.score]),
+  );
+
+  return {
+    currentGeneratedAt: current.generatedAt,
+    lanes: current.breakdown.map((lane) => {
+      const previousScore = previousByLabel.get(lane.label) ?? lane.score;
+
+      return {
+        change: lane.score - previousScore,
+        currentScore: lane.score,
+        label: lane.label,
+        previousScore,
+      };
+    }),
+    overallChange: current.overall - previous.overall,
+    previousGeneratedAt: previous.generatedAt,
+  };
+}
+
 function keywordMatchesText(text: string, keyword: string): boolean {
   const normalized = keyword.trim().toLowerCase();
 
@@ -93,4 +146,30 @@ export function explainWeakestLanes(snapshot: ScoreSnapshot, limit = 3): string[
     .sort((first, second) => first.score - second.score)
     .slice(0, limit)
     .map((lane) => lane.label);
+}
+
+function scoreSnapshotsAreComparable(
+  current: ScoreSnapshot,
+  previous: ScoreSnapshot,
+): boolean {
+  if (current.breakdown.length !== previous.breakdown.length) {
+    return false;
+  }
+
+  const previousWeights = new Map(
+    previous.breakdown.map((lane) => [lane.label, lane.weight]),
+  );
+
+  return current.breakdown.every((lane) => {
+    const previousWeight = previousWeights.get(lane.label);
+
+    return previousWeight !== undefined &&
+      Math.abs(previousWeight - lane.weight) <= 0.000001;
+  });
+}
+
+function timestampValue(value: string): number {
+  const timestamp = new Date(value).getTime();
+
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
 }

@@ -301,20 +301,24 @@ export async function getLatestScoreSnapshot(
 
   const row = rows[0];
 
-  if (!row) {
-    return undefined;
-  }
+  return row ? scoreSnapshotFromRow(row) : undefined;
+}
 
-  const breakdown =
-    typeof row.breakdown === "string"
-      ? JSON.parse(row.breakdown) as ScoreBreakdown[]
-      : row.breakdown;
+export async function getRecentScoreSnapshots(
+  sql: SqlClient,
+  limit = 20,
+): Promise<ScoreSnapshot[]> {
+  const boundedLimit = Number.isFinite(limit)
+    ? Math.max(1, Math.min(Math.floor(limit), 100))
+    : 20;
+  const rows = await sql<ScoreSnapshotRow[]>`
+    select overall, breakdown, created_at
+    from score_snapshots
+    order by created_at desc
+    limit ${boundedLimit}
+  `;
 
-  return {
-    overall: Number(row.overall),
-    generatedAt: toIso(row.created_at),
-    breakdown,
-  };
+  return rows.map(scoreSnapshotFromRow);
 }
 
 export async function getDashboardSummary(sql: SqlClient): Promise<DashboardSummary> {
@@ -1418,6 +1422,19 @@ export function weeklyPlanFromRow(row: WeeklyPlanRow): WeeklyPlan & { createdAt:
 
 function numberCount(value: string | number | undefined) {
   return Number(value ?? 0);
+}
+
+function scoreSnapshotFromRow(row: ScoreSnapshotRow): ScoreSnapshot {
+  const breakdown =
+    typeof row.breakdown === "string"
+      ? JSON.parse(row.breakdown) as ScoreBreakdown[]
+      : row.breakdown;
+
+  return {
+    overall: Number(row.overall),
+    generatedAt: toIso(row.created_at),
+    breakdown,
+  };
 }
 
 function toIso(value: Date | string): string {

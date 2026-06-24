@@ -79,6 +79,13 @@
   margin-bottom: 22px;
 }
 
+.scoreTrendSummary {
+  margin: 8px 0 0;
+  color: #59667a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .sectionHeader h2 {
   color: #172033;
   font-size: 22px;
@@ -97,9 +104,37 @@
 
 .scoreLabel {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   font-size: 15px;
+}
+
+.scoreValue {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 86px;
+}
+
+.scoreChange {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.scoreChange[data-state="improved"] {
+  color: #17663a;
+}
+
+.scoreChange[data-state="declined"] {
+  color: #b42318;
+}
+
+.scoreChange[data-state="baseline"],
+.scoreChange[data-state="unchanged"] {
+  color: #64748b;
 }
 
 .track {

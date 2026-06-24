@@ -2,15 +2,17 @@ import {
   closeSqlClient,
   createSqlClient,
   getDashboardSummary,
+  getRecentScoreSnapshots,
   type DashboardSummary,
 } from "@repo/db";
+import { computeScoreTrend, type ScoreTrend } from "@repo/scoring";
 import { ensureCurrentScoreSnapshot } from "./_lib/current-score";
 import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
 
 type DashboardState =
-  | { status: "ready"; summary: DashboardSummary }
+  | { scoreTrend?: ScoreTrend; status: "ready"; summary: DashboardSummary }
   | { status: "unavailable"; message: string };
 
 const setupPlanItems = [
@@ -48,7 +50,7 @@ export default async function Home() {
           <SetupPlan />
         </main>
       ) : (
-        <Dashboard summary={dashboard.summary} />
+        <Dashboard scoreTrend={dashboard.scoreTrend} summary={dashboard.summary} />
       )}
     </div>
   );
@@ -61,6 +63,12 @@ async function loadDashboardState(): Promise<DashboardState> {
     sql = createSqlClient();
     const summary = await getDashboardSummary(sql);
     const currentScore = await ensureCurrentScoreSnapshot(sql, summary.latestScoreSnapshot);
+    const recentSnapshots = currentScore.snapshot
+      ? await getRecentScoreSnapshots(sql)
+      : [];
+    const scoreTrend = currentScore.snapshot
+      ? computeScoreTrend(currentScore.snapshot, recentSnapshots)
+      : undefined;
 
     return {
       status: "ready",
@@ -68,6 +76,7 @@ async function loadDashboardState(): Promise<DashboardState> {
         ...summary,
         latestScoreSnapshot: currentScore.snapshot,
       },
+      ...(scoreTrend ? { scoreTrend } : {}),
     };
   } catch (error) {
     const message =
@@ -86,8 +95,17 @@ async function loadDashboardState(): Promise<DashboardState> {
   }
 }
 
-function Dashboard({ summary }: { summary: DashboardSummary }) {
+function Dashboard({
+  scoreTrend,
+  summary,
+}: {
+  scoreTrend?: ScoreTrend;
+  summary: DashboardSummary;
+}) {
   const scoreSnapshot = summary.latestScoreSnapshot;
+  const trendByLabel = new Map(
+    scoreTrend?.lanes.map((lane) => [lane.label, lane]),
+  );
 
   return (
     <main className={styles.main}>
@@ -97,26 +115,45 @@ function Dashboard({ summary }: { summary: DashboardSummary }) {
           <h2 id="score-heading">
             {scoreSnapshot ? `Skill Rank Dashboard - Overall ${scoreSnapshot.overall}%` : "No score snapshot yet"}
           </h2>
+          {scoreSnapshot ? (
+            <p className={styles.scoreTrendSummary}>
+              {scoreTrend
+                ? `${formatScoreChange(scoreTrend.overallChange)} overall since ${formatSnapshotDate(scoreTrend.previousGeneratedAt)}.`
+                : "Baseline snapshot. A trend will appear after the next compatible score recomputation."}
+            </p>
+          ) : null}
         </div>
         {scoreSnapshot ? (
           <div className={styles.scoreGrid}>
-            {scoreSnapshot.breakdown.map((score) => (
-              <div className={styles.scoreItem} key={score.label}>
-                <div className={styles.scoreLabel}>
-                  <span>{score.label}</span>
-                  <strong>{score.score}%</strong>
+            {scoreSnapshot.breakdown.map((score) => {
+              const laneTrend = trendByLabel.get(score.label);
+
+              return (
+                <div className={styles.scoreItem} key={score.label}>
+                  <div className={styles.scoreLabel}>
+                    <span>{score.label}</span>
+                    <div className={styles.scoreValue}>
+                      <strong>{score.score}%</strong>
+                      <span
+                        className={styles.scoreChange}
+                        data-state={scoreChangeState(laneTrend?.change)}
+                      >
+                        {laneTrend ? formatScoreChange(laneTrend.change) : "Baseline"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={styles.track}>
+                    <div
+                      className={styles.fill}
+                      style={{ width: `${score.score}%` }}
+                    />
+                  </div>
+                  <p className={styles.rowMeta}>
+                    {scoreMetadata(score)}
+                  </p>
                 </div>
-                <div className={styles.track}>
-                  <div
-                    className={styles.fill}
-                    style={{ width: `${score.score}%` }}
-                  />
-                </div>
-                <p className={styles.rowMeta}>
-                  {scoreMetadata(score)}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className={styles.emptyState}>
@@ -260,6 +297,37 @@ const dashboardLinks = [
 
 function scoreMetadata(score: NonNullable<DashboardSummary["latestScoreSnapshot"]>["breakdown"][number]) {
   return `${Math.round(score.weight * 100)}% weight | ${score.evidenceCount} evidence item(s) | ${score.explanation}`;
+}
+
+function formatScoreChange(change: number) {
+  if (change === 0) {
+    return "No change";
+  }
+
+  return `${change > 0 ? "+" : ""}${change} pts`;
+}
+
+function scoreChangeState(change: number | undefined) {
+  if (change === undefined) {
+    return "baseline";
+  }
+
+  if (change > 0) {
+    return "improved";
+  }
+
+  if (change < 0) {
+    return "declined";
+  }
+
+  return "unchanged";
+}
+
+function formatSnapshotDate(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeZone: "UTC",
+  }).format(new Date(value));
 }
 
 function SetupPlan() {
