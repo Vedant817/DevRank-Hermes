@@ -1,4 +1,9 @@
-import { readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
+import {
+  fetchWithPolicy,
+  readRuntimeEnv,
+  requireEnv,
+  type RuntimeEnv,
+} from "@repo/shared";
 
 interface GraphqlResponse<T> {
   data?: T;
@@ -12,13 +17,15 @@ export async function linearGraphql<T>(
 ): Promise<T> {
   const { LINEAR_API_KEY } = requireEnv(env, ["LINEAR_API_KEY"], "Linear API");
 
-  const response = await fetch("https://api.linear.app/graphql", {
+  const response = await fetchWithPolicy("https://api.linear.app/graphql", {
     method: "POST",
     headers: {
       Authorization: LINEAR_API_KEY,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ query, variables }),
+  }, {
+    retry: true,
   });
 
   if (!response.ok) {

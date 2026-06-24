@@ -1,4 +1,10 @@
-import { ConfigurationError, readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
+import {
+  ConfigurationError,
+  fetchWithPolicy,
+  readRuntimeEnv,
+  requireEnv,
+  type RuntimeEnv,
+} from "@repo/shared";
 
 export interface SearchResult {
   title: string;
@@ -41,7 +47,7 @@ async function tavilySearch(
 ): Promise<SearchResult[]> {
   const { TAVILY_API_KEY } = requireEnv(env, ["TAVILY_API_KEY"], "Tavily search");
 
-  const response = await fetch("https://api.tavily.com/search", {
+  const response = await fetchWithPolicy("https://api.tavily.com/search", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -52,6 +58,8 @@ async function tavilySearch(
       search_depth: "basic",
       max_results: 5,
     }),
+  }, {
+    retry: true,
   });
 
   if (!response.ok) {

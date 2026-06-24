@@ -1,4 +1,9 @@
-import { readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
+import {
+  fetchWithPolicy,
+  readRuntimeEnv,
+  requireEnv,
+  type RuntimeEnv,
+} from "@repo/shared";
 export * from "./chat-summary.js";
 export * from "./reusable-skills.js";
 export * from "./skill-extraction.js";
@@ -66,7 +71,7 @@ export async function runHermesMentorSummary(
 
   const config = resolveHermesRuntimeConfig(env);
   const fetchImpl = options.fetch ?? fetch;
-  const response = await fetchImpl(`${config.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+  const response = await fetchWithPolicy(`${config.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -88,6 +93,9 @@ export async function runHermesMentorSummary(
         },
       ],
     }),
+  }, {
+    fetch: fetchImpl,
+    retry: true,
   });
 
   if (!response.ok) {

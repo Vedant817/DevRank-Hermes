@@ -1,5 +1,6 @@
 import {
   ConfigurationError,
+  fetchWithPolicy,
   MEMORY_EMBEDDING_DIMENSIONS,
   readRuntimeEnv,
   type RuntimeEnv,
@@ -70,7 +71,7 @@ export async function embedTexts(
 
   const config = resolveEmbeddingRuntimeConfig(env);
   const fetchImpl = options.fetch ?? fetch;
-  const response = await fetchImpl(`${config.baseUrl.replace(/\/+$/, "")}/embeddings`, {
+  const response = await fetchWithPolicy(`${config.baseUrl.replace(/\/+$/, "")}/embeddings`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
@@ -83,6 +84,9 @@ export async function embedTexts(
       input: normalizedTexts.length === 1 ? normalizedTexts[0] : normalizedTexts,
       model: config.model,
     }),
+  }, {
+    fetch: fetchImpl,
+    retry: true,
   });
 
   if (!response.ok) {

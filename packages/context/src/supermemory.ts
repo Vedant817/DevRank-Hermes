@@ -1,4 +1,9 @@
-import { readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
+import {
+  fetchWithPolicy,
+  readRuntimeEnv,
+  requireEnv,
+  type RuntimeEnv,
+} from "@repo/shared";
 import type { ContextItem, ContextSearchInput, ContextWriteInput } from "./types.js";
 
 const DEFAULT_CONTEXT_LIMIT = 10;
@@ -29,7 +34,7 @@ export async function searchSupermemoryContext(
     url.searchParams.append("containerTags", tag);
   }
 
-  const response = await fetch(url, {
+  const response = await fetchWithPolicy(url, {
     method: "GET",
     headers: baseHeaders(env),
   });
@@ -64,7 +69,7 @@ export async function writeSupermemoryContext(
   input: ContextWriteInput,
   env: RuntimeEnv = readRuntimeEnv(),
 ): Promise<ContextItem> {
-  const response = await fetch("https://api.supermemory.ai/v3/documents", {
+  const response = await fetchWithPolicy("https://api.supermemory.ai/v3/documents", {
     method: "POST",
     headers: baseHeaders(env),
     body: JSON.stringify({

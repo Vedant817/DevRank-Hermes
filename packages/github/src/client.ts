@@ -1,5 +1,10 @@
 import { Octokit } from "@octokit/rest";
-import { readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
+import {
+  fetchWithPolicy,
+  readRuntimeEnv,
+  requireEnv,
+  type RuntimeEnv,
+} from "@repo/shared";
 
 export function createGithubClient(
   env: RuntimeEnv = readRuntimeEnv(),
@@ -12,5 +17,8 @@ export function createGithubClient(
 
   return new Octokit({
     auth: GITHUB_PERSONAL_ACCESS_TOKEN,
+    request: {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => fetchWithPolicy(input, init),
+    },
   });
 }

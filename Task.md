@@ -1027,7 +1027,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Add an idempotency boundary for scheduled Slack delivery.
 - [x] Stop local daemon logs from writing complete session results and configure bounded retention.
 - [x] Make local watch ingestion incremental with persisted checkpoints and resource limits.
-- [ ] Add deadlines and bounded retry policies to external HTTP calls.
+- [x] Add deadlines and bounded retry policies to external HTTP calls.
 - [ ] Paginate Linear backfill without silent truncation.
 - [ ] Refresh PR files and reviews from GitHub webhook activity.
 - [ ] Make GitHub backfill bounded, resumable, and rate-limit aware.

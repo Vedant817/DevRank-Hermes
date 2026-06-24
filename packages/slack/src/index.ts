@@ -1,5 +1,10 @@
 import { IncomingWebhook } from "@slack/webhook";
-import { readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
+import {
+  DEFAULT_EXTERNAL_HTTP_TIMEOUT_MS,
+  readRuntimeEnv,
+  requireEnv,
+  type RuntimeEnv,
+} from "@repo/shared";
 
 export interface SlackSendResult {
   text: string;
@@ -12,7 +17,9 @@ export async function sendSlackMessage(
 ): Promise<SlackSendResult> {
   const { SLACK_WEBHOOK_URL } = requireEnv(env, ["SLACK_WEBHOOK_URL"], "Slack");
 
-  const webhook = new IncomingWebhook(SLACK_WEBHOOK_URL);
+  const webhook = new IncomingWebhook(SLACK_WEBHOOK_URL, {
+    timeout: DEFAULT_EXTERNAL_HTTP_TIMEOUT_MS,
+  });
   await webhook.send({ text });
 
   return {
