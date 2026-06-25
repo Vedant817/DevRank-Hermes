@@ -1,34 +1,51 @@
 import { migrations } from "./schema.js";
-import { closeSqlClient, createSqlClient, type SqlClient } from "./client.js";
+import {
+  closeSqlClient,
+  createSqlClient,
+  runInTransaction,
+  type SqlClient,
+} from "./client.js";
 import type { RuntimeEnv } from "@repo/shared";
 
+const MIGRATION_LOCK_NAMESPACE = "devrank-os";
+const MIGRATION_LOCK_KEY = "schema-migrations";
+
 export async function runMigrations(sql: SqlClient): Promise<string[]> {
-  await sql`
-    create table if not exists schema_migrations (
-      id text primary key,
-      applied_at timestamptz not null default now()
-    )
-  `;
-
-  const applied: string[] = [];
-
-  for (const migration of migrations) {
-    const rows = await sql<{ id: string }[]>`
-      select id from schema_migrations where id = ${migration.id}
+  return runInTransaction(sql, async (transaction) => {
+    await transaction`
+      select pg_advisory_xact_lock(
+        hashtext(${MIGRATION_LOCK_NAMESPACE}),
+        hashtext(${MIGRATION_LOCK_KEY})
+      )
     `;
 
-    if (rows.length > 0) {
-      continue;
+    await transaction`
+      create table if not exists schema_migrations (
+        id text primary key,
+        applied_at timestamptz not null default now()
+      )
+    `;
+
+    const applied: string[] = [];
+
+    for (const migration of migrations) {
+      const rows = await transaction<{ id: string }[]>`
+        select id from schema_migrations where id = ${migration.id}
+      `;
+
+      if (rows.length > 0) {
+        continue;
+      }
+
+      await transaction.unsafe(migration.sql);
+      await transaction`
+        insert into schema_migrations (id) values (${migration.id})
+      `;
+      applied.push(migration.id);
     }
 
-    await sql.unsafe(migration.sql);
-    await sql`
-      insert into schema_migrations (id) values (${migration.id})
-    `;
-    applied.push(migration.id);
-  }
-
-  return applied;
+    return applied;
+  });
 }
 
 export async function runDbMigrations(env?: RuntimeEnv): Promise<{
