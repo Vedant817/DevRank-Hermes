@@ -5,7 +5,10 @@ import {
   computeSdeReadinessSnapshot,
   isCurrentSdeReadinessSnapshot,
 } from "../src/index.js";
-import { sdeReadinessRubric } from "../src/rubrics.js";
+import {
+  sdeReadinessRubric,
+  sdeReadinessRubricVersion,
+} from "../src/rubrics.js";
 import type { EvidenceItem } from "@repo/shared";
 
 test("keeps the scoring rubric weighted to a complete snapshot", () => {
@@ -24,6 +27,7 @@ test("detects score snapshots written by an older rubric", () => {
     isCurrentSdeReadinessSnapshot({
       overall: 0,
       generatedAt: "2026-06-22T00:00:00.000Z",
+      rubricVersion: "legacy-v0",
       breakdown: [
         {
           label: "Backend/API/System Design",
@@ -36,6 +40,33 @@ test("detects score snapshots written by an older rubric", () => {
     }),
     false,
   );
+});
+
+test("does not lower lane scores when unrelated evidence is added", () => {
+  const backendEvidence: EvidenceItem = {
+    id: "backend",
+    source: "manual",
+    title: "Backend API",
+    summary: "Built and deployed a server endpoint.",
+    occurredAt: "2026-06-22T00:00:00.000Z",
+  };
+  const initial = computeSdeReadinessSnapshot([backendEvidence]);
+  const withUnrelatedEvidence = computeSdeReadinessSnapshot([
+    backendEvidence,
+    {
+      id: "unrelated",
+      source: "manual",
+      title: "Study log",
+      summary: "Reviewed a topic without rubric keywords.",
+      occurredAt: "2026-06-23T00:00:00.000Z",
+    },
+  ]);
+  const initialBackend = initial.breakdown.find((lane) => lane.label === "Backend/API");
+  const updatedBackend = withUnrelatedEvidence.breakdown.find((lane) => lane.label === "Backend/API");
+
+  assert.equal(initial.rubricVersion, sdeReadinessRubricVersion);
+  assert.equal(updatedBackend?.score, initialBackend?.score);
+  assert.equal(updatedBackend?.evidenceCount, initialBackend?.evidenceCount);
 });
 
 test("matches scoring keywords as terms instead of substrings", () => {
@@ -131,6 +162,7 @@ test("does not compare snapshots written with a different rubric", () => {
   const incompatible = {
     overall: 80,
     generatedAt: "2026-06-23T00:00:00.000Z",
+    rubricVersion: "legacy-v0",
     breakdown: [
       {
         label: "Legacy combined lane",
@@ -163,6 +195,7 @@ test("uses the newest compatible prior snapshot regardless of input order", () =
   const newerIncompatible = {
     overall: 100,
     generatedAt: "2026-06-23T12:00:00.000Z",
+    rubricVersion: "legacy-v0",
     breakdown: [],
   };
 

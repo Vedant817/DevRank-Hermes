@@ -119,6 +119,7 @@ type ScoreSnapshotRow = {
   overall: string | number;
   breakdown: ScoreBreakdown[] | string;
   created_at: Date | string;
+  rubric_version: string;
 };
 
 type DashboardSourceRow = {
@@ -292,8 +293,13 @@ export async function insertScoreSnapshot(
   const breakdownJson = JSON.stringify(snapshot.breakdown);
 
   await sql`
-    insert into score_snapshots (overall, breakdown, created_at)
-    values (${snapshot.overall}, ${breakdownJson}::jsonb, ${snapshot.generatedAt})
+    insert into score_snapshots (overall, breakdown, rubric_version, created_at)
+    values (
+      ${snapshot.overall},
+      ${breakdownJson}::jsonb,
+      ${snapshot.rubricVersion},
+      ${snapshot.generatedAt}
+    )
   `;
 }
 
@@ -301,7 +307,7 @@ export async function getLatestScoreSnapshot(
   sql: SqlClient,
 ): Promise<ScoreSnapshot | undefined> {
   const rows = await sql<ScoreSnapshotRow[]>`
-    select overall, breakdown, created_at
+    select overall, breakdown, rubric_version, created_at
     from score_snapshots
     order by created_at desc
     limit 1
@@ -320,7 +326,7 @@ export async function getRecentScoreSnapshots(
     ? Math.max(1, Math.min(Math.floor(limit), 100))
     : 20;
   const rows = await sql<ScoreSnapshotRow[]>`
-    select overall, breakdown, created_at
+    select overall, breakdown, rubric_version, created_at
     from score_snapshots
     order by created_at desc
     limit ${boundedLimit}
@@ -1614,6 +1620,7 @@ function scoreSnapshotFromRow(row: ScoreSnapshotRow): ScoreSnapshot {
     overall: Number(row.overall),
     generatedAt: toIso(row.created_at),
     breakdown,
+    rubricVersion: row.rubric_version,
   };
 }
 

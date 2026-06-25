@@ -6,6 +6,8 @@ export interface RubricLane {
   keywords: string[];
 }
 
+export const sdeReadinessRubricVersion = "sde-readiness-v2";
+
 export const sdeReadinessRubric: RubricLane[] = [
   {
     label: "DSA",

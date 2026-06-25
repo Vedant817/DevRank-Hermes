@@ -34,6 +34,7 @@ export interface ScoreSnapshot {
   overall: number;
   generatedAt: string;
   breakdown: ScoreBreakdown[];
+  rubricVersion: string;
 }
 
 export interface DailyPlanTask {

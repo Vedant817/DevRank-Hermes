@@ -198,6 +198,7 @@ test("loads a bounded score history in newest-first order", async () => {
       ]),
       created_at: new Date("2026-06-24T00:00:00.000Z"),
       overall: "64",
+      rubric_version: "sde-readiness-v2",
     },
   ]);
 
@@ -208,6 +209,8 @@ test("loads a bounded score history in newest-first order", async () => {
   assert.equal(snapshots[0]?.overall, 64);
   assert.equal(snapshots[0]?.generatedAt, "2026-06-24T00:00:00.000Z");
   assert.equal(snapshots[0]?.breakdown[0]?.label, "Backend/API");
+  assert.equal(snapshots[0]?.rubricVersion, "sde-readiness-v2");
+  assert.match(normalizedSql(query), /rubric_version/);
 });
 
 function recordingSql(result: unknown[] = []) {

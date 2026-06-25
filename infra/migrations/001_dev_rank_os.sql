@@ -203,6 +203,7 @@ create table if not exists score_snapshots (
   id uuid primary key default gen_random_uuid(),
   overall numeric not null,
   breakdown jsonb not null,
+  rubric_version text not null,
   created_at timestamptz not null default now()
 );
 

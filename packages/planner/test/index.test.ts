@@ -6,6 +6,7 @@ import type { ScoreSnapshot } from "@repo/shared";
 const snapshot: ScoreSnapshot = {
   overall: 35,
   generatedAt: "2026-06-22T00:00:00.000Z",
+  rubricVersion: "sde-readiness-v2",
   breakdown: [
     {
       label: "Code Quality + Testing",

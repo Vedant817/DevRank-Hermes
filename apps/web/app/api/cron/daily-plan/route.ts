@@ -238,6 +238,13 @@ function parseScoreSnapshot(value: unknown) {
     };
   }
 
+  if (typeof value.rubricVersion !== "string" || value.rubricVersion.trim().length === 0) {
+    return {
+      ok: false as const,
+      response: jsonError(400, "invalid_snapshot", "snapshot.rubricVersion is required."),
+    };
+  }
+
   if (!Array.isArray(value.breakdown)) {
     return {
       ok: false as const,
@@ -263,6 +270,7 @@ function parseScoreSnapshot(value: unknown) {
       overall: value.overall,
       generatedAt: value.generatedAt,
       breakdown,
+      rubricVersion: value.rubricVersion,
     },
   };
 }

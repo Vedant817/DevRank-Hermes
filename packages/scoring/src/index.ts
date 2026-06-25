@@ -1,5 +1,9 @@
 import type { EvidenceItem, ScoreBreakdown, ScoreSnapshot } from "@repo/shared";
-import { evidenceText, sdeReadinessRubric } from "./rubrics.js";
+import {
+  evidenceText,
+  sdeReadinessRubric,
+  sdeReadinessRubricVersion,
+} from "./rubrics.js";
 
 export interface ScoreTrend {
   currentGeneratedAt: string;
@@ -19,20 +23,12 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function scoreLane(evidence: EvidenceItem[], keywords: string[]): number {
-  if (evidence.length === 0) {
+function scoreLane(matchingEvidenceCount: number): number {
+  if (matchingEvidenceCount === 0) {
     return 0;
   }
 
-  const matched = evidence.filter((item) => {
-    const text = evidenceText(item);
-    return keywords.some((keyword) => keywordMatchesText(text, keyword));
-  });
-
-  const coverage = matched.length / Math.max(evidence.length, 1);
-  const depthBonus = Math.min(matched.length * 8, 40);
-
-  return clampScore(coverage * 60 + depthBonus);
+  return clampScore(60 + Math.min(matchingEvidenceCount * 8, 40));
 }
 
 export function computeSdeReadinessSnapshot(
@@ -40,11 +36,11 @@ export function computeSdeReadinessSnapshot(
   generatedAt = new Date().toISOString(),
 ): ScoreSnapshot {
   const breakdown: ScoreBreakdown[] = sdeReadinessRubric.map((lane) => {
-    const laneScore = scoreLane(evidence, lane.keywords);
     const matchingEvidence = evidence.filter((item) => {
       const text = evidenceText(item);
       return lane.keywords.some((keyword) => keywordMatchesText(text, keyword));
     });
+    const laneScore = scoreLane(matchingEvidence.length);
 
     return {
       label: lane.label,
@@ -66,10 +62,15 @@ export function computeSdeReadinessSnapshot(
     overall,
     generatedAt,
     breakdown,
+    rubricVersion: sdeReadinessRubricVersion,
   };
 }
 
 export function isCurrentSdeReadinessSnapshot(snapshot: ScoreSnapshot): boolean {
+  if (snapshot.rubricVersion !== sdeReadinessRubricVersion) {
+    return false;
+  }
+
   if (snapshot.breakdown.length !== sdeReadinessRubric.length) {
     return false;
   }
@@ -152,6 +153,10 @@ function scoreSnapshotsAreComparable(
   current: ScoreSnapshot,
   previous: ScoreSnapshot,
 ): boolean {
+  if (current.rubricVersion !== previous.rubricVersion) {
+    return false;
+  }
+
   if (current.breakdown.length !== previous.breakdown.length) {
     return false;
   }
