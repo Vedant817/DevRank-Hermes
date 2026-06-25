@@ -69,6 +69,9 @@ TAVILY_API_KEY=...
 
 ## Local Development
 
+The app supports Node.js 24 LTS. From the repository root, run `nvm use`
+before installing dependencies or starting the app.
+
 ```bash
 pnpm --filter web dev
 ```

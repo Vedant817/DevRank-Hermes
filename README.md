@@ -24,7 +24,12 @@ scores, learning plans, Slack targets, and mentor summaries.
 
 ## Setup
 
+Use Node.js 24 LTS and pnpm 11. The root `.nvmrc` selects the supported Node
+major, which also matches the Vercel runtime declared by the web package.
+
 ```bash
+nvm use
+corepack enable
 pnpm install
 pnpm devrank env:check --feature database
 pnpm devrank db:migrate
