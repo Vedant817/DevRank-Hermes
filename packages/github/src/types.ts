@@ -17,9 +17,42 @@ export interface GithubPullRequestSummary {
   number: number;
   title: string;
   state: string;
+  headSha?: string | null;
   htmlUrl: string | null;
   mergedAt: string | null;
   updatedAt: string | null;
+}
+
+export type GithubPullRequestCheckStatus =
+  | "completed"
+  | "in_progress"
+  | "pending"
+  | "queued"
+  | "requested"
+  | "waiting";
+
+export type GithubPullRequestCheckConclusion =
+  | "action_required"
+  | "cancelled"
+  | "failure"
+  | "neutral"
+  | "skipped"
+  | "success"
+  | "timed_out";
+
+export interface GithubPullRequestCheckSummary {
+  appSlug: string | null;
+  completedAt: string | null;
+  conclusion: GithubPullRequestCheckConclusion | null;
+  detailsUrl: string | null;
+  headSha: string;
+  id: number;
+  name: string;
+  pullRequestId: number;
+  pullRequestNumber: number;
+  repoFullName: string;
+  startedAt: string | null;
+  status: GithubPullRequestCheckStatus;
 }
 
 export interface GithubPullRequestFileSummary {
@@ -77,6 +110,7 @@ export interface GithubBackfillResult {
     repoPage: number;
   };
   commits: GithubCommitSummary[];
+  pullRequestChecks?: GithubPullRequestCheckSummary[];
   pullRequestFiles: GithubPullRequestFileSummary[];
   pullRequestReviews: GithubPullRequestReviewSummary[];
   repoProfiles: GithubRepoProfileSummary[];

@@ -3,6 +3,7 @@ import type {
   GithubBackfillOptions,
   GithubBackfillResult,
   GithubCommitSummary,
+  GithubPullRequestCheckSummary,
   GithubPullRequestFileSummary,
   GithubPullRequestReviewSummary,
   GithubRepoProfileSummary,
@@ -21,6 +22,7 @@ const MAX_GITHUB_PULL_REQUEST_LIMIT_PER_REPO = 100;
 const MAX_GITHUB_REPO_LIMIT = 100;
 const DEFAULT_GITHUB_CONCURRENCY = 2;
 const DEFAULT_GITHUB_MINIMUM_RATE_LIMIT_REMAINING = 100;
+const MAX_GITHUB_CHECK_RUNS_PER_PULL_REQUEST = 100;
 const MAX_GITHUB_PROFILE_TREE_ENTRIES = 5_000;
 
 function mapRepo(
@@ -95,6 +97,7 @@ export async function backfillGithubUser(
   });
   const repoSummaries = repoResponse.data.map(mapRepo);
   const commits: GithubCommitSummary[] = [];
+  const pullRequestChecks: GithubPullRequestCheckSummary[] = [];
   const pullRequestFiles: GithubPullRequestFileSummary[] = [];
   const pullRequestReviews: GithubPullRequestReviewSummary[] = [];
   const repoProfiles: GithubRepoProfileSummary[] = [];
@@ -114,6 +117,7 @@ export async function backfillGithubUser(
         number: pull.number,
         title: pull.title,
         state: pull.state,
+        headSha: pull.head.sha,
         htmlUrl: pull.html_url,
         mergedAt: pull.merged_at,
         updatedAt: pull.updated_at,
@@ -132,6 +136,7 @@ export async function backfillGithubUser(
     const profile = shouldScanProfiles ? await profileGithubRepo(octokit, repo) : undefined;
 
     return {
+      checks: metadata.flatMap((item) => item.checks),
       commits: repoCommits,
       files: metadata.flatMap((item) => item.files),
       profile,
@@ -141,6 +146,7 @@ export async function backfillGithubUser(
   });
 
   for (const result of repoResults) {
+    pullRequestChecks.push(...result.checks);
     commits.push(...result.commits);
     pullRequestFiles.push(...result.files);
     pullRequestReviews.push(...result.reviews);
@@ -158,6 +164,7 @@ export async function backfillGithubUser(
       repoPage,
     },
     commits,
+    pullRequestChecks,
     pullRequestFiles,
     pullRequestReviews,
     repoProfiles,
@@ -174,11 +181,20 @@ export async function fetchGithubPullRequestMetadata(
     ignoreMissing?: boolean;
   } = {},
 ): Promise<{
+  checks: GithubPullRequestCheckSummary[];
   files: GithubPullRequestFileSummary[];
   reviews: GithubPullRequestReviewSummary[];
 }> {
   try {
-    const [files, reviews, reviewComments] = await Promise.all([
+    const headSha = await githubPullRequestHeadSha(octokit, repo, pullRequest);
+    const [checkRuns, files, reviews, reviewComments] = await Promise.all([
+      octokit.checks.listForRef({
+        filter: "latest",
+        owner: repo.owner,
+        per_page: MAX_GITHUB_CHECK_RUNS_PER_PULL_REQUEST,
+        ref: headSha,
+        repo: repo.name,
+      }),
       octokit.paginate(octokit.pulls.listFiles, {
         owner: repo.owner,
         pull_number: pullRequest.number,
@@ -201,6 +217,22 @@ export async function fetchGithubPullRequestMetadata(
     const commentCounts = reviewCommentCounts(reviewComments);
 
     return {
+      checks: checkRuns.data.check_runs
+        .slice(0, MAX_GITHUB_CHECK_RUNS_PER_PULL_REQUEST)
+        .map((checkRun) => ({
+          appSlug: checkRun.app?.slug ?? null,
+          completedAt: checkRun.completed_at,
+          conclusion: checkRun.conclusion,
+          detailsUrl: checkRun.details_url,
+          headSha: checkRun.head_sha,
+          id: checkRun.id,
+          name: checkRun.name,
+          pullRequestId: pullRequest.id,
+          pullRequestNumber: pullRequest.number,
+          repoFullName: repo.fullName,
+          startedAt: checkRun.started_at,
+          status: checkRun.status,
+        })),
       files: files.map((file) => ({
         additions: file.additions,
         changes: file.changes,
@@ -229,6 +261,7 @@ export async function fetchGithubPullRequestMetadata(
 
     if ((status === 404 || status === 410) && options.ignoreMissing !== false) {
       return {
+        checks: [],
         files: [],
         reviews: [],
       };
@@ -236,6 +269,24 @@ export async function fetchGithubPullRequestMetadata(
 
     throw error;
   }
+}
+
+async function githubPullRequestHeadSha(
+  octokit: Octokit,
+  repo: GithubRepoSummary,
+  pullRequest: GithubPullRequestSummary,
+) {
+  if (pullRequest.headSha) {
+    return pullRequest.headSha;
+  }
+
+  const response = await octokit.pulls.get({
+    owner: repo.owner,
+    pull_number: pullRequest.number,
+    repo: repo.name,
+  });
+
+  return response.data.head.sha;
 }
 
 export async function profileGithubRepo(

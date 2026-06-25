@@ -11,11 +11,34 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
   const listFiles = () => undefined;
   const listReviews = () => undefined;
   const listReviewComments = () => undefined;
+  const checkCalls: unknown[] = [];
   const commitCalls: unknown[] = [];
   const fileCalls: unknown[] = [];
   const pullCalls: unknown[] = [];
   const repoListCalls: unknown[] = [];
   const octokit = {
+    checks: {
+      listForRef: async (params: unknown) => {
+        checkCalls.push(params);
+
+        return {
+          data: {
+            check_runs: [{
+              app: { slug: "github-actions" },
+              completed_at: "2026-06-22T04:20:00Z",
+              conclusion: "success",
+              details_url: "https://github.com/salescode/devrank-os/actions/runs/404",
+              head_sha: "pr-head-123",
+              id: 404,
+              name: "test",
+              started_at: "2026-06-22T04:10:00Z",
+              status: "completed",
+            }],
+            total_count: 1,
+          },
+        };
+      },
+    },
     paginate: async (method: unknown, params: unknown) => {
       if (method === listFiles) {
         fileCalls.push(params);
@@ -82,6 +105,7 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
           number: 7,
           title: "Persist GitHub commits",
           state: "open",
+          head: { sha: "pr-head-123" },
           html_url: "https://github.com/salescode/devrank-os/pull/7",
           merged_at: null,
           updated_at: "2026-06-22T03:00:00Z",
@@ -156,6 +180,20 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
     repoPage: 1,
   });
   assert.equal(result.pullRequests.length, 1);
+  assert.deepEqual(result.pullRequestChecks, [{
+    appSlug: "github-actions",
+    completedAt: "2026-06-22T04:20:00Z",
+    conclusion: "success",
+    detailsUrl: "https://github.com/salescode/devrank-os/actions/runs/404",
+    headSha: "pr-head-123",
+    id: 404,
+    name: "test",
+    pullRequestId: 202,
+    pullRequestNumber: 7,
+    repoFullName: "salescode/devrank-os",
+    startedAt: "2026-06-22T04:10:00Z",
+    status: "completed",
+  }]);
   assert.deepEqual(result.pullRequestFiles, [{
     additions: 30,
     changes: 40,
@@ -239,6 +277,13 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
     pull_number: 7,
     repo: "devrank-os",
     per_page: 100,
+  });
+  assert.deepEqual(checkCalls[0], {
+    filter: "latest",
+    owner: "salescode",
+    per_page: 100,
+    ref: "pr-head-123",
+    repo: "devrank-os",
   });
 });
 
@@ -371,6 +416,11 @@ test("fails before fan-out when the GitHub rate limit is below the configured fl
 test("webhook metadata refresh does not treat hidden GitHub resources as empty", async () => {
   const error = Object.assign(new Error("Not Found"), { status: 404 });
   const octokit = {
+    checks: {
+      listForRef: async () => {
+        throw error;
+      },
+    },
     paginate: async () => {
       throw error;
     },
@@ -399,6 +449,7 @@ test("webhook metadata refresh does not treat hidden GitHub resources as empty",
       {
         htmlUrl: null,
         id: 202,
+        headSha: "private-head",
         mergedAt: null,
         number: 7,
         repoFullName: "salescode/private",
@@ -411,3 +462,154 @@ test("webhook metadata refresh does not treat hidden GitHub resources as empty",
     error,
   );
 });
+
+test("backfill metadata preserves hidden-resource semantics for check runs", async () => {
+  const error = Object.assign(new Error("Gone"), { status: 410 });
+  const octokit = {
+    checks: {
+      listForRef: async () => {
+        throw error;
+      },
+    },
+    paginate: async () => [],
+    pulls: {
+      listFiles: () => undefined,
+      listReviewComments: () => undefined,
+      listReviews: () => undefined,
+    },
+  } as unknown as Octokit;
+
+  const metadata = await fetchGithubPullRequestMetadata(
+    octokit,
+    githubRepo(),
+    githubPullRequest(),
+  );
+
+  assert.deepEqual(metadata, {
+    checks: [],
+    files: [],
+    reviews: [],
+  });
+});
+
+test("does not treat missing check-run permissions as healthy CI evidence", async () => {
+  const error = Object.assign(new Error("Resource not accessible by integration"), { status: 403 });
+  const octokit = {
+    checks: {
+      listForRef: async () => {
+        throw error;
+      },
+    },
+    paginate: async () => [],
+    pulls: {
+      listFiles: () => undefined,
+      listReviewComments: () => undefined,
+      listReviews: () => undefined,
+    },
+  } as unknown as Octokit;
+
+  await assert.rejects(
+    fetchGithubPullRequestMetadata(
+      octokit,
+      githubRepo(),
+      githubPullRequest(),
+    ),
+    error,
+  );
+});
+
+test("resolves missing PR head SHAs and caps returned check-run evidence", async () => {
+  const checkCalls: unknown[] = [];
+  const pullCalls: unknown[] = [];
+  const octokit = {
+    checks: {
+      listForRef: async (params: unknown) => {
+        checkCalls.push(params);
+
+        return {
+          data: {
+            check_runs: Array.from({ length: 101 }, (_, index) => ({
+              app: null,
+              completed_at: null,
+              conclusion: null,
+              details_url: null,
+              head_sha: "resolved-head",
+              id: index + 1,
+              name: `check-${index + 1}`,
+              started_at: null,
+              status: "queued",
+            })),
+            total_count: 101,
+          },
+        };
+      },
+    },
+    paginate: async () => [],
+    pulls: {
+      get: async (params: unknown) => {
+        pullCalls.push(params);
+        return {
+          data: {
+            head: { sha: "resolved-head" },
+          },
+        };
+      },
+      listFiles: () => undefined,
+      listReviewComments: () => undefined,
+      listReviews: () => undefined,
+    },
+  } as unknown as Octokit;
+
+  const metadata = await fetchGithubPullRequestMetadata(
+    octokit,
+    githubRepo(),
+    {
+      ...githubPullRequest(),
+      headSha: null,
+    },
+  );
+
+  assert.equal(metadata.checks.length, 100);
+  assert.equal(metadata.checks.at(-1)?.id, 100);
+  assert.deepEqual(pullCalls[0], {
+    owner: "salescode",
+    pull_number: 7,
+    repo: "devrank-os",
+  });
+  assert.deepEqual(checkCalls[0], {
+    filter: "latest",
+    owner: "salescode",
+    per_page: 100,
+    ref: "resolved-head",
+    repo: "devrank-os",
+  });
+});
+
+function githubRepo() {
+  return {
+    defaultBranch: "main",
+    fullName: "salescode/devrank-os",
+    htmlUrl: null,
+    id: 101,
+    language: "TypeScript",
+    name: "devrank-os",
+    owner: "salescode",
+    private: false,
+    pushedAt: null,
+    updatedAt: null,
+  };
+}
+
+function githubPullRequest() {
+  return {
+    headSha: "pr-head-123",
+    htmlUrl: null,
+    id: 202,
+    mergedAt: null,
+    number: 7,
+    repoFullName: "salescode/devrank-os",
+    state: "open",
+    title: "CI evidence",
+    updatedAt: null,
+  };
+}
