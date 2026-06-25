@@ -74,6 +74,43 @@ test("rejects a paginated Linear response without a continuation cursor", async 
   );
 });
 
+test("accepts the requested Linear workspace by id, name, or URL key", async () => {
+  for (const workspace of ["org-1", "DevRank", "devrank"]) {
+    const graphql: LinearGraphqlExecutor = async <T>() => ({
+      organization: { id: "org-1", name: "DevRank", urlKey: "devrank" },
+      projects: {
+        nodes: [],
+        pageInfo: { endCursor: null, hasNextPage: false },
+      },
+      issues: {
+        nodes: [],
+        pageInfo: { endCursor: null, hasNextPage: false },
+      },
+    }) as T;
+
+    await backfillLinear({ first: 25, workspace }, graphql);
+  }
+});
+
+test("rejects a Linear token scoped to a different requested workspace", async () => {
+  const graphql: LinearGraphqlExecutor = async <T>() => ({
+    organization: { id: "org-1", name: "DevRank", urlKey: "devrank" },
+    projects: {
+      nodes: [],
+      pageInfo: { endCursor: null, hasNextPage: false },
+    },
+    issues: {
+      nodes: [],
+      pageInfo: { endCursor: null, hasNextPage: false },
+    },
+  }) as T;
+
+  await assert.rejects(
+    backfillLinear({ workspace: "other-workspace" }, graphql),
+    /not requested workspace "other-workspace"/,
+  );
+});
+
 function project(id: string) {
   return {
     id,

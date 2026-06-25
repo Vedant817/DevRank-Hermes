@@ -152,6 +152,11 @@ const supermemoryRequirement: EnvRequirement = {
   oneOf: [["SUPERMEMORY_API_KEY"]],
 };
 
+const ownerRequirement: EnvRequirement = {
+  label: "Single-user owner",
+  oneOf: [["DEVRANK_OWNER_ID"]],
+};
+
 const commands: CommandSpec[] = [
   {
     name: "env:check",
@@ -489,7 +494,7 @@ async function handleEnvCheck(context: CommandContext) {
   const feature = configString(context, "feature") ?? "all";
   const featureRequirements: Record<string, EnvRequirement[]> = {
     api: [apiTokenRequirement, cronRequirement],
-    context: [databaseRequirement, supermemoryRequirement],
+    context: [],
     database: [databaseRequirement],
     embeddings: [embeddingsRequirement],
     github: [databaseRequirement, githubBackfillAuthRequirement],
@@ -498,6 +503,10 @@ async function handleEnvCheck(context: CommandContext) {
     market: [marketSearchRequirement],
     slack: [slackRequirement],
   };
+
+  if (feature === "all" || feature === "context") {
+    featureRequirements.context = contextRequirementsForEnv(context.env);
+  }
   const selected: Array<[string, EnvRequirement[] | undefined]> =
     feature === "all"
       ? Object.entries(featureRequirements)
@@ -511,9 +520,13 @@ async function handleEnvCheck(context: CommandContext) {
     feature,
     checks: selected.map(([name, requirements]) => {
       const checkedRequirements = requirements ?? [];
+      const provider = name === "context"
+        ? contextProviderForEnv(context.env)
+        : undefined;
 
       return {
         feature: name,
+        ...(provider ? { provider } : {}),
         ready: checkedRequirements.every((requirement) => requirementMet(requirement, context.env)),
         requirements: checkedRequirements.map((requirement) => ({
           label: requirement.label,
@@ -523,6 +536,50 @@ async function handleEnvCheck(context: CommandContext) {
       };
     }),
   };
+}
+
+export function getContextReadiness(env: NodeJS.ProcessEnv) {
+  const provider = contextProviderForEnv(env);
+  const requirements = contextRequirementsForEnv(env);
+
+  return {
+    provider,
+    ready: requirements.every((requirement) => requirementMet(requirement, env)),
+    requirements: requirements.map((requirement) => ({
+      label: requirement.label,
+      configured: requirementMet(requirement, env),
+      required: describeRequirement(requirement),
+    })),
+  };
+}
+
+function contextRequirementsForEnv(env: NodeJS.ProcessEnv): EnvRequirement[] {
+  switch (contextProviderForEnv(env)) {
+    case "combined":
+      return [ownerRequirement, databaseRequirement, supermemoryRequirement];
+    case "supermemory":
+      return [ownerRequirement, supermemoryRequirement];
+    case "supabase":
+      return [ownerRequirement, databaseRequirement];
+  }
+}
+
+function contextProviderForEnv(
+  env: NodeJS.ProcessEnv,
+): "combined" | "supermemory" | "supabase" {
+  const provider = envValue(env, "CONTEXT_PROVIDER") ?? "supabase";
+
+  switch (provider) {
+    case "combined":
+    case "supermemory":
+    case "supabase":
+      return provider;
+    default:
+      throw new CliError(
+        `Unsupported CONTEXT_PROVIDER "${provider}". Use one of: supabase, supermemory, combined.`,
+        2,
+      );
+  }
 }
 
 async function handleDbMigrate() {
@@ -890,7 +947,7 @@ async function persistGithubBackfillResult(context: CommandContext, result: unkn
   }
 }
 
-async function invokeLinearBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+export async function invokeLinearBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
   const directHandler = optionalFunction(moduleExports, ["linearBackfill", "run"]);
 
   if (directHandler) {
@@ -898,7 +955,10 @@ async function invokeLinearBackfill(moduleExports: ModuleExports, context: Comma
   }
 
   const backfillLinear = requiredFunction(moduleExports, ["backfillLinear"], moduleName, context.command);
-  return persistLinearBackfillResult(context, await backfillLinear(configNumber(context, "first", 100)));
+  return persistLinearBackfillResult(context, await backfillLinear({
+    first: configNumber(context, "first", 100),
+    workspace: configString(context, "workspace"),
+  }));
 }
 
 async function persistLinearBackfillResult(context: CommandContext, result: unknown) {

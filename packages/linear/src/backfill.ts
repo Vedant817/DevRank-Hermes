@@ -45,6 +45,11 @@ export type LinearGraphqlExecutor = <T>(
   variables: Record<string, unknown>,
 ) => Promise<T>;
 
+export interface LinearBackfillOptions {
+  first?: number;
+  workspace?: string;
+}
+
 const MAX_LINEAR_PAGE_SIZE = 100;
 const MAX_LINEAR_BACKFILL_PAGES = 1_000;
 
@@ -93,10 +98,11 @@ const backfillQuery = `
 `;
 
 export async function backfillLinear(
-  first = MAX_LINEAR_PAGE_SIZE,
+  firstOrOptions: number | LinearBackfillOptions = MAX_LINEAR_PAGE_SIZE,
   graphql: LinearGraphqlExecutor = linearGraphql,
 ): Promise<LinearBackfillResult> {
-  const pageSize = normalizePageSize(first);
+  const options = normalizeBackfillOptions(firstOrOptions);
+  const pageSize = normalizePageSize(options.first);
   const projectRows = new Map<string, LinearBackfillResult["projects"][number]>();
   const issueRows = new Map<string, LinearBackfillResult["issues"][number]>();
   let includeProjects = true;
@@ -121,6 +127,7 @@ export async function backfillLinear(
       projectsAfter,
     });
     organization ??= data.organization;
+    assertRequestedWorkspace(options.workspace, organization);
 
     for (const project of data.projects?.nodes ?? []) {
       projectRows.set(project.id, {
@@ -198,4 +205,46 @@ function normalizePageSize(value: number) {
   }
 
   return Math.max(1, Math.min(Math.floor(value), MAX_LINEAR_PAGE_SIZE));
+}
+
+function normalizeBackfillOptions(
+  firstOrOptions: number | LinearBackfillOptions,
+): Required<Pick<LinearBackfillOptions, "first">> & Pick<LinearBackfillOptions, "workspace"> {
+  if (typeof firstOrOptions === "number") {
+    return {
+      first: firstOrOptions,
+      workspace: undefined,
+    };
+  }
+
+  const workspace = firstOrOptions.workspace?.trim();
+
+  return {
+    first: firstOrOptions.first ?? MAX_LINEAR_PAGE_SIZE,
+    workspace: workspace || undefined,
+  };
+}
+
+function assertRequestedWorkspace(
+  requestedWorkspace: string | undefined,
+  organization: LinearBackfillQuery["organization"],
+) {
+  if (!requestedWorkspace) {
+    return;
+  }
+
+  const normalizedRequested = requestedWorkspace.toLowerCase();
+  const matches = [
+    organization?.id,
+    organization?.name,
+    organization?.urlKey,
+  ].some((candidate) => candidate?.trim().toLowerCase() === normalizedRequested);
+
+  if (!matches) {
+    const actualWorkspace = organization?.name ?? organization?.urlKey ?? organization?.id ?? "unknown";
+
+    throw new Error(
+      `Linear token resolved workspace "${actualWorkspace}", not requested workspace "${requestedWorkspace}".`,
+    );
+  }
 }

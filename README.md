@@ -46,7 +46,12 @@ Feature-specific env can be checked with:
 
 ```bash
 pnpm devrank env:check --feature all
+pnpm devrank env:check --feature context
 ```
+
+The context check follows `CONTEXT_PROVIDER`: `supabase` requires the database,
+`supermemory` requires `SUPERMEMORY_API_KEY`, and `combined` requires both.
+Every mode also requires `DEVRANK_OWNER_ID`.
 
 Hermes can use provider-neutral AI settings, with the existing OpenRouter
 settings still supported for compatibility:
@@ -111,6 +116,10 @@ pnpm devrank linear:backfill
 pnpm devrank slack:test
 pnpm devrank market:benchmark
 ```
+
+Use `linear:backfill --workspace <id|name|url-key>` to assert that the Linear
+token is scoped to the intended workspace. The command fails before persistence
+when the resolved workspace does not match.
 
 GitHub backfill processes 10 repositories per run, returns a `nextRepoPage`
 checkpoint, checks the GitHub core rate limit before fan-out, and imports up to
