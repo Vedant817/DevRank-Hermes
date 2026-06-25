@@ -1037,7 +1037,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Replace process-local API rate limiting with production-safe distributed enforcement.
 - [x] Enforce the supported single-user ownership boundary or implement tenant isolation.
 - [x] Make readiness scoring monotonic for unrelated evidence and version the rubric.
-- [ ] Generate evidence-adaptive planner tasks instead of fixed templates.
+- [x] Generate evidence-adaptive planner tasks instead of fixed templates.
 - [ ] Serialize migrations with transactions and a Postgres advisory lock.
 - [ ] Apply Linear dashboard filters and counts before pagination limits.
 - [ ] Align the supported Node runtime with Next.js requirements.

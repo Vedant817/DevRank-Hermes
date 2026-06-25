@@ -1,10 +1,13 @@
 import type { DailyPlan, DailyPlanTask, ScoreSnapshot, WeeklyPlan, WeeklyPlanTask } from "@repo/shared";
-import { explainWeakestLanes } from "@repo/scoring";
+
+type ScoreBreakdown = ScoreSnapshot["breakdown"][number];
 
 interface PlanRule {
+  advancedTitle: string;
   category: DailyPlanTask["category"];
   match: string[];
   minutes: number;
+  missingTitle: string;
   title: string;
 }
 
@@ -24,43 +27,13 @@ export interface GenerateWeeklyPlanOptions {
 
 const DEFAULT_MAX_WEAK_LANE_TASKS = 3;
 const MAX_WEAK_LANE_TASKS = 8;
-const DAILY_ESSENTIALS: DailyPlanTask[] = [
-  {
-    title: "DSA: solve Arrays/Hashing - Medium and Binary Search - Medium, then record the patterns.",
-    category: "dsa",
-    minutes: 45,
-    evidence: "Daily DSA target",
-  },
-  {
-    title: "Backend: build one endpoint with validation, pagination, and tests.",
-    category: "backend",
-    minutes: 60,
-    evidence: "Daily backend target",
-  },
-  {
-    title: "System design: revise rate limiter + Redis token bucket tradeoffs.",
-    category: "system_design",
-    minutes: 45,
-    evidence: "Daily system design target",
-  },
-  {
-    title: "GitHub/portfolio: improve one repo README with architecture diagram and setup steps.",
-    category: "github",
-    minutes: 45,
-    evidence: "Daily portfolio target",
-  },
-  {
-    title: "AI-agent: use Hermes/Codex/Claude to generate tests, then manually verify and document changes.",
-    category: "ai_agent",
-    minutes: 30,
-    evidence: "Daily AI-agent target",
-  },
-  {
-    title: "Minimum non-zero day: complete one 15-minute evidence-backed task and log what changed.",
-    category: "public_proof",
-    minutes: 15,
-    evidence: "Minimum non-zero day",
-  },
+const DAILY_ESSENTIAL_CATEGORIES: DailyPlanTask["category"][] = [
+  "dsa",
+  "backend",
+  "system_design",
+  "github",
+  "ai_agent",
+  "public_proof",
 ];
 
 const WEEKLY_PLAN_TEMPLATE: WeeklyPlanTask[] = [
@@ -174,55 +147,73 @@ const WEEKLY_PLAN_TEMPLATE: WeeklyPlanTask[] = [
 const planRules: PlanRule[] = [
   {
     match: ["dsa", "leetcode", "algorithm", "data structure"],
+    missingTitle: "Establish DSA evidence by solving one medium problem and recording the pattern and complexity.",
     title: "Solve two medium DSA questions and record the patterns learned.",
+    advancedTitle: "Solve one harder DSA problem under time constraints and compare two valid approaches.",
     category: "dsa",
     minutes: 45,
   },
   {
     match: ["backend", "api"],
+    missingTitle: "Establish backend evidence by shipping one validated endpoint with a focused test.",
     title: "Build or improve one API endpoint with validation, pagination, and tests.",
+    advancedTitle: "Harden one backend path for concurrency, retries, or failure recovery and prove it with tests.",
     category: "backend",
     minutes: 60,
   },
   {
     match: ["frontend", "ui", "react", "next.js", "accessibility"],
+    missingTitle: "Establish frontend evidence with one responsive, accessible workflow and interaction test.",
     title: "Improve one frontend workflow with accessible states and responsive layout checks.",
+    advancedTitle: "Profile and harden one frontend workflow for accessibility, performance, and failure states.",
     category: "frontend",
     minutes: 45,
   },
   {
     match: ["system design", "architecture"],
+    missingTitle: "Establish system-design evidence by documenting requirements, data flow, and one failure mode.",
     title: "Revise one system design component and document the tradeoffs.",
+    advancedTitle: "Stress-test one architecture decision with capacity estimates, failure recovery, and alternatives.",
     category: "system_design",
     minutes: 45,
   },
   {
     match: ["github", "portfolio", "repository", "readme", "pull request"],
+    missingTitle: "Establish portfolio evidence by documenting one repository's problem, architecture, setup, and validation.",
     title: "Improve one repository with README, tests, deployment, or architecture proof.",
+    advancedTitle: "Turn the strongest repository into reviewable proof with a focused PR, validation evidence, and deployment notes.",
     category: "github",
     minutes: 45,
   },
   {
     match: ["test", "testing", "qa", "quality"],
+    missingTitle: "Establish testing evidence with a regression test for one production-critical behavior.",
     title: "Add or harden tests around one user-facing or integration-critical path.",
+    advancedTitle: "Add adversarial integration coverage for concurrency, retries, or partial failure.",
     category: "testing",
     minutes: 45,
   },
   {
     match: ["devops", "cloud", "vercel", "supabase", "ci", "deploy"],
+    missingTitle: "Establish deployment evidence by running one production-like build or deploy check and recording the result.",
     title: "Verify one deploy, cron, database, or CI path and capture the evidence.",
+    advancedTitle: "Exercise rollback, alerting, or recovery for one deployed path and document the operational result.",
     category: "devops",
     minutes: 40,
   },
   {
     match: ["ai agent", "automation", "codex", "claude", "hermes"],
+    missingTitle: "Establish AI-agent evidence by completing one bounded task with manual verification and a saved result.",
     title: "Turn one repeated AI-agent workflow into a reusable documented skill.",
+    advancedTitle: "Evaluate one reusable agent workflow against failure cases and improve its validation gate.",
     category: "ai_agent",
     minutes: 30,
   },
   {
     match: ["communication", "content", "public proof", "resume", "linkedin", "docs"],
+    missingTitle: "Establish public proof with one concise note linked to a real commit, PR, test, or deployment.",
     title: "Write one evidence-backed project note, resume bullet, or public proof artifact.",
+    advancedTitle: "Publish a technical explanation that connects measured results to architecture and tradeoffs.",
     category: "public_proof",
     minutes: 30,
   },
@@ -234,7 +225,7 @@ export function generateDailyPlan(
   urgentLinearTask?: string,
 ): DailyPlan {
   const options = normalizeOptions(dateOrOptions, urgentLinearTask);
-  const weakLanes = explainWeakestLanes(snapshot, options.maxWeakLaneTasks);
+  const weakLanes = weakestBreakdown(snapshot, options.maxWeakLaneTasks);
   const tasks: DailyPlanTask[] = [];
 
   const linearTask = linearTaskForOptions(options);
@@ -244,8 +235,10 @@ export function generateDailyPlan(
   }
 
   if (options.includeDailyEssentials) {
-    for (const task of DAILY_ESSENTIALS) {
-      addTask(tasks, task);
+    for (const category of DAILY_ESSENTIAL_CATEGORIES) {
+      const task = taskForCategory(snapshot, category);
+
+      addTask(tasks, category === "public_proof" ? { ...task, minutes: 15 } : task);
     }
   }
 
@@ -286,9 +279,9 @@ export function generateWeeklyPlan(
 ): WeeklyPlan {
   const generatedAt = options.generatedAt ?? new Date().toISOString();
   const weekStart = options.weekStart ?? mondayOfDate(new Date(generatedAt));
-  const weakLanes = explainWeakestLanes(snapshot, normalizeTaskLimit(options.maxWeakLaneTasks));
+  const weakLanes = weakestBreakdown(snapshot, normalizeTaskLimit(options.maxWeakLaneTasks));
   const weeklyGoal = weakLanes.length > 0
-    ? `Improve ${weakLanes.join(", ")} with one evidence-backed ship each day.`
+    ? `Improve ${weakLanes.map((lane) => lane.label).join(", ")} with one evidence-backed ship each day.`
     : "Maintain daily SDE growth with one evidence-backed ship each day.";
   const tasks = WEEKLY_PLAN_TEMPLATE.map((task) => enrichWeeklyTask(task, weakLanes));
 
@@ -377,27 +370,89 @@ function addTask(tasks: DailyPlanTask[], task: DailyPlanTask): void {
   }
 }
 
-function taskForLane(lane: string): DailyPlanTask {
-  const normalizedLane = lane.toLowerCase();
+function taskForCategory(
+  snapshot: ScoreSnapshot,
+  category: DailyPlanTask["category"],
+): DailyPlanTask {
+  const rule = planRules.find((candidate) => candidate.category === category);
+
+  if (!rule) {
+    throw new Error(`No planner rule exists for category: ${category}`);
+  }
+
+  const lane = snapshot.breakdown.find((candidate) => laneMatchesRule(candidate, rule));
+
+  if (!lane) {
+    return {
+      title: rule.missingTitle,
+      category: rule.category,
+      minutes: rule.minutes,
+      evidence: "Rubric lane unavailable; baseline task selected",
+    };
+  }
+
+  return taskForRule(rule, lane);
+}
+
+function taskForLane(lane: ScoreBreakdown): DailyPlanTask {
+  const normalizedLane = lane.label.toLowerCase();
   const rule = planRules.find((candidate) =>
     candidate.match.some((keyword) => keywordMatchesText(normalizedLane, keyword)),
   );
 
   if (!rule) {
     return {
-      title: `Create evidence for ${lane}.`,
+      title: `Create evidence for ${lane.label}.`,
       category: "public_proof",
       minutes: 30,
-      evidence: lane,
+      evidence: laneEvidence(lane),
     };
   }
 
+  return taskForRule(rule, lane);
+}
+
+function taskForRule(rule: PlanRule, lane: ScoreBreakdown): DailyPlanTask {
   return {
-    title: rule.title,
+    title: adaptiveTitle(rule, lane),
     category: rule.category,
     minutes: rule.minutes,
-    evidence: lane,
+    evidence: laneEvidence(lane),
   };
+}
+
+function adaptiveTitle(rule: PlanRule, lane: ScoreBreakdown): string {
+  if (lane.evidenceCount === 0) {
+    return rule.missingTitle;
+  }
+
+  if (lane.score >= 80 && lane.evidenceCount >= 3) {
+    return rule.advancedTitle;
+  }
+
+  return rule.title;
+}
+
+function laneEvidence(lane: ScoreBreakdown): string {
+  const itemLabel = lane.evidenceCount === 1 ? "item" : "items";
+
+  return `${lane.label}: ${lane.score}% from ${lane.evidenceCount} evidence ${itemLabel}`;
+}
+
+function laneMatchesRule(lane: ScoreBreakdown, rule: PlanRule): boolean {
+  const normalizedLane = lane.label.toLowerCase();
+
+  return rule.match.some((keyword) => keywordMatchesText(normalizedLane, keyword));
+}
+
+function weakestBreakdown(snapshot: ScoreSnapshot, limit: number): ScoreBreakdown[] {
+  return [...snapshot.breakdown]
+    .sort((first, second) =>
+      first.score - second.score ||
+      first.evidenceCount - second.evidenceCount ||
+      first.label.localeCompare(second.label),
+    )
+    .slice(0, limit);
 }
 
 function keywordMatchesText(text: string, keyword: string): boolean {
@@ -431,9 +486,9 @@ function normalizePlannerText(value: string | undefined): string | undefined {
   return trimmed.slice(0, 280);
 }
 
-function enrichWeeklyTask(task: WeeklyPlanTask, weakLanes: string[]): WeeklyPlanTask {
+function enrichWeeklyTask(task: WeeklyPlanTask, weakLanes: ScoreBreakdown[]): WeeklyPlanTask {
   const matchingLane = weakLanes.find((lane) => {
-    const normalizedLane = lane.toLowerCase();
+    const normalizedLane = lane.label.toLowerCase();
 
     return task.category === taskForLane(lane).category ||
       normalizedLane.includes(task.category.replace("_", " "));
@@ -445,8 +500,23 @@ function enrichWeeklyTask(task: WeeklyPlanTask, weakLanes: string[]): WeeklyPlan
 
   return {
     ...task,
-    evidence: task.evidence ? `${task.evidence}; weak lane: ${matchingLane}` : `Weak lane: ${matchingLane}`,
+    title: `${task.title} ${weeklyAdjustment(matchingLane)}`,
+    evidence: task.evidence
+      ? `${task.evidence}; ${laneEvidence(matchingLane)}`
+      : laneEvidence(matchingLane),
   };
+}
+
+function weeklyAdjustment(lane: ScoreBreakdown): string {
+  if (lane.evidenceCount === 0) {
+    return "Finish with the first persisted proof for this lane.";
+  }
+
+  if (lane.score >= 80 && lane.evidenceCount >= 3) {
+    return "Increase the difficulty and document tradeoffs instead of repeating existing proof.";
+  }
+
+  return `Add independent proof beyond the ${lane.evidenceCount} existing evidence item(s).`;
 }
 
 function mondayOfDate(date: Date): string {

@@ -16,7 +16,6 @@
     "test:unit": "tsx --test test/*.test.ts"
   },
   "dependencies": {
-    "@repo/scoring": "workspace:*",
     "@repo/shared": "workspace:*"
   },
   "devDependencies": {

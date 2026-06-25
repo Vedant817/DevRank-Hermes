@@ -67,14 +67,18 @@ test("generates daily plan tasks from weakest rubric lanes", () => {
     "frontend",
   ]);
   assert.equal(plan.targetMinutes, 400);
-  assert.match(plan.tasks.find((task) => task.category === "dsa")?.title ?? "", /Arrays\/Hashing - Medium/);
-  assert.match(plan.tasks.find((task) => task.category === "dsa")?.title ?? "", /Binary Search - Medium/);
+  assert.match(plan.tasks.find((task) => task.category === "dsa")?.title ?? "", /harder DSA problem/);
   assert.match(plan.tasks.find((task) => task.category === "backend")?.title ?? "", /validation, pagination, and tests/);
-  assert.match(plan.tasks.find((task) => task.category === "system_design")?.title ?? "", /Redis token bucket/);
+  assert.match(plan.tasks.find((task) => task.category === "system_design")?.title ?? "", /Establish system-design evidence/);
   assert.match(plan.tasks.find((task) => task.category === "frontend")?.title ?? "", /accessible states/);
-  assert.match(plan.tasks.find((task) => task.category === "github")?.title ?? "", /architecture diagram/);
-  assert.match(plan.tasks.find((task) => task.category === "ai_agent")?.title ?? "", /manually verify/);
-  assert.match(plan.tasks.find((task) => task.category === "public_proof")?.title ?? "", /Minimum non-zero day/);
+  assert.match(plan.tasks.find((task) => task.category === "github")?.title ?? "", /Establish portfolio evidence/);
+  assert.match(plan.tasks.find((task) => task.category === "ai_agent")?.title ?? "", /Establish AI-agent evidence/);
+  assert.match(plan.tasks.find((task) => task.category === "public_proof")?.title ?? "", /Establish public proof/);
+  assert.equal(plan.tasks.find((task) => task.category === "public_proof")?.minutes, 15);
+  assert.equal(
+    plan.tasks.find((task) => task.category === "backend")?.evidence,
+    "Backend/API: 25% from 1 evidence item",
+  );
 });
 
 test("ignores blank urgent Linear tasks and clamps weak lane limits", () => {
@@ -115,12 +119,13 @@ test("formats Slack message with greeting, target time, and SDE switch plan", ()
   assert.match(slackText, /Today's SDE Switch Plan/);
   assert.match(slackText, /Target time: \d+ min/);
   assert.match(slackText, /Minimum non-zero day: complete one 15-minute evidence-backed task\./);
-  assert.match(slackText, /DSA: solve Arrays\/Hashing - Medium and Binary Search - Medium/);
-  assert.match(slackText, /Backend: build one endpoint with validation, pagination, and tests/);
-  assert.match(slackText, /AI-agent: use Hermes\/Codex\/Claude to generate tests/);
+  assert.match(slackText, /harder DSA problem under time constraints/);
+  assert.match(slackText, /Build or improve one API endpoint with validation, pagination, and tests/);
+  assert.match(slackText, /Establish AI-agent evidence/);
+  assert.match(slackText, /Backend\/API: 25% from 1 evidence item/);
 });
 
-test("generates weekly plan with fixed weekday ladder and weak lane goal", () => {
+test("adapts the weekly ladder to persisted weak-lane evidence", () => {
   const plan = generateWeeklyPlan(snapshot, {
     generatedAt: "2026-06-24T10:00:00.000Z",
     maxWeakLaneTasks: 3,
@@ -134,5 +139,7 @@ test("generates weekly plan with fixed weekday ladder and weak lane goal", () =>
   assert.deepEqual(plan.tasks.slice(0, 2).map((task) => task.day), ["Monday", "Monday"]);
   assert.match(plan.tasks[0]?.title ?? "", /Arrays\/Hashing/);
   assert.match(plan.tasks[1]?.title ?? "", /Backend API/);
+  assert.match(plan.tasks[1]?.title ?? "", /beyond the 1 existing evidence item/);
+  assert.match(plan.tasks[1]?.evidence ?? "", /Backend\/API: 25% from 1 evidence item/);
   assert.match(plan.tasks.find((task) => task.day === "Sunday" && task.category === "public_proof")?.title ?? "", /resume, LinkedIn, X/);
 });
