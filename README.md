@@ -91,6 +91,10 @@ imports with `sourceType` set to `cloud_export`, `manual_export`, or
 
 ## Main Commands
 
+DevRank OS is a single-user deployment. Set `DEVRANK_OWNER_ID` to a stable
+identifier such as `vedant`; API, cron, dashboard, and context access fail
+closed when that owner boundary is missing.
+
 ```bash
 pnpm devrank ingest:local-ai --codex-sessions-dir ~/.codex/sessions
 pnpm devrank ingest:local-ai --codex-sessions-dir ~/.codex/sessions --store-embeddings

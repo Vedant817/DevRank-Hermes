@@ -3,6 +3,7 @@ import {
   containsLikelySecret,
   getOptionalObject,
   getOptionalString,
+  getOwnerScopedContainerTags,
   getRequiredString,
   jsonError,
   jsonOk,
@@ -88,6 +89,11 @@ export async function POST(request: Request) {
   if (!containerTags.ok) {
     return containerTags.response;
   }
+  const ownerScope = getOwnerScopedContainerTags(containerTags.value);
+
+  if (!ownerScope.ok) {
+    return ownerScope.response;
+  }
 
   if (containsLikelySecretInJson({
     metadata: metadata.value,
@@ -105,7 +111,7 @@ export async function POST(request: Request) {
       content: summary.value,
       source: source.value,
       sourceId: getOptionalString(body.value, "sourceId"),
-      containerTags: containerTags.value,
+      containerTags: ownerScope.value,
       metadata: metadata.value,
     });
 

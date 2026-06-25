@@ -2,8 +2,32 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   rateLimit,
+  requireApiAuth,
   type RateLimitStore,
 } from "../app/api/_lib/route-utils";
+
+test("API auth fails closed without a configured single-user owner", () => {
+  const previousToken = process.env.DEVRANK_API_TOKEN;
+  const previousOwner = process.env.DEVRANK_OWNER_ID;
+  process.env.DEVRANK_API_TOKEN = "test-token";
+  delete process.env.DEVRANK_OWNER_ID;
+
+  try {
+    const missingOwner = requireApiAuth(requestWithHeaders({
+      authorization: "Bearer test-token",
+    }));
+    process.env.DEVRANK_OWNER_ID = "vedant";
+    const configured = requireApiAuth(requestWithHeaders({
+      authorization: "Bearer test-token",
+    }));
+
+    assert.equal(missingOwner?.status, 503);
+    assert.equal(configured, null);
+  } finally {
+    restoreEnv("DEVRANK_API_TOKEN", previousToken);
+    restoreEnv("DEVRANK_OWNER_ID", previousOwner);
+  }
+});
 
 test("rate limiter ignores spoofed IP headers unless proxy trust is enabled", async () => {
   const previousTrust = process.env.DEVRANK_TRUST_PROXY_IP_HEADERS;
@@ -152,12 +176,7 @@ function requestWithHeaders(headers: Record<string, string>) {
 }
 
 function restoreTrustProxyHeader(value: string | undefined) {
-  if (value === undefined) {
-    delete process.env.DEVRANK_TRUST_PROXY_IP_HEADERS;
-    return;
-  }
-
-  process.env.DEVRANK_TRUST_PROXY_IP_HEADERS = value;
+  restoreEnv("DEVRANK_TRUST_PROXY_IP_HEADERS", value);
 }
 
 function memoryRateLimitStore(): RateLimitStore {
@@ -177,4 +196,13 @@ function memoryRateLimitStore(): RateLimitStore {
       resetAt: new Date(bucket.resetAt).toISOString(),
     };
   };
+}
+
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[name];
+    return;
+  }
+
+  process.env[name] = value;
 }

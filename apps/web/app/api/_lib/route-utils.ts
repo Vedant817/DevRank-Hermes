@@ -4,6 +4,10 @@ import {
   closeSqlClient,
   createSqlClient,
 } from "@repo/db";
+import {
+  resolveSingleUserOwner,
+  scopeContainerTagsForOwner,
+} from "@repo/shared";
 import { NextResponse } from "next/server";
 
 type JsonObject = Record<string, unknown>;
@@ -301,23 +305,65 @@ export function requireApiAuth(
     options.scopedEnvName !== undefined &&
     getEnvValue(options.scopedEnvName) !== undefined
   ) {
-    return requireBearerSecret(request, [{
+    const authError = requireBearerSecret(request, [{
       envName: options.scopedEnvName,
       label: options.label ?? "scoped API token",
     }]);
+
+    return authError ?? requireOwnerBoundary();
   }
 
-  return requireBearerSecret(request, [{
+  const authError = requireBearerSecret(request, [{
     envName: "DEVRANK_API_TOKEN",
     label: options.label ?? "API token",
   }]);
+
+  return authError ?? requireOwnerBoundary();
 }
 
 export function requireCronAuth(request: Request) {
-  return requireBearerSecret(request, [{
+  const authError = requireBearerSecret(request, [{
     envName: "CRON_SECRET",
     label: "cron secret",
   }]);
+
+  return authError ?? requireOwnerBoundary();
+}
+
+export function getOwnerScopedContainerTags(containerTags: string[] | undefined) {
+  try {
+    return {
+      ok: true as const,
+      value: scopeContainerTagsForOwner(containerTags),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Owner scope is invalid.";
+    const mismatch = message.includes("does not match");
+
+    return {
+      ok: false as const,
+      response: jsonError(
+        mismatch ? 403 : 503,
+        mismatch ? "owner_scope_mismatch" : "owner_not_configured",
+        message,
+      ),
+    };
+  }
+}
+
+export function getSingleUserOwner() {
+  try {
+    return { ok: true as const, value: resolveSingleUserOwner() };
+  } catch (error) {
+    return {
+      ok: false as const,
+      response: jsonError(
+        503,
+        "owner_not_configured",
+        error instanceof Error ? error.message : "Single-user owner is not configured.",
+      ),
+    };
+  }
 }
 
 export function getRequiredEnv(name: string) {
@@ -474,6 +520,12 @@ async function distributedRateLimitStore(input: {
   } finally {
     await closeSqlClient(sql);
   }
+}
+
+function requireOwnerBoundary() {
+  const owner = getSingleUserOwner();
+
+  return owner.ok ? null : owner.response;
 }
 
 export function containsLikelySecret(value: string) {

@@ -25,14 +25,19 @@ test("normalizes context writes with a stable source id", () => {
 });
 
 test("combined context search returns the healthy provider and removes duplicate content", async () => {
+  const searchScopes: Array<string[] | undefined> = [];
   const providers = fakeProviders({
-    searchSupabase: async () => [{
-      id: "supabase-1",
-      score: 0.7,
-      source: "supabase",
-      summary: "Shared context",
-      title: "Context",
-    }],
+    searchSupabase: async (input) => {
+      searchScopes.push(input.containerTags);
+
+      return [{
+        id: "supabase-1",
+        score: 0.7,
+        source: "supabase",
+        summary: "Shared context",
+        title: "Context",
+      }];
+    },
     searchSupermemory: async () => [{
       id: "supermemory-1",
       score: 0.9,
@@ -50,7 +55,7 @@ test("combined context search returns the healthy provider and removes duplicate
 
   const deduplicated = await searchContext(
     { query: "context" },
-    { CONTEXT_PROVIDER: "combined" },
+    { CONTEXT_PROVIDER: "combined", DEVRANK_OWNER_ID: "vedant" },
     providers,
   );
   providers.searchSupermemoryContext = async () => {
@@ -58,7 +63,7 @@ test("combined context search returns the healthy provider and removes duplicate
   };
   const fallback = await searchContext(
     { query: "context" },
-    { CONTEXT_PROVIDER: "combined" },
+    { CONTEXT_PROVIDER: "combined", DEVRANK_OWNER_ID: "vedant" },
     providers,
   );
 
@@ -66,6 +71,33 @@ test("combined context search returns the healthy provider and removes duplicate
   assert.equal(deduplicated[0]?.source, "supermemory");
   assert.equal(fallback.length, 1);
   assert.equal(fallback[0]?.source, "supabase");
+  assert.deepEqual(searchScopes, [["user:vedant"], ["user:vedant"]]);
+});
+
+test("context access rejects a different user scope", async () => {
+  const providers = fakeProviders({
+    writeSupabase: async () => {
+      throw new Error("unused");
+    },
+    writeSupermemory: async () => {
+      throw new Error("unused");
+    },
+  });
+
+  await assert.rejects(
+    searchContext(
+      {
+        containerTags: ["user:other"],
+        query: "context",
+      },
+      {
+        CONTEXT_PROVIDER: "supabase",
+        DEVRANK_OWNER_ID: "vedant",
+      },
+      providers,
+    ),
+    /does not match the configured single-user owner/,
+  );
 });
 
 test("combined context search fails when every provider fails", async () => {
@@ -87,7 +119,7 @@ test("combined context search fails when every provider fails", async () => {
   await assert.rejects(
     searchContext(
       { query: "context" },
-      { CONTEXT_PROVIDER: "combined" },
+      { CONTEXT_PROVIDER: "combined", DEVRANK_OWNER_ID: "vedant" },
       providers,
     ),
     /All configured context providers failed/,
@@ -124,17 +156,20 @@ test("combined context writes record Supermemory success in Supabase metadata", 
     },
     {
       CONTEXT_PROVIDER: "combined",
+      DEVRANK_OWNER_ID: "vedant",
       SUPERMEMORY_API_KEY: "test-key",
     },
     providers,
   );
 
   const supabaseInput = writes[0] as {
+    containerTags?: string[];
     metadata?: { externalContext?: { supermemory?: { id?: string; status?: string } } };
     sourceId?: string;
   };
 
   assert.equal(typeof supabaseInput.sourceId, "string");
+  assert.deepEqual(supabaseInput.containerTags, ["user:vedant"]);
   assert.equal(supabaseInput.metadata?.externalContext?.supermemory?.status, "written");
   assert.equal(supabaseInput.metadata?.externalContext?.supermemory?.id, "supermemory-1");
 });
@@ -167,6 +202,7 @@ test("combined context writes record Supermemory failure status before rethrowin
       },
       {
         CONTEXT_PROVIDER: "combined",
+        DEVRANK_OWNER_ID: "vedant",
         SUPERMEMORY_API_KEY: "test-key",
       },
       providers,
@@ -221,6 +257,7 @@ test("combined context retries reuse the same remote identity after a Supabase f
   };
   const env = {
     CONTEXT_PROVIDER: "combined",
+    DEVRANK_OWNER_ID: "vedant",
     SUPERMEMORY_API_KEY: "test-key",
   };
 

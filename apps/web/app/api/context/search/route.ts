@@ -1,6 +1,7 @@
 import {
   getOptionalInteger,
   getOptionalObject,
+  getOwnerScopedContainerTags,
   getRequiredString,
   jsonError,
   jsonOk,
@@ -75,12 +76,17 @@ export async function POST(request: Request) {
   if (!containerTags.ok) {
     return containerTags.response;
   }
+  const ownerScope = getOwnerScopedContainerTags(containerTags.value);
+
+  if (!ownerScope.ok) {
+    return ownerScope.response;
+  }
 
   try {
     const results = await searchContext({
       query: query.value,
       limit: limit.value,
-      containerTags: containerTags.value,
+      containerTags: ownerScope.value,
     });
 
     return jsonOk({ results });

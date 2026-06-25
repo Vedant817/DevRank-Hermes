@@ -8,6 +8,7 @@ import {
 import {
   containsLikelySecretInJson,
   getOptionalString,
+  getSingleUserOwner,
   isJsonObject,
   jsonError,
   jsonOk,
@@ -94,6 +95,18 @@ export async function POST(request: Request) {
       field: "targetId",
       scope,
     });
+  }
+
+  if (scope === "user") {
+    const owner = getSingleUserOwner();
+
+    if (!owner.ok) {
+      return owner.response;
+    }
+
+    if (targetId !== owner.value.id) {
+      return jsonError(403, "owner_scope_mismatch", "User scope must match the configured owner.");
+    }
   }
 
   try {

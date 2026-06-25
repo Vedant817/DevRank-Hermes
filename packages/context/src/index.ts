@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import { readRuntimeEnv, type RuntimeEnv } from "@repo/shared";
+import {
+  readRuntimeEnv,
+  scopeContainerTagsForOwner,
+  type RuntimeEnv,
+} from "@repo/shared";
 import { searchSupabaseContext, writeSupabaseContext } from "./supabase.js";
 import { searchSupermemoryContext, writeSupermemoryContext } from "./supermemory.js";
 import type { ContextItem, ContextSearchInput, ContextWriteInput } from "./types.js";
@@ -23,14 +27,19 @@ export async function searchContext(
   env: RuntimeEnv = readRuntimeEnv(),
   providers: ContextProviders = defaultProviders,
 ): Promise<ContextItem[]> {
+  const scopedInput = {
+    ...input,
+    containerTags: scopeContainerTagsForOwner(input.containerTags, env),
+  };
+
   if (env.CONTEXT_PROVIDER === "supermemory") {
-    return providers.searchSupermemoryContext(input, env);
+    return providers.searchSupermemoryContext(scopedInput, env);
   }
 
   if (env.CONTEXT_PROVIDER === "combined") {
     const [supabase, supermemory] = await Promise.allSettled([
-      providers.searchSupabaseContext(input),
-      providers.searchSupermemoryContext(input, env),
+      providers.searchSupabaseContext(scopedInput),
+      providers.searchSupermemoryContext(scopedInput, env),
     ]);
 
     if (supabase.status === "rejected" && supermemory.status === "rejected") {
@@ -43,11 +52,11 @@ export async function searchContext(
     return mergeContextResults(
       supabase.status === "fulfilled" ? supabase.value : [],
       supermemory.status === "fulfilled" ? supermemory.value : [],
-      input.limit ?? 10,
+      scopedInput.limit ?? 10,
     );
   }
 
-  return providers.searchSupabaseContext(input);
+  return providers.searchSupabaseContext(scopedInput);
 }
 
 function mergeContextResults(
@@ -76,7 +85,10 @@ export async function writeContext(
   env: RuntimeEnv = readRuntimeEnv(),
   providers: ContextProviders = defaultProviders,
 ): Promise<ContextItem> {
-  const normalizedInput = normalizeContextWriteInput(input);
+  const normalizedInput = normalizeContextWriteInput({
+    ...input,
+    containerTags: scopeContainerTagsForOwner(input.containerTags, env),
+  });
 
   if (env.CONTEXT_PROVIDER === "supermemory") {
     return providers.writeSupermemoryContext(normalizedInput, env);

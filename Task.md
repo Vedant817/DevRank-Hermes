@@ -804,7 +804,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `CONTEXT_PROVIDER=supermemory`.
   - [x] `CONTEXT_PROVIDER=combined`.
 - [ ] Use deterministic Supermemory `containerTag` values:
-  - [ ] `user:{userId}` for user-level memory.
+  - [x] `user:{userId}` for user-level memory.
   - [ ] `project:{projectId}` for project-level memory.
   - [ ] `agent:{agentId}` for agent-specific memory.
   - [ ] `repo:{repoId}` for repository-level memory if needed.
@@ -1035,7 +1035,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Make combined context writes idempotent across Supabase and Supermemory failures.
 - [x] Make context retrieval resilient and provider-scoped.
 - [x] Replace process-local API rate limiting with production-safe distributed enforcement.
-- [ ] Enforce the supported single-user ownership boundary or implement tenant isolation.
+- [x] Enforce the supported single-user ownership boundary or implement tenant isolation.
 - [ ] Make readiness scoring monotonic for unrelated evidence and version the rubric.
 - [ ] Generate evidence-adaptive planner tasks instead of fixed templates.
 - [ ] Serialize migrations with transactions and a Postgres advisory lock.

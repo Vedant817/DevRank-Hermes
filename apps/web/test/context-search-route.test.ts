@@ -5,7 +5,9 @@ import { setRateLimitStore } from "../app/api/_lib/route-utils";
 
 test("context search rejects one-character queries as client errors", async () => {
   const previousToken = process.env.DEVRANK_CONTEXT_READ_TOKEN;
+  const previousOwner = process.env.DEVRANK_OWNER_ID;
   process.env.DEVRANK_CONTEXT_READ_TOKEN = "read-token";
+  process.env.DEVRANK_OWNER_ID = "vedant";
   const restoreRateLimitStore = setRateLimitStore(async ({ windowMs }) => ({
     count: 1,
     resetAt: new Date(Date.now() + windowMs).toISOString(),
@@ -26,6 +28,11 @@ test("context search rejects one-character queries as client errors", async () =
     assert.equal(body.error?.code, "query_too_short");
   } finally {
     restoreRateLimitStore();
+    if (previousOwner === undefined) {
+      delete process.env.DEVRANK_OWNER_ID;
+    } else {
+      process.env.DEVRANK_OWNER_ID = previousOwner;
+    }
     if (previousToken === undefined) {
       delete process.env.DEVRANK_CONTEXT_READ_TOKEN;
     } else {

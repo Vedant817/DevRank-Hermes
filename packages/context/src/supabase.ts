@@ -112,7 +112,7 @@ function escapeLikePattern(value: string) {
   return value.replace(/[!%_]/g, (character) => `!${character}`);
 }
 
-function filterByContainerTags(
+export function filterByContainerTags(
   rows: ContextItem[],
   containerTags: string[] | undefined,
 ) {
@@ -123,7 +123,10 @@ function filterByContainerTags(
   return rows.filter((row) => {
     const tags = row.metadata?.containerTags;
 
-    return Array.isArray(tags)
-      && containerTags.every((tag) => tags.includes(tag));
+    if (!Array.isArray(tags) || tags.length === 0) {
+      return containerTags.every((tag) => tag.startsWith("user:"));
+    }
+
+    return containerTags.every((tag) => tags.includes(tag));
   });
 }

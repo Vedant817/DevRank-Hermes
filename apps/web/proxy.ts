@@ -3,6 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 const DEFAULT_DASHBOARD_USER = "devrank";
 
 export function proxy(request: NextRequest) {
+  const ownerId = process.env.DEVRANK_OWNER_ID?.trim();
+
+  if (!ownerId || !/^[a-zA-Z0-9_-]{1,64}$/.test(ownerId)) {
+    return new NextResponse("Single-user owner is not configured.", {
+      status: 503,
+    });
+  }
+
   const expectedToken = process.env.DEVRANK_DASHBOARD_TOKEN?.trim()
     || process.env.DEVRANK_API_TOKEN?.trim();
 

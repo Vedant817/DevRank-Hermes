@@ -22,6 +22,7 @@ export const runtimeEnvSchema = z.object({
   DEVRANK_PLANNER_TOKEN: nonEmptyString.optional(),
   DEVRANK_HERMES_REVIEW_TOKEN: nonEmptyString.optional(),
   DEVRANK_LOCAL_INGEST_ROOTS: nonEmptyString.optional(),
+  DEVRANK_OWNER_ID: nonEmptyString.optional(),
   GITHUB_APP_ID: nonEmptyString.optional(),
   GITHUB_INSTALLATION_ID: nonEmptyString.optional(),
   GITHUB_PRIVATE_KEY: nonEmptyString.optional(),
