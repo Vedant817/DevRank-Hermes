@@ -58,19 +58,21 @@ export interface LinearProjectDashboard {
     proof: LinearGithubProof[];
   }>;
   staleIssues: LinearDashboardIssue[];
-  totals: {
-    blockedIssues: number;
-    doneIssues: number;
-    highPriorityIssues: number;
-    issues: number;
-    missingGithubProof: number;
-    openIssues: number;
-    projects: number;
-    resumeWorthyCompletedIssues: number;
-    staleIssues: number;
-    unownedIssues: number;
-  };
+  totals: LinearProjectDashboardTotals;
   unownedIssues: LinearDashboardIssue[];
+}
+
+export interface LinearProjectDashboardTotals {
+  blockedIssues: number;
+  doneIssues: number;
+  highPriorityIssues: number;
+  issues: number;
+  missingGithubProof: number;
+  openIssues: number;
+  projects: number;
+  resumeWorthyCompletedIssues: number;
+  staleIssues: number;
+  unownedIssues: number;
 }
 
 export interface LinearDashboardProject {
@@ -175,6 +177,7 @@ type LinearProjectSqlRow = {
   progress: string | number | null;
   state: string | null;
   team_name: string | null;
+  total_projects: string | number;
   url: string | null;
   workspace_name: string | null;
 };
@@ -190,6 +193,15 @@ type LinearIssueSqlRow = {
   synced_at: Date | string;
   team_name: string | null;
   title: string;
+  total_blocked_issues: string | number;
+  total_done_issues: string | number;
+  total_high_priority_issues: string | number;
+  total_issues: string | number;
+  total_missing_github_proof: string | number;
+  total_open_issues: string | number;
+  total_resume_worthy_completed_issues: string | number;
+  total_stale_issues: string | number;
+  total_unowned_issues: string | number;
   updated_at: Date | string | null;
   url: string | null;
   workspace_name: string | null;
@@ -204,11 +216,45 @@ type GithubProofSqlRow = {
   url: string | null;
 };
 
+type LinearFilterCountSqlRow = {
+  count: string | number;
+  value: string | number;
+};
+
+type LinearFilterProjectSqlRow = {
+  id: string;
+  name: string;
+  team_name: string | null;
+  workspace_name: string | null;
+};
+
+type LinearFilterScopeSqlRow = {
+  team_name: string | null;
+  workspace_name: string | null;
+};
+
 export async function getLinearProjectDashboard(
   sql: SqlClient,
   options: { filters?: LinearProjectDashboardFilters; now?: Date } = {},
 ): Promise<LinearProjectDashboard> {
-  const [projectRows, issueRows, proofRows] = await Promise.all([
+  const filters = normalizeDashboardFilters(options.filters);
+  const now = options.now ?? new Date();
+  const staleBefore = new Date(now.getTime() - STALE_ISSUE_DAYS * 86_400_000).toISOString();
+  const workspaceName = filters.workspaceName ?? null;
+  const teamName = filters.teamName ?? null;
+  const projectId = filters.projectId ?? null;
+  const status = filters.status ?? null;
+  const priority = filters.priority ?? null;
+  const hasIssueScopedFilters = status !== null || priority !== null;
+  const [
+    projectRows,
+    issueRows,
+    proofRows,
+    filterProjectRows,
+    filterPriorityRows,
+    filterStatusRows,
+    filterScopeRows,
+  ] = await Promise.all([
     sql<LinearProjectSqlRow[]>`
       select
         project.id,
@@ -217,35 +263,128 @@ export async function getLinearProjectDashboard(
         project.progress,
         project.url,
         team.name as team_name,
-        workspace.name as workspace_name
+        workspace.name as workspace_name,
+        count(*) over() as total_projects
       from linear_projects project
       left join linear_teams team on team.id = project.team_id
       left join linear_workspaces workspace on workspace.id = team.workspace_id
+      where (
+        ${workspaceName}::text is null
+        or coalesce(workspace.name, 'Unknown workspace') = ${workspaceName}
+      )
+        and (
+          ${teamName}::text is null
+          or coalesce(team.name, 'Unknown team') = ${teamName}
+        )
+        and (${projectId}::text is null or project.id = ${projectId})
+        and (
+          ${hasIssueScopedFilters} = false
+          or exists (
+            select 1
+            from linear_issues issue
+            where issue.project_id = project.id
+              and (
+                ${status}::text is null
+                or case
+                  when coalesce(issue.state, '') ~* '(block|stuck|hold|waiting)' then 'blocked'
+                  when coalesce(issue.state, '') ~* '(cancel|won.?t|duplicate)' then 'canceled'
+                  when coalesce(issue.state, '') ~* '(done|complete|closed|resolved|merged|released)' then 'done'
+                  else 'open'
+                end = ${status}
+              )
+              and (
+                ${priority}::integer is null
+                or case
+                  when issue.priority between 1 and 4 then issue.priority
+                  else 4
+                end = ${priority}
+              )
+          )
+        )
       order by project.synced_at desc, project.name
       limit 500
     `,
     sql<LinearIssueSqlRow[]>`
+      with classified_issues as (
+        select
+          issue.id,
+          issue.identifier,
+          issue.title,
+          issue.state,
+          issue.priority,
+          issue.assignee,
+          issue.url,
+          issue.updated_at,
+          issue.synced_at,
+          issue.project_id,
+          project.name as project_name,
+          coalesce(issue_team.name, project_team.name) as team_name,
+          coalesce(issue_workspace.name, project_workspace.name) as workspace_name,
+          case
+            when coalesce(issue.state, '') ~* '(block|stuck|hold|waiting)' then 'blocked'
+            when coalesce(issue.state, '') ~* '(cancel|won.?t|duplicate)' then 'canceled'
+            when coalesce(issue.state, '') ~* '(done|complete|closed|resolved|merged|released)' then 'done'
+            else 'open'
+          end as status_category,
+          case
+            when issue.priority between 1 and 4 then issue.priority
+            else 4
+          end as normalized_priority,
+          (
+            case
+              when coalesce(issue.state, '') ~* '(done|complete|closed|resolved|merged|released|cancel|won.?t|duplicate)'
+                then false
+              else coalesce(issue.updated_at, issue.synced_at) <= ${staleBefore}::timestamptz
+            end
+          ) as is_stale,
+          exists (
+            select 1
+            from github_pull_requests proof_pr
+            where (
+              ' ' || regexp_replace(upper(proof_pr.title), '[^A-Z0-9]+', ' ', 'g') || ' '
+            ) like (
+              '% ' || regexp_replace(upper(issue.identifier), '[^A-Z0-9]+', ' ', 'g') || ' %'
+            )
+          ) as has_github_proof
+        from linear_issues issue
+        left join linear_projects project on project.id = issue.project_id
+        left join linear_teams issue_team on issue_team.id = issue.team_id
+        left join linear_workspaces issue_workspace on issue_workspace.id = issue_team.workspace_id
+        left join linear_teams project_team on project_team.id = project.team_id
+        left join linear_workspaces project_workspace on project_workspace.id = project_team.workspace_id
+      ),
+      filtered_issues as (
+        select *
+        from classified_issues
+        where (
+          ${workspaceName}::text is null
+          or coalesce(workspace_name, 'Unknown workspace') = ${workspaceName}
+        )
+          and (
+            ${teamName}::text is null
+            or coalesce(team_name, 'Unknown team') = ${teamName}
+          )
+          and (${projectId}::text is null or project_id = ${projectId})
+          and (${status}::text is null or status_category = ${status})
+          and (${priority}::integer is null or normalized_priority = ${priority})
+      )
       select
-        issue.id,
-        issue.identifier,
-        issue.title,
-        issue.state,
-        issue.priority,
-        issue.assignee,
-        issue.url,
-        issue.updated_at,
-        issue.synced_at,
-        issue.project_id,
-        project.name as project_name,
-        coalesce(issue_team.name, project_team.name) as team_name,
-        coalesce(issue_workspace.name, project_workspace.name) as workspace_name
-      from linear_issues issue
-      left join linear_projects project on project.id = issue.project_id
-      left join linear_teams issue_team on issue_team.id = issue.team_id
-      left join linear_workspaces issue_workspace on issue_workspace.id = issue_team.workspace_id
-      left join linear_teams project_team on project_team.id = project.team_id
-      left join linear_workspaces project_workspace on project_workspace.id = project_team.workspace_id
-      order by coalesce(issue.updated_at, issue.synced_at) desc, issue.identifier
+        filtered_issues.*,
+        count(*) over() as total_issues,
+        count(*) filter (where status_category = 'blocked') over() as total_blocked_issues,
+        count(*) filter (where status_category = 'done') over() as total_done_issues,
+        count(*) filter (where status_category = 'open') over() as total_open_issues,
+        count(*) filter (where normalized_priority <= 2) over() as total_high_priority_issues,
+        count(*) filter (where is_stale) over() as total_stale_issues,
+        count(*) filter (where nullif(trim(assignee), '') is null) over() as total_unowned_issues,
+        count(*) filter (
+          where status_category <> 'canceled' and has_github_proof = false
+        ) over() as total_missing_github_proof,
+        count(*) filter (
+          where status_category = 'done' and has_github_proof = true
+        ) over() as total_resume_worthy_completed_issues
+      from filtered_issues
+      order by coalesce(updated_at, synced_at) desc, identifier
       limit 1000
     `,
     sql<GithubProofSqlRow[]>`
@@ -261,11 +400,79 @@ export async function getLinearProjectDashboard(
       order by coalesce(pr.merged_at, pr.updated_at, pr.synced_at) desc
       limit 1000
     `,
+    sql<LinearFilterProjectSqlRow[]>`
+      select
+        project.id,
+        project.name,
+        team.name as team_name,
+        workspace.name as workspace_name
+      from linear_projects project
+      left join linear_teams team on team.id = project.team_id
+      left join linear_workspaces workspace on workspace.id = team.workspace_id
+      order by workspace.name nulls last, team.name nulls last, project.name
+    `,
+    sql<LinearFilterCountSqlRow[]>`
+      select
+        case
+          when issue.priority between 1 and 4 then issue.priority
+          else 4
+        end as value,
+        count(*) as count
+      from linear_issues issue
+      group by 1
+      order by 1
+    `,
+    sql<LinearFilterCountSqlRow[]>`
+      select
+        case
+          when coalesce(issue.state, '') ~* '(block|stuck|hold|waiting)' then 'blocked'
+          when coalesce(issue.state, '') ~* '(cancel|won.?t|duplicate)' then 'canceled'
+          when coalesce(issue.state, '') ~* '(done|complete|closed|resolved|merged|released)' then 'done'
+          else 'open'
+        end as value,
+        count(*) as count
+      from linear_issues issue
+      group by 1
+      order by 1
+    `,
+    sql<LinearFilterScopeSqlRow[]>`
+      select distinct scope.team_name, scope.workspace_name
+      from (
+        select
+          team.name as team_name,
+          workspace.name as workspace_name
+        from linear_projects project
+        left join linear_teams team on team.id = project.team_id
+        left join linear_workspaces workspace on workspace.id = team.workspace_id
+
+        union all
+
+        select
+          coalesce(issue_team.name, project_team.name) as team_name,
+          coalesce(issue_workspace.name, project_workspace.name) as workspace_name
+        from linear_issues issue
+        left join linear_projects project on project.id = issue.project_id
+        left join linear_teams issue_team on issue_team.id = issue.team_id
+        left join linear_workspaces issue_workspace on issue_workspace.id = issue_team.workspace_id
+        left join linear_teams project_team on project_team.id = project.team_id
+        left join linear_workspaces project_workspace on project_workspace.id = project_team.workspace_id
+      ) scope
+    `,
   ]);
 
+  const exactTotals = totalsFromSqlRows(projectRows, issueRows);
+  const exactFilterOptions = filterOptionsFromSqlRows({
+    priorities: filterPriorityRows,
+    projects: filterProjectRows,
+    scopes: filterScopeRows,
+    statuses: filterStatusRows,
+  });
+
   return buildLinearProjectDashboard({
-    filters: options.filters,
-    now: options.now ?? new Date(),
+    exactFilterOptions,
+    exactTotals,
+    filters,
+    now,
     projects: projectRows.map((row) => ({
       id: row.id,
       name: row.name,
@@ -302,6 +509,8 @@ export async function getLinearProjectDashboard(
 }
 
 export function buildLinearProjectDashboard(input: {
+  exactFilterOptions?: LinearProjectDashboardFilterOptions;
+  exactTotals?: LinearProjectDashboardTotals;
   filters?: LinearProjectDashboardFilters;
   githubProof: LinearGithubProofRow[];
   issues: LinearDashboardIssueRow[];
@@ -354,7 +563,7 @@ export function buildLinearProjectDashboard(input: {
       source: "linear_project_progress",
       state: project.progress === null ? "missing" : "tracked",
     })),
-    filterOptions: filterOptions(input.projects, allIssues),
+    filterOptions: input.exactFilterOptions ?? filterOptions(input.projects, allIssues),
     highPriorityIssues: highPriorityIssues.slice(0, MAX_SIGNAL_ROWS),
     issuesMissingGithubProof: issuesMissingGithubProof.slice(0, MAX_SIGNAL_ROWS),
     planningCandidates: filteredIssues
@@ -366,7 +575,7 @@ export function buildLinearProjectDashboard(input: {
     projects,
     resumeWorthyCompletedIssues: resumeWorthyCompletedIssues.slice(0, MAX_SIGNAL_ROWS),
     staleIssues: staleIssues.slice(0, MAX_SIGNAL_ROWS),
-    totals: {
+    totals: input.exactTotals ?? {
       blockedIssues: blockedIssues.length,
       doneIssues: doneIssues.length,
       highPriorityIssues: highPriorityIssues.length,
@@ -392,6 +601,26 @@ export function parseLinearProjectDashboardFilters(
     teamName: singleParam(input.team),
     workspaceName: singleParam(input.workspace),
   });
+}
+
+function totalsFromSqlRows(
+  projectRows: LinearProjectSqlRow[],
+  issueRows: LinearIssueSqlRow[],
+): LinearProjectDashboardTotals {
+  const issue = issueRows[0];
+
+  return {
+    blockedIssues: numberCount(issue?.total_blocked_issues),
+    doneIssues: numberCount(issue?.total_done_issues),
+    highPriorityIssues: numberCount(issue?.total_high_priority_issues),
+    issues: numberCount(issue?.total_issues),
+    missingGithubProof: numberCount(issue?.total_missing_github_proof),
+    openIssues: numberCount(issue?.total_open_issues),
+    projects: numberCount(projectRows[0]?.total_projects),
+    resumeWorthyCompletedIssues: numberCount(issue?.total_resume_worthy_completed_issues),
+    staleIssues: numberCount(issue?.total_stale_issues),
+    unownedIssues: numberCount(issue?.total_unowned_issues),
+  };
 }
 
 function toIssue(
@@ -526,6 +755,50 @@ function projectGroups(projects: LinearDashboardProject[]) {
       };
     })
     .sort((first, second) => first.workspaceName.localeCompare(second.workspaceName) || first.teamName.localeCompare(second.teamName));
+}
+
+function filterOptionsFromSqlRows(input: {
+  priorities: LinearFilterCountSqlRow[];
+  projects: LinearFilterProjectSqlRow[];
+  scopes: LinearFilterScopeSqlRow[];
+  statuses: LinearFilterCountSqlRow[];
+}): LinearProjectDashboardFilterOptions {
+  const projects = input.projects.map((project) => ({
+    id: project.id,
+    name: sanitize(project.name) ?? "Unnamed project",
+    teamName: sanitize(project.team_name) || "Unknown team",
+    workspaceName: sanitize(project.workspace_name) || "Unknown workspace",
+  }));
+  const priorities = input.priorities.flatMap((row) => {
+    const priority = parsePriorityFilter(row.value);
+
+    return priority === undefined
+      ? []
+      : [{
+          count: numberCount(row.count),
+          label: priorityLabel(priority),
+          value: priority,
+        }];
+  });
+  const statuses = input.statuses.flatMap((row) => {
+    const status = parseStatusFilter(String(row.value));
+
+    return status === undefined
+      ? []
+      : [{
+          count: numberCount(row.count),
+          label: status,
+          value: status,
+        }];
+  });
+
+  return {
+    priorities,
+    projects,
+    statuses,
+    teams: sortedUnique(input.scopes.map((scope) => sanitize(scope.team_name) || "Unknown team")),
+    workspaces: sortedUnique(input.scopes.map((scope) => sanitize(scope.workspace_name) || "Unknown workspace")),
+  };
 }
 
 function filterOptions(
@@ -716,6 +989,10 @@ function normalizePriority(priority: number | null): number {
   }
 
   return Math.min(priority, 4);
+}
+
+function numberCount(value: string | number | undefined): number {
+  return Number(value ?? 0);
 }
 
 function priorityLabel(priority: number): string {
