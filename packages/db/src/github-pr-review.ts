@@ -2,8 +2,10 @@ import type { SqlClient } from "./client.js";
 
 export interface GithubPrReviewDashboard {
   totals: {
+    failingCiPullRequests: number;
     filesChanged: number;
     highRiskPullRequests: number;
+    passingCiPullRequests: number;
     pullRequests: number;
     reviews: number;
   };
@@ -12,6 +14,9 @@ export interface GithubPrReviewDashboard {
 
 export interface GithubPrReviewItem {
   architectureImpact: "high" | "low" | "medium";
+  ciChecks: number;
+  ciHealth: "failing" | "inconclusive" | "passing" | "pending" | "unavailable";
+  ciSummary: string;
   codeSmellScore: number;
   filesChanged: number;
   learningExtracted: string[];
@@ -38,6 +43,8 @@ export interface GithubPrReviewRow {
   architectureFiles: number;
   backendFiles: number;
   changesRequestedReviews: number;
+  checkCount: number;
+  failedChecks: number;
   fileCount: number;
   files: string[];
   frontendFiles: number;
@@ -45,11 +52,14 @@ export interface GithubPrReviewRow {
   infraFiles: number;
   mergedAt: string | null;
   number: number;
+  passedChecks: number;
+  pendingChecks: number;
   repoFullName: string;
   reviewComments: number;
   reviews: number;
   securityFiles: number;
   state: string;
+  successfulChecks: number;
   testFiles: number;
   title: string;
   totalAdditions: number;
@@ -63,6 +73,8 @@ type GithubPrReviewSqlRow = {
   architecture_files: string | number;
   backend_files: string | number;
   changes_requested_reviews: string | number;
+  check_count: string | number;
+  failed_checks: string | number;
   file_count: string | number;
   files: string[] | null;
   frontend_files: string | number;
@@ -70,11 +82,14 @@ type GithubPrReviewSqlRow = {
   infra_files: string | number;
   merged_at: Date | string | null;
   number: number;
+  passed_checks: string | number;
+  pending_checks: string | number;
   repo_full_name: string;
   review_comments: string | number;
   reviews: string | number;
   security_files: string | number;
   state: string;
+  successful_checks: string | number;
   test_files: string | number;
   title: string;
   total_additions: string | number;
@@ -125,6 +140,33 @@ export async function getGithubPrReviewDashboard(
         coalesce(sum(comment_count), 0) as review_comments
       from github_pr_reviews
       group by pull_request_id
+    ),
+    check_stats as (
+      select
+        check_run.pull_request_id,
+        count(*) as check_count,
+        count(*) filter (
+          where lower(status) <> 'completed'
+        ) as pending_checks,
+        count(*) filter (
+          where lower(status) = 'completed'
+            and lower(conclusion) in ('success', 'neutral', 'skipped')
+        ) as successful_checks,
+        count(*) filter (
+          where lower(status) = 'completed'
+            and lower(conclusion) = 'success'
+        ) as passed_checks,
+        count(*) filter (
+          where lower(status) = 'completed'
+            and (
+              conclusion is null
+              or lower(conclusion) not in ('success', 'neutral', 'skipped')
+            )
+        ) as failed_checks
+      from github_pr_checks check_run
+      join github_pull_requests pr on pr.id = check_run.pull_request_id
+      where pr.head_sha is null or check_run.head_sha = pr.head_sha
+      group by check_run.pull_request_id
     )
     select
       repo.full_name as repo_full_name,
@@ -148,11 +190,17 @@ export async function getGithubPrReviewDashboard(
       coalesce(review_stats.reviews, 0) as reviews,
       coalesce(review_stats.approval_reviews, 0) as approval_reviews,
       coalesce(review_stats.changes_requested_reviews, 0) as changes_requested_reviews,
-      coalesce(review_stats.review_comments, 0) as review_comments
+      coalesce(review_stats.review_comments, 0) as review_comments,
+      coalesce(check_stats.check_count, 0) as check_count,
+      coalesce(check_stats.pending_checks, 0) as pending_checks,
+      coalesce(check_stats.successful_checks, 0) as successful_checks,
+      coalesce(check_stats.passed_checks, 0) as passed_checks,
+      coalesce(check_stats.failed_checks, 0) as failed_checks
     from github_pull_requests pr
     join github_repos repo on repo.id = pr.repo_id
     left join file_stats on file_stats.pull_request_id = pr.id
     left join review_stats on review_stats.pull_request_id = pr.id
+    left join check_stats on check_stats.pull_request_id = pr.id
     order by coalesce(pr.updated_at, pr.merged_at, pr.synced_at) desc
     limit 200
   `;
@@ -162,6 +210,8 @@ export async function getGithubPrReviewDashboard(
     architectureFiles: Number(row.architecture_files),
     backendFiles: Number(row.backend_files),
     changesRequestedReviews: Number(row.changes_requested_reviews),
+    checkCount: Number(row.check_count),
+    failedChecks: Number(row.failed_checks),
     fileCount: Number(row.file_count),
     files: row.files ?? [],
     frontendFiles: Number(row.frontend_files),
@@ -169,11 +219,14 @@ export async function getGithubPrReviewDashboard(
     infraFiles: Number(row.infra_files),
     mergedAt: row.merged_at ? toIso(row.merged_at) : null,
     number: row.number,
+    passedChecks: Number(row.passed_checks),
+    pendingChecks: Number(row.pending_checks),
     repoFullName: row.repo_full_name,
     reviewComments: Number(row.review_comments),
     reviews: Number(row.reviews),
     securityFiles: Number(row.security_files),
     state: row.state,
+    successfulChecks: Number(row.successful_checks),
     testFiles: Number(row.test_files),
     title: row.title,
     totalAdditions: Number(row.total_additions),
@@ -188,8 +241,10 @@ export function buildGithubPrReviewDashboard(rows: GithubPrReviewRow[]): GithubP
 
   return {
     totals: {
+      failingCiPullRequests: pullRequests.filter((item) => item.ciHealth === "failing").length,
       filesChanged: rows.reduce((total, row) => total + row.fileCount, 0),
       highRiskPullRequests: pullRequests.filter((item) => item.riskLevel === "high").length,
+      passingCiPullRequests: pullRequests.filter((item) => item.ciHealth === "passing").length,
       pullRequests: rows.length,
       reviews: rows.reduce((total, row) => total + row.reviews, 0),
     },
@@ -198,16 +253,20 @@ export function buildGithubPrReviewDashboard(rows: GithubPrReviewRow[]): GithubP
 }
 
 function toReviewItem(row: GithubPrReviewRow): GithubPrReviewItem {
-  const riskLevel = riskLevelFor(row);
+  const ciHealth = ciHealthFor(row);
+  const riskLevel = riskLevelFor(row, ciHealth);
   const testQuality = testQualityFor(row);
   const reviewState = reviewStateFor(row);
   const architectureImpact = architectureImpactFor(row);
   const codeSmellScore = codeSmellScoreFor(row, testQuality);
   const securityIssues = securityIssuesFor(row, testQuality);
-  const prQualityScore = prQualityScoreFor(row, testQuality, reviewState, codeSmellScore);
+  const prQualityScore = prQualityScoreFor(row, testQuality, reviewState, ciHealth, codeSmellScore);
 
   return {
     architectureImpact,
+    ciChecks: row.checkCount,
+    ciHealth,
+    ciSummary: ciSummaryFor(row, ciHealth),
     codeSmellScore,
     filesChanged: row.fileCount,
     learningExtracted: learningFor(row, testQuality, architectureImpact),
@@ -230,8 +289,12 @@ function toReviewItem(row: GithubPrReviewRow): GithubPrReviewItem {
   };
 }
 
-function riskLevelFor(row: GithubPrReviewRow) {
+function riskLevelFor(
+  row: GithubPrReviewRow,
+  ciHealth: GithubPrReviewItem["ciHealth"],
+) {
   if (
+    ciHealth === "failing" ||
     row.totalChanges >= 800 ||
     row.fileCount >= 20 ||
     row.changesRequestedReviews > 0 ||
@@ -250,6 +313,44 @@ function riskLevelFor(row: GithubPrReviewRow) {
   }
 
   return "low" as const;
+}
+
+function ciHealthFor(row: GithubPrReviewRow): GithubPrReviewItem["ciHealth"] {
+  if (row.checkCount === 0) {
+    return "unavailable";
+  }
+
+  if (row.failedChecks > 0) {
+    return "failing";
+  }
+
+  if (row.pendingChecks > 0) {
+    return "pending";
+  }
+
+  if (row.passedChecks > 0 && row.successfulChecks === row.checkCount) {
+    return "passing";
+  }
+
+  return "inconclusive";
+}
+
+function ciSummaryFor(
+  row: GithubPrReviewRow,
+  ciHealth: GithubPrReviewItem["ciHealth"],
+) {
+  switch (ciHealth) {
+    case "passing":
+      return `${row.passedChecks} of ${row.checkCount} imported GitHub check-run(s) passed.`;
+    case "failing":
+      return `${row.failedChecks} of ${row.checkCount} imported CI check(s) failed.`;
+    case "inconclusive":
+      return "Imported GitHub check-run evidence is neutral or skipped only; no successful CI run was found.";
+    case "pending":
+      return `${row.pendingChecks} of ${row.checkCount} imported CI check(s) are still pending.`;
+    case "unavailable":
+      return "No GitHub check-run evidence has been imported for this pull request.";
+  }
 }
 
 function testQualityFor(row: GithubPrReviewRow) {
@@ -343,11 +444,12 @@ function prQualityScoreFor(
   row: GithubPrReviewRow,
   testQuality: GithubPrReviewItem["testQuality"],
   reviewState: GithubPrReviewItem["reviewState"],
+  ciHealth: GithubPrReviewItem["ciHealth"],
   codeSmellScore: number,
 ) {
   const testScore = testQuality === "strong" ? 20 : testQuality === "partial" ? 10 : 0;
   const reviewScore = reviewState === "approved" ? 15 : reviewState === "reviewed" ? 8 : 0;
-  const ciHealthScore = 0;
+  const ciHealthScore = ciHealth === "passing" ? 10 : ciHealth === "pending" ? 3 : 0;
   const securityScore = row.securityFiles === 0 ? 10 : 5;
   const clarityScore = row.title.trim().length >= 12 ? 25 : 12;
   const structureScore = Math.max(0, 15 - Math.floor(codeSmellScore / 10));
@@ -364,6 +466,7 @@ function learningFor(
   const signals = [
     row.testFiles > 0 ? "Testing evidence attached to PR." : undefined,
     row.reviews > 0 ? "Review feedback loop captured." : undefined,
+    row.checkCount > 0 ? ciSummaryFor(row, ciHealthFor(row)) : undefined,
     architectureImpact !== "low" ? "Architecture-impacting change visible." : undefined,
     row.securityFiles > 0 ? "Security-sensitive change requires careful validation." : undefined,
     testQuality === "missing" ? "Add test proof before treating this PR as portfolio evidence." : undefined,

@@ -3,6 +3,7 @@ import test from "node:test";
 import type { Octokit } from "@octokit/rest";
 import {
   backfillGithubUser,
+  fetchGithubPullRequest,
   fetchGithubPullRequestMetadata,
   profileGithubRepo,
 } from "../src/backfill.js";
@@ -180,6 +181,12 @@ test("backfills repos, pull requests, and bounded default-branch commits", async
     repoPage: 1,
   });
   assert.equal(result.pullRequests.length, 1);
+  assert.deepEqual(result.pullRequestCheckSnapshots, [{
+    headSha: "pr-head-123",
+    pullRequestId: 202,
+    pullRequestNumber: 7,
+    repoFullName: "salescode/devrank-os",
+  }]);
   assert.deepEqual(result.pullRequestChecks, [{
     appSlug: "github-actions",
     completedAt: "2026-06-22T04:20:00Z",
@@ -582,6 +589,49 @@ test("resolves missing PR head SHAs and caps returned check-run evidence", async
     per_page: 100,
     ref: "resolved-head",
     repo: "devrank-os",
+  });
+});
+
+test("fetches a full pull request summary for check-run webhook refresh", async () => {
+  const pullCalls: unknown[] = [];
+  const octokit = {
+    pulls: {
+      get: async (params: unknown) => {
+        pullCalls.push(params);
+
+        return {
+          data: {
+            head: { sha: "check-run-head" },
+            html_url: "https://github.com/salescode/devrank-os/pull/7",
+            id: 202,
+            merged_at: null,
+            number: 7,
+            state: "open",
+            title: "Refresh CI evidence",
+            updated_at: "2026-06-25T00:00:00Z",
+          },
+        };
+      },
+    },
+  } as unknown as Octokit;
+
+  const pullRequest = await fetchGithubPullRequest(octokit, githubRepo(), 7);
+
+  assert.deepEqual(pullCalls[0], {
+    owner: "salescode",
+    pull_number: 7,
+    repo: "devrank-os",
+  });
+  assert.deepEqual(pullRequest, {
+    headSha: "check-run-head",
+    htmlUrl: "https://github.com/salescode/devrank-os/pull/7",
+    id: 202,
+    mergedAt: null,
+    number: 7,
+    repoFullName: "salescode/devrank-os",
+    state: "open",
+    title: "Refresh CI evidence",
+    updatedAt: "2026-06-25T00:00:00Z",
   });
 });
 

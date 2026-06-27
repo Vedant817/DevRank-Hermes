@@ -925,7 +925,7 @@ async function persistGithubBackfillResult(context: CommandContext, result: unkn
       await insertIngestionRun(transaction, {
         source: "github_backfill",
         status: "success",
-        summary: `Imported ${persisted.repos} GitHub repo(s), ${persisted.pullRequests} pull request(s), ${persisted.pullRequestFiles} PR file(s), ${persisted.pullRequestReviews} PR review(s), ${persisted.commits} commit(s), and ${persisted.repoProfiles} repo profile(s).`,
+        summary: `Imported ${persisted.repos} GitHub repo(s), ${persisted.pullRequests} pull request(s), ${persisted.pullRequestChecks} PR check(s), ${persisted.pullRequestFiles} PR file(s), ${persisted.pullRequestReviews} PR review(s), ${persisted.commits} commit(s), and ${persisted.repoProfiles} repo profile(s).`,
       });
 
       return persisted;
@@ -1174,6 +1174,8 @@ function isGithubBackfillLike(value: unknown): value is Parameters<typeof upsert
   return Array.isArray(record.repos) &&
     Array.isArray(record.pullRequests) &&
     (record.commits === undefined || Array.isArray(record.commits)) &&
+    (record.pullRequestChecks === undefined || Array.isArray(record.pullRequestChecks)) &&
+    (record.pullRequestCheckSnapshots === undefined || Array.isArray(record.pullRequestCheckSnapshots)) &&
     (record.pullRequestFiles === undefined || Array.isArray(record.pullRequestFiles)) &&
     (record.pullRequestReviews === undefined || Array.isArray(record.pullRequestReviews)) &&
     (record.repoProfiles === undefined || Array.isArray(record.repoProfiles));

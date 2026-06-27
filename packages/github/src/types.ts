@@ -37,6 +37,7 @@ export type GithubPullRequestCheckConclusion =
   | "failure"
   | "neutral"
   | "skipped"
+  | "stale"
   | "success"
   | "timed_out";
 
@@ -53,6 +54,13 @@ export interface GithubPullRequestCheckSummary {
   repoFullName: string;
   startedAt: string | null;
   status: GithubPullRequestCheckStatus;
+}
+
+export interface GithubPullRequestCheckSnapshot {
+  headSha: string;
+  pullRequestId: number;
+  pullRequestNumber: number;
+  repoFullName: string;
 }
 
 export interface GithubPullRequestFileSummary {
@@ -111,6 +119,7 @@ export interface GithubBackfillResult {
   };
   commits: GithubCommitSummary[];
   pullRequestChecks?: GithubPullRequestCheckSummary[];
+  pullRequestCheckSnapshots?: GithubPullRequestCheckSnapshot[];
   pullRequestFiles: GithubPullRequestFileSummary[];
   pullRequestReviews: GithubPullRequestReviewSummary[];
   repoProfiles: GithubRepoProfileSummary[];
@@ -136,6 +145,7 @@ export interface GithubWebhookResult {
   action?: string;
   repository?: string;
   pullRequestNumber?: number;
+  pullRequestNumbers?: number[];
 }
 
 export interface GithubWebhookIngestion {

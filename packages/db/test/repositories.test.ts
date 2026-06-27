@@ -4,6 +4,7 @@ import type { SqlClient } from "../src/client.js";
 import {
   deleteGithubPullRequestMetadata,
   deleteGithubRepositories,
+  upsertGithubBackfill,
 } from "../src/github.js";
 import {
   claimGithubWebhookDelivery,
@@ -134,20 +135,108 @@ test("GitHub repository deletion removes dependent pull requests before the repo
   assert.ok(calls.indexOf(pullRequestDelete) < calls.indexOf(repositoryDelete));
 });
 
-test("GitHub pull request metadata replacement clears stale files and reviews", async () => {
+test("GitHub pull request metadata replacement clears stale checks, files, and reviews", async () => {
   const { calls, sql } = recordingSqlSequence([
+    [{ id: 401 }, { id: 402 }],
     [{ pull_request_id: 202 }, { pull_request_id: 202 }],
     [{ id: 301 }],
   ]);
 
   const deleted = await deleteGithubPullRequestMetadata(sql, [202, 202]);
 
+  const checkDelete = requiredCall(calls, "delete from github_pr_checks");
   const fileDelete = requiredCall(calls, "delete from github_pr_files");
   const reviewDelete = requiredCall(calls, "delete from github_pr_reviews");
-  assert.deepEqual(deleted, { files: 2, reviews: 1 });
+  assert.deepEqual(deleted, { checks: 2, files: 2, reviews: 1 });
+  assert.equal(checkDelete.values[0], 202);
   assert.equal(fileDelete.values[0], 202);
   assert.equal(reviewDelete.values[0], 202);
   assert.equal(calls.filter((call) => normalizedSql(call).includes("delete from github_pr_files")).length, 1);
+});
+
+test("persists GitHub check runs as idempotent PR metadata", async () => {
+  const { calls, sql } = recordingSqlSequence([
+    [{ id: 202 }],
+    [],
+    [{ id: 202 }],
+    [],
+  ]);
+
+  const written = await upsertGithubBackfill(sql, {
+    commits: [],
+    pullRequestChecks: [{
+      appSlug: "github-actions",
+      completedAt: "2026-06-25T00:05:00.000Z",
+      conclusion: "success",
+      detailsUrl: "https://github.com/salescode/devrank-os/actions/runs/401",
+      headSha: "abc123",
+      id: 401,
+      name: "test",
+      pullRequestId: 202,
+      pullRequestNumber: 7,
+      repoFullName: "salescode/devrank-os",
+      startedAt: "2026-06-25T00:00:00.000Z",
+      status: "completed",
+    }],
+    pullRequestCheckSnapshots: [{
+      headSha: "abc123",
+      pullRequestId: 202,
+      pullRequestNumber: 7,
+      repoFullName: "salescode/devrank-os",
+    }],
+    pullRequestFiles: [],
+    pullRequestReviews: [],
+    pullRequests: [],
+    repoProfiles: [],
+    repos: [],
+  });
+  const deleteCall = requiredCall(calls, "delete from github_pr_checks");
+  const insert = requiredCall(calls, "insert into github_pr_checks");
+
+  assert.equal(written.pullRequestChecks, 1);
+  assert.equal(deleteCall.values[0], 202);
+  assert.ok(calls.indexOf(deleteCall) < calls.indexOf(insert));
+  assert.match(normalizedSql(insert), /on conflict \(id\) do update/);
+  assert.deepEqual(insert.values.slice(0, 4), [401, 202, "abc123", "test"]);
+});
+
+test("persists GitHub pull request head SHA for current-head CI scoring", async () => {
+  const { calls, sql } = recordingSql();
+
+  await upsertGithubBackfill(sql, {
+    commits: [],
+    pullRequestFiles: [],
+    pullRequestReviews: [],
+    pullRequests: [{
+      headSha: "pr-head-123",
+      htmlUrl: "https://github.com/salescode/devrank-os/pull/7",
+      id: 202,
+      mergedAt: null,
+      number: 7,
+      repoFullName: "salescode/devrank-os",
+      state: "open",
+      title: "Add CI evidence",
+      updatedAt: "2026-06-25T00:00:00.000Z",
+    }],
+    repoProfiles: [],
+    repos: [{
+      defaultBranch: "master",
+      fullName: "salescode/devrank-os",
+      htmlUrl: "https://github.com/salescode/devrank-os",
+      id: 101,
+      language: "TypeScript",
+      name: "devrank-os",
+      owner: "salescode",
+      private: false,
+      pushedAt: "2026-06-25T00:00:00.000Z",
+      updatedAt: "2026-06-25T00:00:00.000Z",
+    }],
+  });
+
+  const insert = requiredCall(calls, "insert into github_pull_requests");
+
+  assert.match(normalizedSql(insert), /head_sha/);
+  assert.equal(insert.values[5], "pr-head-123");
 });
 
 test("scheduled Slack delivery claims are idempotent and reclaim only failed or abandoned rows", async () => {

@@ -23,3 +23,16 @@ test("registers the score snapshot rubric version migration", () => {
   assert.match(migration.sql, /set rubric_version = 'legacy-v0'/);
   assert.match(migration.sql, /alter column rubric_version set not null/);
 });
+
+test("registers persisted GitHub PR check-run evidence", () => {
+  const migration = migrations.find(
+    (candidate) => candidate.id === "016_github_pr_checks",
+  );
+
+  assert.ok(migration);
+  assert.match(migration.sql, /add column if not exists head_sha text/);
+  assert.match(migration.sql, /create table if not exists github_pr_checks/);
+  assert.match(migration.sql, /references github_pull_requests\(id\) on delete cascade/);
+  assert.match(migration.sql, /github_pr_checks_pull_request_idx/);
+  assert.match(migration.sql, /github_pr_checks_pull_request_head_idx/);
+});

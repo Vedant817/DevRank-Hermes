@@ -10,6 +10,7 @@ import type {
 } from "./types.js";
 
 const SUPPORTED_WEBHOOK_EVENTS = new Set([
+  "check_run",
   "pull_request",
   "pull_request_review",
   "pull_request_review_comment",
@@ -57,16 +58,23 @@ export function summarizeGithubWebhook(
 ): GithubWebhookResult {
   const record = typeof payload === "object" && payload !== null ? payload as {
     action?: string;
+    check_run?: { pull_requests?: Array<{ number?: number }> };
     repository?: { full_name?: string };
     pull_request?: { number?: number };
   } : {};
+
+  const pullRequestNumbers = uniqueNumbers([
+    record.pull_request?.number,
+    ...(record.check_run?.pull_requests?.map((item) => item.number) ?? []),
+  ]);
 
   return {
     eventName,
     deliveryId,
     action: record.action,
     repository: record.repository?.full_name,
-    pullRequestNumber: record.pull_request?.number,
+    pullRequestNumber: pullRequestNumbers[0],
+    pullRequestNumbers,
   };
 }
 
@@ -169,6 +177,7 @@ function githubPullRequestFromPayload(
     number,
     title,
     state,
+    headSha: stringValue(asRecord(pullRequest.head).sha) ?? null,
     htmlUrl: stringValue(pullRequest.html_url) ?? null,
     mergedAt: stringValue(pullRequest.merged_at) ?? null,
     updatedAt: stringValue(pullRequest.updated_at) ?? null,
@@ -231,4 +240,10 @@ function numberValue(value: unknown) {
 
 function booleanValue(value: unknown) {
   return typeof value === "boolean" ? value : undefined;
+}
+
+function uniqueNumbers(values: Array<number | undefined>) {
+  return [...new Set(values.filter((value): value is number =>
+    typeof value === "number" && Number.isFinite(value),
+  ))];
 }

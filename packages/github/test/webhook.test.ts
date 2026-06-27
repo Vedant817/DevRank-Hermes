@@ -40,6 +40,7 @@ test("extracts repo and pull request rows from GitHub webhook payload", () => {
     action: "opened",
     repository: "salescode/devrank-os",
     pullRequestNumber: 7,
+    pullRequestNumbers: [7],
   });
   assert.equal(ingestion.backfill.repos.length, 1);
   assert.equal(ingestion.backfill.repos[0]?.fullName, "salescode/devrank-os");
@@ -108,12 +109,51 @@ test("supports repository.created without accepting every repository action", ()
     action: "created",
     repository: "salescode/new-service",
     pullRequestNumber: undefined,
+    pullRequestNumbers: [],
   });
   assert.equal(ingestion.backfill.repos.length, 1);
   assert.equal(ingestion.backfill.repos[0]?.fullName, "salescode/new-service");
   assert.deepEqual(ingestion.backfill.pullRequests, []);
   assert.deepEqual(ingestion.backfill.commits, []);
   assert.deepEqual(ingestion.deletions.repositoryIds, []);
+});
+
+test("supports check_run webhook payloads for PR CI refresh", () => {
+  assert.equal(isSupportedGithubWebhookEvent("check_run", "completed"), true);
+
+  const ingestion = githubWebhookIngestion("check_run", "delivery-6", {
+    action: "completed",
+    check_run: {
+      pull_requests: [{
+        number: 7,
+      }, {
+        number: 8,
+      }],
+    },
+    repository: {
+      id: 101,
+      full_name: "salescode/devrank-os",
+      name: "devrank-os",
+      owner: { login: "salescode" },
+      private: false,
+      default_branch: "master",
+      html_url: "https://github.com/salescode/devrank-os",
+      language: "TypeScript",
+      pushed_at: "2026-06-22T01:00:00Z",
+      updated_at: "2026-06-22T02:00:00Z",
+    },
+  });
+
+  assert.deepEqual(ingestion.summary, {
+    eventName: "check_run",
+    deliveryId: "delivery-6",
+    action: "completed",
+    repository: "salescode/devrank-os",
+    pullRequestNumber: 7,
+    pullRequestNumbers: [7, 8],
+  });
+  assert.equal(ingestion.backfill.repos.length, 1);
+  assert.deepEqual(ingestion.backfill.pullRequests, []);
 });
 
 test("emits a repository deletion instead of re-upserting deleted GitHub data", () => {
@@ -139,5 +179,6 @@ test("summarizes sparse payloads without throwing", () => {
     action: undefined,
     repository: undefined,
     pullRequestNumber: undefined,
+    pullRequestNumbers: [],
   });
 });

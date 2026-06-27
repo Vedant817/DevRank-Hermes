@@ -123,8 +123,12 @@ when the resolved workspace does not match.
 
 GitHub backfill processes 10 repositories per run, returns a `nextRepoPage`
 checkpoint, checks the GitHub core rate limit before fan-out, and imports up to
-100 pull requests and 100 recent default-branch commits per repository. Resume
-with `--repo-page <nextRepoPage>`. Use `--commit-limit 0` to reduce API usage.
+100 pull requests, 100 current-head check runs per scanned pull request, and
+100 recent default-branch commits per repository. Resume with
+`--repo-page <nextRepoPage>`. Use `--commit-limit 0` to reduce API usage. The
+GitHub token must be able to read repository pull requests, contents, and
+checks; missing check permissions fail ingestion instead of treating CI as
+healthy.
 
 ## Verification
 

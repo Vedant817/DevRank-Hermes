@@ -20,6 +20,7 @@ export interface PersistableGithubPullRequest {
   number: number;
   title: string;
   state: string;
+  headSha?: string | null;
   htmlUrl: string | null;
   mergedAt: string | null;
   updatedAt: string | null;
@@ -49,6 +50,28 @@ export interface PersistableGithubPullRequestReview {
   submittedAt: string | null;
 }
 
+export interface PersistableGithubPullRequestCheck {
+  appSlug: string | null;
+  completedAt: string | null;
+  conclusion: string | null;
+  detailsUrl: string | null;
+  headSha: string;
+  id: number;
+  name: string;
+  pullRequestId: number;
+  pullRequestNumber: number;
+  repoFullName: string;
+  startedAt: string | null;
+  status: string;
+}
+
+export interface PersistableGithubPullRequestCheckSnapshot {
+  headSha: string;
+  pullRequestId: number;
+  pullRequestNumber: number;
+  repoFullName: string;
+}
+
 export interface PersistableGithubCommit {
   authorLogin: string | null;
   branch: string | null;
@@ -74,6 +97,8 @@ export interface PersistableGithubRepoProfile {
 
 export interface PersistableGithubBackfill {
   commits?: PersistableGithubCommit[];
+  pullRequestChecks?: PersistableGithubPullRequestCheck[];
+  pullRequestCheckSnapshots?: PersistableGithubPullRequestCheckSnapshot[];
   pullRequestFiles?: PersistableGithubPullRequestFile[];
   pullRequestReviews?: PersistableGithubPullRequestReview[];
   repoProfiles?: PersistableGithubRepoProfile[];
@@ -121,6 +146,7 @@ export async function upsertGithubBackfill(
   input: PersistableGithubBackfill,
 ): Promise<{
   commits: number;
+  pullRequestChecks: number;
   pullRequestFiles: number;
   pullRequestReviews: number;
   repoProfiles: number;
@@ -129,6 +155,7 @@ export async function upsertGithubBackfill(
 }> {
   const repoIdsByFullName = new Map<string, number>();
   let commits = 0;
+  let pullRequestChecks = 0;
   let pullRequestFiles = 0;
   let pullRequestReviews = 0;
   let repoProfiles = 0;
@@ -194,6 +221,7 @@ export async function upsertGithubBackfill(
         number,
         title,
         state,
+        head_sha,
         html_url,
         merged_at,
         updated_at,
@@ -205,6 +233,7 @@ export async function upsertGithubBackfill(
         ${pullRequest.number},
         ${pullRequest.title},
         ${pullRequest.state},
+        ${pullRequest.headSha ?? null},
         ${pullRequest.htmlUrl},
         ${pullRequest.mergedAt},
         ${pullRequest.updatedAt},
@@ -215,12 +244,24 @@ export async function upsertGithubBackfill(
         number = excluded.number,
         title = excluded.title,
         state = excluded.state,
+        head_sha = excluded.head_sha,
         html_url = excluded.html_url,
         merged_at = excluded.merged_at,
         updated_at = excluded.updated_at,
         synced_at = now()
     `;
     pullRequests += 1;
+  }
+
+  for (const snapshot of input.pullRequestCheckSnapshots ?? []) {
+    if (!await githubPullRequestExists(sql, snapshot.pullRequestId)) {
+      continue;
+    }
+
+    await sql`
+      delete from github_pr_checks
+      where pull_request_id = ${snapshot.pullRequestId}
+    `;
   }
 
   for (const file of input.pullRequestFiles ?? []) {
@@ -296,6 +337,53 @@ export async function upsertGithubBackfill(
         synced_at = now()
     `;
     pullRequestReviews += 1;
+  }
+
+  for (const check of input.pullRequestChecks ?? []) {
+    if (!await githubPullRequestExists(sql, check.pullRequestId)) {
+      continue;
+    }
+
+    await sql`
+      insert into github_pr_checks (
+        id,
+        pull_request_id,
+        head_sha,
+        name,
+        status,
+        conclusion,
+        details_url,
+        app_slug,
+        started_at,
+        completed_at,
+        synced_at
+      )
+      values (
+        ${check.id},
+        ${check.pullRequestId},
+        ${check.headSha},
+        ${check.name},
+        ${check.status},
+        ${check.conclusion},
+        ${check.detailsUrl},
+        ${check.appSlug},
+        ${check.startedAt},
+        ${check.completedAt},
+        now()
+      )
+      on conflict (id) do update set
+        pull_request_id = excluded.pull_request_id,
+        head_sha = excluded.head_sha,
+        name = excluded.name,
+        status = excluded.status,
+        conclusion = excluded.conclusion,
+        details_url = excluded.details_url,
+        app_slug = excluded.app_slug,
+        started_at = excluded.started_at,
+        completed_at = excluded.completed_at,
+        synced_at = now()
+    `;
+    pullRequestChecks += 1;
   }
 
   for (const commit of input.commits ?? []) {
@@ -390,6 +478,7 @@ export async function upsertGithubBackfill(
 
   return {
     commits,
+    pullRequestChecks,
     pullRequestFiles,
     pullRequestReviews,
     repoProfiles,
@@ -425,13 +514,20 @@ export async function deleteGithubPullRequestMetadata(
   sql: SqlClient,
   pullRequestIds: number[],
 ): Promise<{
+  checks: number;
   files: number;
   reviews: number;
 }> {
+  let checks = 0;
   let files = 0;
   let reviews = 0;
 
   for (const pullRequestId of new Set(pullRequestIds)) {
+    const deletedChecks = await sql<{ id: number }[]>`
+      delete from github_pr_checks
+      where pull_request_id = ${pullRequestId}
+      returning id
+    `;
     const deletedFiles = await sql<{ pull_request_id: number }[]>`
       delete from github_pr_files
       where pull_request_id = ${pullRequestId}
@@ -443,11 +539,12 @@ export async function deleteGithubPullRequestMetadata(
       returning id
     `;
 
+    checks += deletedChecks.length;
     files += deletedFiles.length;
     reviews += deletedReviews.length;
   }
 
-  return { files, reviews };
+  return { checks, files, reviews };
 }
 
 export async function listGithubRepoEvidence(

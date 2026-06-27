@@ -23,6 +23,7 @@ import {
 } from "@repo/db";
 import {
   createGithubClient,
+  fetchGithubPullRequest,
   fetchGithubPullRequestMetadata,
   githubWebhookIngestion,
   isSupportedGithubWebhookEvent,
@@ -131,18 +132,44 @@ export async function POST(request: Request) {
       );
     }
 
-    const pullRequest = ingestion.backfill.pullRequests[0];
     const repo = ingestion.backfill.repos[0];
 
-    if (shouldRefreshPullRequestMetadata(event) && pullRequest && repo) {
-      const metadata = await fetchGithubPullRequestMetadata(
-        createGithubClient(),
-        repo,
-        pullRequest,
-        { ignoreMissing: false },
+    if (shouldRefreshPullRequestMetadata(event) && repo) {
+      const github = createGithubClient();
+      const pullRequests = [...ingestion.backfill.pullRequests];
+      const pullRequestNumbers = ingestion.summary.pullRequestNumbers ?? [];
+
+      for (const pullRequestNumber of pullRequestNumbers) {
+        const alreadyLoaded = pullRequests.some(
+          (item) => item.repoFullName === repo.fullName && item.number === pullRequestNumber,
+        );
+
+        if (!alreadyLoaded) {
+          pullRequests.push(await fetchGithubPullRequest(github, repo, pullRequestNumber));
+        }
+      }
+
+      const metadataItems = await Promise.all(
+        pullRequests.map(async (pullRequest) => {
+          if (!ingestion.backfill.pullRequests.some((item) => item.id === pullRequest.id)) {
+            ingestion.backfill.pullRequests.push(pullRequest);
+          }
+
+          return fetchGithubPullRequestMetadata(
+            github,
+            repo,
+            pullRequest,
+            { ignoreMissing: false },
+          );
+        }),
       );
-      ingestion.backfill.pullRequestFiles = metadata.files;
-      ingestion.backfill.pullRequestReviews = metadata.reviews;
+
+      ingestion.backfill.pullRequestChecks = metadataItems.flatMap((metadata) => metadata.checks);
+      ingestion.backfill.pullRequestCheckSnapshots = metadataItems.flatMap((metadata) =>
+        metadata.checkSnapshot ? [metadata.checkSnapshot] : [],
+      );
+      ingestion.backfill.pullRequestFiles = metadataItems.flatMap((metadata) => metadata.files);
+      ingestion.backfill.pullRequestReviews = metadataItems.flatMap((metadata) => metadata.reviews);
     }
 
     const persisted = await runInTransaction(sql, async (transaction) => {
@@ -179,7 +206,7 @@ export async function POST(request: Request) {
       await insertIngestionRun(transaction, {
         source: "github_webhook",
         status: "success",
-        summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${deletedRepositories} deleted repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), ${written.repoProfiles} repo profile(s), and ${writtenEvidence} evidence item(s).`,
+        summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${deletedRepositories} deleted repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestChecks} PR check(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), ${written.repoProfiles} repo profile(s), and ${writtenEvidence} evidence item(s).`,
       });
 
       return { deletedRepositories, replacedMetadata, written, writtenEvidence };
@@ -219,7 +246,8 @@ export async function POST(request: Request) {
 }
 
 function shouldRefreshPullRequestMetadata(event: string) {
-  return event === "pull_request"
+  return event === "check_run"
+    || event === "pull_request"
     || event === "pull_request_review"
     || event === "pull_request_review_comment";
 }

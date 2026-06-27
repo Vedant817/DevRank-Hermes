@@ -84,6 +84,7 @@ create table if not exists github_pull_requests (
   number integer not null,
   title text not null,
   state text not null,
+  head_sha text,
   html_url text,
   merged_at timestamptz,
   updated_at timestamptz,
@@ -118,6 +119,26 @@ create table if not exists github_pr_reviews (
 
 create index if not exists github_pr_reviews_pull_request_idx
   on github_pr_reviews (pull_request_id);
+
+create table if not exists github_pr_checks (
+  id bigint primary key,
+  pull_request_id bigint not null references github_pull_requests(id) on delete cascade,
+  head_sha text not null,
+  name text not null,
+  status text not null,
+  conclusion text,
+  details_url text,
+  app_slug text,
+  started_at timestamptz,
+  completed_at timestamptz,
+  synced_at timestamptz not null default now()
+);
+
+create index if not exists github_pr_checks_pull_request_idx
+  on github_pr_checks (pull_request_id);
+
+create index if not exists github_pr_checks_pull_request_head_idx
+  on github_pr_checks (pull_request_id, head_sha);
 
 create table if not exists github_commits (
   repo_id bigint not null references github_repos(id) on delete cascade,

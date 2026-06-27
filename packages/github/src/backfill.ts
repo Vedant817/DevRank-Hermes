@@ -2,6 +2,7 @@ import type { Octokit } from "@octokit/rest";
 import type {
   GithubBackfillOptions,
   GithubBackfillResult,
+  GithubPullRequestCheckSnapshot,
   GithubCommitSummary,
   GithubPullRequestCheckSummary,
   GithubPullRequestFileSummary,
@@ -98,6 +99,7 @@ export async function backfillGithubUser(
   const repoSummaries = repoResponse.data.map(mapRepo);
   const commits: GithubCommitSummary[] = [];
   const pullRequestChecks: GithubPullRequestCheckSummary[] = [];
+  const pullRequestCheckSnapshots: GithubPullRequestCheckSnapshot[] = [];
   const pullRequestFiles: GithubPullRequestFileSummary[] = [];
   const pullRequestReviews: GithubPullRequestReviewSummary[] = [];
   const repoProfiles: GithubRepoProfileSummary[] = [];
@@ -140,6 +142,7 @@ export async function backfillGithubUser(
       commits: repoCommits,
       files: metadata.flatMap((item) => item.files),
       profile,
+      checkSnapshots: metadata.map((item) => item.checkSnapshot).filter((item): item is GithubPullRequestCheckSnapshot => item !== undefined),
       pullRequests: repoPullRequests,
       reviews: metadata.flatMap((item) => item.reviews),
     };
@@ -147,6 +150,7 @@ export async function backfillGithubUser(
 
   for (const result of repoResults) {
     pullRequestChecks.push(...result.checks);
+    pullRequestCheckSnapshots.push(...result.checkSnapshots);
     commits.push(...result.commits);
     pullRequestFiles.push(...result.files);
     pullRequestReviews.push(...result.reviews);
@@ -165,6 +169,7 @@ export async function backfillGithubUser(
     },
     commits,
     pullRequestChecks,
+    pullRequestCheckSnapshots,
     pullRequestFiles,
     pullRequestReviews,
     repoProfiles,
@@ -181,6 +186,7 @@ export async function fetchGithubPullRequestMetadata(
     ignoreMissing?: boolean;
   } = {},
 ): Promise<{
+  checkSnapshot?: GithubPullRequestCheckSnapshot;
   checks: GithubPullRequestCheckSummary[];
   files: GithubPullRequestFileSummary[];
   reviews: GithubPullRequestReviewSummary[];
@@ -217,6 +223,12 @@ export async function fetchGithubPullRequestMetadata(
     const commentCounts = reviewCommentCounts(reviewComments);
 
     return {
+      checkSnapshot: {
+        headSha,
+        pullRequestId: pullRequest.id,
+        pullRequestNumber: pullRequest.number,
+        repoFullName: repo.fullName,
+      },
       checks: checkRuns.data.check_runs
         .slice(0, MAX_GITHUB_CHECK_RUNS_PER_PULL_REQUEST)
         .map((checkRun) => ({
@@ -269,6 +281,31 @@ export async function fetchGithubPullRequestMetadata(
 
     throw error;
   }
+}
+
+export async function fetchGithubPullRequest(
+  octokit: Octokit,
+  repo: GithubRepoSummary,
+  pullRequestNumber: number,
+): Promise<GithubPullRequestSummary> {
+  const response = await octokit.pulls.get({
+    owner: repo.owner,
+    pull_number: pullRequestNumber,
+    repo: repo.name,
+  });
+  const pull = response.data;
+
+  return {
+    id: pull.id,
+    repoFullName: repo.fullName,
+    number: pull.number,
+    title: pull.title,
+    state: pull.state,
+    headSha: pull.head.sha,
+    htmlUrl: pull.html_url,
+    mergedAt: pull.merged_at,
+    updatedAt: pull.updated_at,
+  };
 }
 
 async function githubPullRequestHeadSha(

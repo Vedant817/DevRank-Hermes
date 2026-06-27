@@ -369,6 +369,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `pull_request.closed`
   - [x] `pull_request_review.submitted`
   - [x] `pull_request_review_comment.created`
+  - [x] `check_run.completed`
   - [ ] `issues.opened`
   - [ ] `release.published`
   - [ ] `workflow_run.completed`
@@ -385,13 +386,13 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Issue activity.
   - [x] README quality.
   - [x] Test coverage signals.
-  - [ ] CI status.
+  - [x] CI status.
   - [ ] Security/code scanning alerts.
   - [x] Project complexity.
 - [ ] Use GitHub REST APIs for:
   - [x] Listing pull requests.
   - [x] Listing recent default-branch commits.
-  - [ ] Viewing pull requests.
+  - [x] Viewing pull requests.
   - [ ] Editing pull requests.
   - [ ] Creating pull requests if needed.
   - [ ] Merging pull requests if needed.
@@ -411,6 +412,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Fetch commits from backfill and push webhooks.
 - [x] Fetch reviews.
 - [x] Fetch comments.
+- [x] Fetch current-head GitHub check-run CI evidence.
 - [ ] Run static analysis summary.
 - [ ] Classify PR type:
   - [ ] Feature.
@@ -676,12 +678,12 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] 8% DevOps/Cloud.
   - [x] 7% AI Agent/Automation Skills.
   - [x] 5% Communication + Public Proof.
-- [ ] Implement PR quality score formula:
+- [x] Implement PR quality score formula:
   - [x] 25% clarity of change.
   - [x] 20% test coverage.
   - [x] 15% code structure.
   - [x] 15% review response quality.
-  - [ ] 10% CI health.
+  - [x] 10% CI health.
   - [x] 10% security/static analysis.
   - [x] 5% documentation.
 - [ ] Implement AI-agent maturity score formula:

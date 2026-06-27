@@ -126,8 +126,26 @@ function Dashboard({ dashboard }: { dashboard: GithubPrReviewDashboard }) {
           rows={dashboard.pullRequests.map((item) => ({
             key: `${item.repoFullName}#${item.number}`,
             label: item.summary,
-            meta: `${item.testQuality} tests | ${item.reviewState} | ${item.mergeStatus}`,
+            meta: `${item.testQuality} tests | ${item.reviewState} | ${item.ciHealth} CI | ${item.mergeStatus}`,
             value: `${item.prQualityScore}%`,
+          }))}
+        />
+      </section>
+
+      <section className={styles.panel} aria-labelledby="ci-heading">
+        <div className={styles.sectionHeader}>
+          <p className={styles.kicker}>CI health</p>
+          <h2 id="ci-heading">
+            {dashboard.totals.passingCiPullRequests} passing, {dashboard.totals.failingCiPullRequests} failing
+          </h2>
+        </div>
+        <RankedRows
+          emptyText="No GitHub check-run evidence has been imported yet."
+          rows={dashboard.pullRequests.map((item) => ({
+            key: `${item.repoFullName}#${item.number}`,
+            label: item.summary,
+            meta: item.ciSummary,
+            value: item.ciHealth,
           }))}
         />
       </section>
@@ -217,7 +235,7 @@ function PrRows({ pullRequests }: { pullRequests: GithubPrReviewItem[] }) {
           <div>
             <strong>{item.summary}</strong>
             <span>
-              {item.riskLevel} risk | {item.testQuality} tests | {item.reviewState}
+              {item.riskLevel} risk | {item.testQuality} tests | {item.reviewState} | {item.ciHealth} CI
             </span>
           </div>
           <small>{item.prQualityScore}%</small>
