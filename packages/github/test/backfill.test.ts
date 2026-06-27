@@ -525,6 +525,53 @@ test("does not treat missing check-run permissions as healthy CI evidence", asyn
   );
 });
 
+test("orders pull request reviews chronologically before persistence", async () => {
+  const listReviews = () => undefined;
+  const octokit = {
+    checks: {
+      listForRef: async () => ({
+        data: {
+          check_runs: [],
+          total_count: 0,
+        },
+      }),
+    },
+    paginate: async (method: unknown) => {
+      if (method === listReviews) {
+        return [{
+          html_url: "https://github.com/salescode/devrank-os/pull/7#pullrequestreview-2",
+          id: 2,
+          state: "APPROVED",
+          submitted_at: "2026-06-25T02:00:00Z",
+          user: { login: "reviewer-2" },
+        }, {
+          html_url: "https://github.com/salescode/devrank-os/pull/7#pullrequestreview-1",
+          id: 1,
+          state: "COMMENTED",
+          submitted_at: "2026-06-25T01:00:00Z",
+          user: { login: "reviewer-1" },
+        }];
+      }
+
+      return [];
+    },
+    pulls: {
+      listFiles: () => undefined,
+      listReviewComments: () => undefined,
+      listReviews,
+    },
+  } as unknown as Octokit;
+
+  const metadata = await fetchGithubPullRequestMetadata(
+    octokit,
+    githubRepo(),
+    githubPullRequest(),
+  );
+
+  assert.deepEqual(metadata.reviews.map((review) => review.id), [1, 2]);
+  assert.deepEqual(metadata.reviews.map((review) => review.reviewerLogin), ["reviewer-1", "reviewer-2"]);
+});
+
 test("resolves missing PR head SHAs and caps returned check-run evidence", async () => {
   const checkCalls: unknown[] = [];
   const pullCalls: unknown[] = [];

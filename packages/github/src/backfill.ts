@@ -221,6 +221,7 @@ export async function fetchGithubPullRequestMetadata(
       }),
     ]);
     const commentCounts = reviewCommentCounts(reviewComments);
+    const sortedReviews = [...reviews].sort(compareReviewsChronologically);
 
     return {
       checkSnapshot: {
@@ -256,7 +257,7 @@ export async function fetchGithubPullRequestMetadata(
         repoFullName: repo.fullName,
         status: file.status,
       })),
-      reviews: reviews.map((review) => ({
+      reviews: sortedReviews.map((review) => ({
         commentCount: commentCounts.get(review.id) ?? 0,
         htmlUrl: review.html_url ?? null,
         id: review.id,
@@ -281,6 +282,22 @@ export async function fetchGithubPullRequestMetadata(
 
     throw error;
   }
+}
+
+function compareReviewsChronologically(
+  left: { id?: number; submitted_at?: string | null },
+  right: { id?: number; submitted_at?: string | null },
+) {
+  return compareNullableIso(left.submitted_at, right.submitted_at)
+    || (left.id ?? 0) - (right.id ?? 0);
+}
+
+function compareNullableIso(left: string | null | undefined, right: string | null | undefined) {
+  if (left === right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+
+  return new Date(left).getTime() - new Date(right).getTime();
 }
 
 export async function fetchGithubPullRequest(

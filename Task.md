@@ -396,7 +396,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] Editing pull requests.
   - [ ] Creating pull requests if needed.
   - [ ] Merging pull requests if needed.
-  - [ ] Listing PR reviews chronologically.
+  - [x] Listing PR reviews chronologically.
 - [ ] Add GitHub CodeQL/code scanning integration later.
 - [ ] Support retrieving code scanning alerts.
 - [ ] Support updating code scanning alerts.

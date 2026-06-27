@@ -27,6 +27,7 @@ export interface GithubPrReviewItem {
   resumeWorthyImpact: string;
   reviewComments: number;
   reviewState: "approved" | "changes-requested" | "reviewed" | "unreviewed";
+  reviewTimeline: GithubPrReviewTimelineItem[];
   riskLevel: "high" | "low" | "medium";
   securityIssues: string[];
   summary: string;
@@ -36,6 +37,15 @@ export interface GithubPrReviewItem {
   totalChanges: number;
   url: string | null;
   updatedAt: string | null;
+}
+
+export interface GithubPrReviewTimelineItem {
+  commentCount: number;
+  htmlUrl: string | null;
+  id: number;
+  reviewerLogin: string | null;
+  state: string;
+  submittedAt: string | null;
 }
 
 export interface GithubPrReviewRow {
@@ -56,6 +66,7 @@ export interface GithubPrReviewRow {
   pendingChecks: number;
   repoFullName: string;
   reviewComments: number;
+  reviewTimeline?: GithubPrReviewTimelineItem[];
   reviews: number;
   securityFiles: number;
   state: string;
@@ -86,6 +97,7 @@ type GithubPrReviewSqlRow = {
   pending_checks: string | number;
   repo_full_name: string;
   review_comments: string | number;
+  review_timeline: unknown;
   reviews: string | number;
   security_files: string | number;
   state: string;
@@ -137,7 +149,18 @@ export async function getGithubPrReviewDashboard(
         count(*) as reviews,
         count(*) filter (where state ilike 'approved') as approval_reviews,
         count(*) filter (where state ilike 'changes_requested') as changes_requested_reviews,
-        coalesce(sum(comment_count), 0) as review_comments
+        coalesce(sum(comment_count), 0) as review_comments,
+        jsonb_agg(
+          jsonb_build_object(
+            'commentCount', comment_count,
+            'htmlUrl', html_url,
+            'id', id,
+            'reviewerLogin', reviewer_login,
+            'state', state,
+            'submittedAt', submitted_at
+          )
+          order by submitted_at asc nulls last, id asc
+        ) as review_timeline
       from github_pr_reviews
       group by pull_request_id
     ),
@@ -191,6 +214,7 @@ export async function getGithubPrReviewDashboard(
       coalesce(review_stats.approval_reviews, 0) as approval_reviews,
       coalesce(review_stats.changes_requested_reviews, 0) as changes_requested_reviews,
       coalesce(review_stats.review_comments, 0) as review_comments,
+      coalesce(review_stats.review_timeline, '[]'::jsonb) as review_timeline,
       coalesce(check_stats.check_count, 0) as check_count,
       coalesce(check_stats.pending_checks, 0) as pending_checks,
       coalesce(check_stats.successful_checks, 0) as successful_checks,
@@ -223,6 +247,7 @@ export async function getGithubPrReviewDashboard(
     pendingChecks: Number(row.pending_checks),
     repoFullName: row.repo_full_name,
     reviewComments: Number(row.review_comments),
+    reviewTimeline: parseReviewTimeline(row.review_timeline),
     reviews: Number(row.reviews),
     securityFiles: Number(row.security_files),
     state: row.state,
@@ -277,6 +302,7 @@ function toReviewItem(row: GithubPrReviewRow): GithubPrReviewItem {
     resumeWorthyImpact: resumeImpactFor(row, prQualityScore, architectureImpact),
     reviewComments: row.reviewComments,
     reviewState,
+    reviewTimeline: sortedReviewTimeline(row.reviewTimeline ?? []),
     riskLevel,
     securityIssues,
     summary: `${row.repoFullName}#${row.number} ${row.title}`,
@@ -375,6 +401,47 @@ function reviewStateFor(row: GithubPrReviewRow) {
   }
 
   return row.reviews > 0 ? "reviewed" as const : "unreviewed" as const;
+}
+
+function sortedReviewTimeline(items: GithubPrReviewTimelineItem[]) {
+  return [...items].sort((left, right) =>
+    compareNullableIso(left.submittedAt, right.submittedAt)
+      || left.id - right.id,
+  );
+}
+
+function parseReviewTimeline(value: unknown): GithubPrReviewTimelineItem[] {
+  const items = typeof value === "string" ? safeJsonParse(value) : value;
+
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.map(parseReviewTimelineItem).filter((item): item is GithubPrReviewTimelineItem => item !== null);
+}
+
+function parseReviewTimelineItem(value: unknown): GithubPrReviewTimelineItem | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const id = Number(record.id);
+  const commentCount = Number(record.commentCount ?? 0);
+  const state = typeof record.state === "string" ? record.state : undefined;
+
+  if (!Number.isFinite(id) || state === undefined) {
+    return null;
+  }
+
+  return {
+    commentCount: Number.isFinite(commentCount) ? commentCount : 0,
+    htmlUrl: typeof record.htmlUrl === "string" ? record.htmlUrl : null,
+    id,
+    reviewerLogin: typeof record.reviewerLogin === "string" ? record.reviewerLogin : null,
+    state,
+    submittedAt: typeof record.submittedAt === "string" ? toIso(record.submittedAt) : null,
+  };
 }
 
 function mergeStatusFor(row: GithubPrReviewRow) {
@@ -497,4 +564,20 @@ function resumeImpactFor(
 
 function toIso(value: Date | string) {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+function compareNullableIso(left: string | null | undefined, right: string | null | undefined) {
+  if (left === right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+
+  return new Date(left).getTime() - new Date(right).getTime();
+}
+
+function safeJsonParse(value: string) {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return [];
+  }
 }

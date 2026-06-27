@@ -166,6 +166,29 @@ function Dashboard({ dashboard }: { dashboard: GithubPrReviewDashboard }) {
         />
       </section>
 
+      <section className={styles.panel} aria-labelledby="review-timeline-heading">
+        <div className={styles.sectionHeader}>
+          <p className={styles.kicker}>Review timeline</p>
+          <h2 id="review-timeline-heading">Chronological review flow</h2>
+        </div>
+        <SignalRows
+          emptyText="No chronological review timeline has been imported yet."
+          rows={dashboard.pullRequests.flatMap((item) =>
+            item.reviewTimeline.map((review, index) => ({
+              key: `${item.repoFullName}#${item.number}-review-${review.id}`,
+              label: `${index + 1}. ${review.state.toLowerCase()}`,
+              meta: [
+                item.summary,
+                review.reviewerLogin ? `Reviewer: ${review.reviewerLogin}` : "Reviewer unknown",
+                review.submittedAt ? `Submitted: ${formatTimestamp(review.submittedAt)}` : "Submission time unavailable",
+                `${review.commentCount} comment(s)`,
+              ].join(" | "),
+              value: item.reviewState,
+            })),
+          )}
+        />
+      </section>
+
       <section className={styles.panel} aria-labelledby="architecture-heading">
         <div className={styles.sectionHeader}>
           <p className={styles.kicker}>Architecture impact</p>
@@ -277,3 +300,11 @@ function RankedRows({
 }
 
 const SignalRows = RankedRows;
+
+function formatTimestamp(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(new Date(value));
+}

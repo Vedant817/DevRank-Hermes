@@ -28,6 +28,21 @@ test("builds PR review dashboard from persisted PR file and review metadata", ()
       pendingChecks: 0,
       repoFullName: "salescode/devrank-os",
       reviewComments: 3,
+      reviewTimeline: [{
+        commentCount: 1,
+        htmlUrl: "https://github.com/salescode/devrank-os/pull/7#pullrequestreview-302",
+        id: 302,
+        reviewerLogin: "reviewer-2",
+        state: "APPROVED",
+        submittedAt: "2026-06-23T07:15:00.000Z",
+      }, {
+        commentCount: 2,
+        htmlUrl: "https://github.com/salescode/devrank-os/pull/7#pullrequestreview-301",
+        id: 301,
+        reviewerLogin: "reviewer-1",
+        state: "COMMENTED",
+        submittedAt: "2026-06-23T07:00:00.000Z",
+      }],
       reviews: 1,
       securityFiles: 0,
       state: "closed",
@@ -87,6 +102,10 @@ test("builds PR review dashboard from persisted PR file and review metadata", ()
   assert.equal(dashboard.pullRequests[0]?.ciHealth, "passing");
   assert.equal(dashboard.pullRequests[0]?.ciChecks, 3);
   assert.match(dashboard.pullRequests[0]?.ciSummary ?? "", /3 of 3/);
+  assert.deepEqual(
+    dashboard.pullRequests[0]?.reviewTimeline.map((review) => review.id),
+    [301, 302],
+  );
   assert.match(dashboard.pullRequests[0]?.resumeWorthyImpact ?? "", /Strong resume evidence/);
   assert.equal(dashboard.pullRequests[1]?.riskLevel, "high");
   assert.equal(dashboard.pullRequests[1]?.testQuality, "missing");
