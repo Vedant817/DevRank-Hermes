@@ -20,9 +20,11 @@ import {
   runInTransaction,
   upsertEvidenceItems,
   upsertGithubBackfill,
+  upsertSkillEvidence,
 } from "@repo/db";
 import {
   createGithubClient,
+  deriveGithubPrSkillEvidence,
   fetchGithubPullRequest,
   fetchGithubPullRequestMetadata,
   githubWebhookIngestion,
@@ -202,14 +204,19 @@ export async function POST(request: Request) {
         },
       }]);
 
+      const writtenSkillEvidence = await upsertSkillEvidence(
+        transaction,
+        deriveGithubPrSkillEvidence(ingestion.backfill),
+      );
+
       await markGithubWebhookDeliveryProcessed(transaction, deliveryId);
       await insertIngestionRun(transaction, {
         source: "github_webhook",
         status: "success",
-        summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${deletedRepositories} deleted repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestChecks} PR check(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), ${written.repoProfiles} repo profile(s), and ${writtenEvidence} evidence item(s).`,
+        summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${deletedRepositories} deleted repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestChecks} PR check(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), ${written.repoProfiles} repo profile(s), ${writtenEvidence} evidence item(s), and ${writtenSkillEvidence} skill evidence item(s).`,
       });
 
-      return { deletedRepositories, replacedMetadata, written, writtenEvidence };
+      return { deletedRepositories, replacedMetadata, written, writtenEvidence, writtenSkillEvidence };
     });
 
     return jsonOk({

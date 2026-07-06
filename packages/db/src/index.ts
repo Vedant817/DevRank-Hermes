@@ -10,3 +10,4 @@ export * from "./migrate.js";
 export * from "./rate-limit.js";
 export * from "./repositories.js";
 export * from "./schema.js";
+export * from "./skills.js";

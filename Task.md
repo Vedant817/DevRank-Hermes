@@ -157,8 +157,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] `ai_tool_calls`
   - [x] `ai_session_summaries`
   - [x] `memory_items`
-  - [ ] `skills`
-  - [ ] `skill_evidence`
+  - [x] `skills`
+  - [x] `skill_evidence`
   - [x] `github_repos`
   - [x] `github_commits`
   - [x] `github_pull_requests`
@@ -425,7 +425,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Classify PR test quality.
 - [x] Classify PR design quality.
 - [x] Update PR dashboard.
-- [ ] Update skill evidence.
+- [x] Update skill evidence.
 - [ ] Recompute SDE readiness score.
 - [x] Handle `pull_request.opened`.
 - [x] Handle `pull_request.synchronize`.
