@@ -15,13 +15,17 @@ import {
   deleteGithubRepositories,
   deleteGithubPullRequestMetadata,
   insertIngestionRun,
+  insertScoreSnapshot,
+  listScoringEvidence,
   markGithubWebhookDeliveryFailed,
   markGithubWebhookDeliveryProcessed,
   runInTransaction,
   upsertEvidenceItems,
   upsertGithubBackfill,
   upsertSkillEvidence,
+  type SqlClient,
 } from "@repo/db";
+import { computeSdeReadinessSnapshot } from "@repo/scoring";
 import {
   createGithubClient,
   deriveGithubPrSkillEvidence,
@@ -218,6 +222,7 @@ export async function POST(request: Request) {
 
       return { deletedRepositories, replacedMetadata, written, writtenEvidence, writtenSkillEvidence };
     });
+    const scoreRecompute = await recomputeScoreSnapshotFromEvidence(sql);
 
     return jsonOk({
       received: true,
@@ -225,6 +230,7 @@ export async function POST(request: Request) {
       deliveryId,
       action,
       summary: ingestion.summary,
+      scoreRecompute,
       ...persisted,
     });
   } catch (error) {
@@ -257,4 +263,23 @@ function shouldRefreshPullRequestMetadata(event: string) {
     || event === "pull_request"
     || event === "pull_request_review"
     || event === "pull_request_review_comment";
+}
+
+// Best-effort SDE readiness refresh after webhook evidence lands: a scoring
+// failure must not undo or fail the already-committed webhook persistence.
+async function recomputeScoreSnapshotFromEvidence(sql: SqlClient) {
+  try {
+    const evidence = await listScoringEvidence(sql);
+
+    if (evidence.length === 0) {
+      return { status: "skipped_no_evidence" as const };
+    }
+
+    const snapshot = computeSdeReadinessSnapshot(evidence);
+    await insertScoreSnapshot(sql, snapshot);
+
+    return { evidenceCount: evidence.length, overall: snapshot.overall, status: "updated" as const };
+  } catch {
+    return { status: "failed" as const };
+  }
 }

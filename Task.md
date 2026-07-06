@@ -426,7 +426,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Classify PR design quality.
 - [x] Update PR dashboard.
 - [x] Update skill evidence.
-- [ ] Recompute SDE readiness score.
+- [x] Recompute SDE readiness score.
 - [x] Handle `pull_request.opened`.
 - [x] Handle `pull_request.synchronize`.
 - [x] Handle `pull_request.closed`.
