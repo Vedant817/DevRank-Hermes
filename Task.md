@@ -693,15 +693,15 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] 15% tool/orchestrator setup.
   - [x] 10% reusable skills created.
   - [x] 10% reduced repeated mistakes.
-- [ ] Implement Repo Portfolio Score formula:
-  - [ ] 20% real-world problem clarity.
-  - [ ] 15% architecture quality.
-  - [ ] 15% code quality.
-  - [ ] 15% tests/CI.
-  - [ ] 10% deployment/demo.
-  - [ ] 10% README/docs.
-  - [ ] 10% technical depth.
-  - [ ] 5% uniqueness.
+- [x] Implement Repo Portfolio Score formula:
+  - [x] 20% real-world problem clarity.
+  - [x] 15% architecture quality.
+  - [x] 15% code quality.
+  - [x] 15% tests/CI.
+  - [x] 10% deployment/demo.
+  - [x] 10% README/docs.
+  - [x] 10% technical depth.
+  - [x] 5% uniqueness.
 - [x] Store score snapshots over time.
 - [x] Explain every score with evidence.
 - [x] Detect stale score snapshots when the scoring rubric changes.
@@ -710,16 +710,16 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 ## 16. Portfolio Generation Logic
 
-- [ ] Score every repo with Repo Portfolio Score.
-- [ ] Generate repo status labels:
-  - [ ] This repo is resume-ready.
-  - [ ] This repo needs README.
-  - [ ] This repo needs tests.
-  - [ ] This repo needs deployed demo.
-  - [ ] This repo is too tutorial-like.
-  - [ ] This repo has strong backend depth.
-  - [ ] This repo does not prove SDE skill yet.
-- [ ] Link repo scores to dashboard recommendations.
+- [x] Score every repo with Repo Portfolio Score.
+- [x] Generate repo status labels:
+  - [x] This repo is resume-ready.
+  - [x] This repo needs README.
+  - [x] This repo needs tests.
+  - [x] This repo needs deployed demo.
+  - [x] This repo is too tutorial-like.
+  - [x] This repo has strong backend depth.
+  - [x] This repo does not prove SDE skill yet.
+- [x] Link repo scores to dashboard recommendations.
 - [ ] Link repo improvements to daily/weekly learning plans.
 - [x] Link Linear completed issues to portfolio evidence only when they map to real code, PRs, docs, or deployed work.
 - [x] Link strong repos to resume and LinkedIn content generation.
@@ -881,8 +881,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [ ] Import all repos.
 - [ ] Import PRs.
 - [x] Import commits.
-- [ ] Implement repo scoring.
-- [ ] Build Portfolio Dashboard.
+- [x] Implement repo scoring.
+- [x] Build Portfolio Dashboard.
 
 ### Week 4: GitHub and Linear Webhooks
 

@@ -1,18 +1,54 @@
 import type { SqlClient } from "./client.js";
 
-const RECENT_WINDOW_DAYS = 30;
-const PORTFOLIO_SIGNAL_POINTS = {
-  architecture: 10,
-  commits: 15,
-  deployment: 10,
-  pullRequests: 15,
-  readme: 15,
-  recency: 10,
-  techStack: 10,
-  tests: 15,
+// Repo Portfolio Score rubric (Task.md section 15) mapped to importable
+// GitHub evidence. Factors that need human judgment (problem clarity,
+// uniqueness) use documented proxies: README + merged-PR proof for clarity,
+// absence of tutorial-like signals for uniqueness.
+const PORTFOLIO_RUBRIC_POINTS = {
+  architectureQuality: 15,
+  codeQuality: 15,
+  deploymentDemo: 10,
+  problemClarity: 20,
+  readmeDocs: 10,
+  technicalDepth: 10,
+  testsCi: 15,
+  uniqueness: 5,
 } as const;
-const MAX_PORTFOLIO_SCORE = Object.values(PORTFOLIO_SIGNAL_POINTS)
+const MAX_PORTFOLIO_SCORE = Object.values(PORTFOLIO_RUBRIC_POINTS)
   .reduce((total, points) => total + points, 0);
+
+const tutorialNamePattern =
+  /(tutorial|course|learn(ing)?|practice|playground|example|demo|clone|starter|template|bootcamp|udemy|freecodecamp|training|exercise)/i;
+
+const backendStackSignals = new Set([
+  ".net",
+  "api",
+  "c#",
+  "database",
+  "django",
+  "express",
+  "fastapi",
+  "fastify",
+  "flask",
+  "go",
+  "golang",
+  "graphql",
+  "java",
+  "kafka",
+  "kotlin",
+  "mysql",
+  "nest",
+  "node",
+  "node.js",
+  "postgres",
+  "postgresql",
+  "python",
+  "redis",
+  "rust",
+  "server",
+  "spring",
+  "supabase",
+]);
 
 export interface GithubPortfolioDashboard {
   totals: {
@@ -68,6 +104,7 @@ export interface GithubPortfolioRepo {
   profileStatus: "missing" | "scanned" | "unavailable";
   pullRequestCount: number;
   reasons: string[];
+  statusLabels: string[];
   techStack: string[];
 }
 
@@ -245,7 +282,7 @@ export function buildGithubPortfolioDashboard(input: {
 function toPortfolioRepo(row: GithubPortfolioRepoRow, now: Date): GithubPortfolioRepo {
   const profileStatus = row.scanStatus ?? "missing";
   const reasons = portfolioReasons(row, now, profileStatus);
-  const portfolioScore = scorePortfolio(row, now);
+  const portfolioScore = scorePortfolio(row);
   const techStack = row.techStack.length > 0
     ? row.techStack
     : row.language
@@ -266,29 +303,99 @@ function toPortfolioRepo(row: GithubPortfolioRepoRow, now: Date): GithubPortfoli
     profileStatus,
     pullRequestCount: row.pullRequests,
     reasons,
+    statusLabels: statusLabelsFor(row, portfolioScore, profileStatus),
     techStack,
   };
 }
 
-function scorePortfolio(row: GithubPortfolioRepoRow, now: Date) {
-  const profileScore =
-    booleanPoints(row.hasReadme, PORTFOLIO_SIGNAL_POINTS.readme) +
-    booleanPoints(row.hasTests, PORTFOLIO_SIGNAL_POINTS.tests) +
-    booleanPoints(row.hasDeploymentConfig, PORTFOLIO_SIGNAL_POINTS.deployment) +
-    booleanPoints(row.hasArchitectureDiagram, PORTFOLIO_SIGNAL_POINTS.architecture);
-  const commitScore = boundedRatio(row.commits, 40) * PORTFOLIO_SIGNAL_POINTS.commits;
-  const recentScore =
-    row.lastCommitAt && daysSince(row.lastCommitAt, now) <= RECENT_WINDOW_DAYS
-      ? PORTFOLIO_SIGNAL_POINTS.recency
-      : 0;
-  const prScore =
-    boundedRatio(row.pullRequests, 12) * PORTFOLIO_SIGNAL_POINTS.pullRequests;
+function scorePortfolio(row: GithubPortfolioRepoRow) {
   const stackSignals = row.techStack.length || (row.language ? 1 : 0);
-  const stackScore =
-    boundedRatio(stackSignals, 4) * PORTFOLIO_SIGNAL_POINTS.techStack;
-  const rawScore = profileScore + commitScore + recentScore + prScore + stackScore;
+  const mergedRatio = row.pullRequests > 0
+    ? Math.min(1, Math.max(0, row.mergedPullRequests / row.pullRequests))
+    : 0;
+  const problemClarity =
+    booleanPoints(row.hasReadme, 12) +
+    (row.mergedPullRequests > 0 ? 8 : 0);
+  const architectureQuality =
+    booleanPoints(row.hasArchitectureDiagram, 10) +
+    (stackSignals >= 2 ? 5 : 0);
+  const codeQuality = mergedRatio * PORTFOLIO_RUBRIC_POINTS.codeQuality;
+  const testsCi = booleanPoints(row.hasTests, PORTFOLIO_RUBRIC_POINTS.testsCi);
+  const deploymentDemo = booleanPoints(
+    row.hasDeploymentConfig,
+    PORTFOLIO_RUBRIC_POINTS.deploymentDemo,
+  );
+  const readmeDocs = booleanPoints(row.hasReadme, PORTFOLIO_RUBRIC_POINTS.readmeDocs);
+  const technicalDepth =
+    boundedRatio(row.commits, 40) * 5 + boundedRatio(stackSignals, 4) * 5;
+  const uniqueness = isTutorialLike(row) ? 0 : PORTFOLIO_RUBRIC_POINTS.uniqueness;
+  const rawScore =
+    problemClarity +
+    architectureQuality +
+    codeQuality +
+    testsCi +
+    deploymentDemo +
+    readmeDocs +
+    technicalDepth +
+    uniqueness;
 
   return Math.max(0, Math.min(MAX_PORTFOLIO_SCORE, Math.round(rawScore)));
+}
+
+function isTutorialLike(row: GithubPortfolioRepoRow) {
+  if (tutorialNamePattern.test(row.fullName.split("/").pop() ?? row.fullName)) {
+    return true;
+  }
+
+  return (
+    row.scanStatus === "scanned" &&
+    row.hasTests === false &&
+    row.pullRequests <= 0 &&
+    !(row.commits >= 10)
+  );
+}
+
+function hasBackendStack(row: GithubPortfolioRepoRow) {
+  const signals = [...row.techStack, ...(row.language ? [row.language] : [])];
+
+  return signals.some((signal) => backendStackSignals.has(signal.trim().toLowerCase()));
+}
+
+function statusLabelsFor(
+  row: GithubPortfolioRepoRow,
+  portfolioScore: number,
+  profileStatus: GithubPortfolioRepo["profileStatus"],
+) {
+  const labels: string[] = [];
+  const resumeReady =
+    portfolioScore >= 70 &&
+    row.hasReadme === true &&
+    row.hasTests === true &&
+    row.mergedPullRequests > 0;
+
+  if (resumeReady) {
+    labels.push("This repo is resume-ready.");
+  }
+
+  if (profileStatus === "scanned") {
+    if (row.hasReadme === false) labels.push("This repo needs README.");
+    if (row.hasTests === false) labels.push("This repo needs tests.");
+    if (row.hasDeploymentConfig === false) labels.push("This repo needs deployed demo.");
+  }
+
+  if (isTutorialLike(row)) {
+    labels.push("This repo is too tutorial-like.");
+  }
+
+  if (hasBackendStack(row) && row.hasTests === true && row.commits >= 20) {
+    labels.push("This repo has strong backend depth.");
+  }
+
+  if (!resumeReady && portfolioScore < 35) {
+    labels.push("This repo does not prove SDE skill yet.");
+  }
+
+  return labels;
 }
 
 function portfolioReasons(

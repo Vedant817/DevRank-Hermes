@@ -226,7 +226,9 @@ function RepoRows({
         <div className={styles.sourceRow} key={repo.fullName}>
           <div>
             <strong>{repo.fullName}</strong>
-            <span>{repo.reasons.slice(0, 2).join(" ")}</span>
+            <span>
+              {[...repo.statusLabels.slice(0, 2), ...repo.reasons.slice(0, 2)].join(" ")}
+            </span>
           </div>
           <small>{repo.portfolioScore}%</small>
         </div>

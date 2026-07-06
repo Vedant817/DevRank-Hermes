@@ -70,8 +70,16 @@ test("builds GitHub portfolio dashboard from persisted repo profile evidence", (
   assert.equal(dashboard.totals.profiledRepos, 2);
   assert.equal(dashboard.totals.unavailableProfiles, 1);
   assert.equal(dashboard.bestRepos[0]?.fullName, "salescode/devrank-os");
-  assert.equal(dashboard.bestRepos[0]?.portfolioScore, 93);
+  assert.equal(dashboard.bestRepos[0]?.portfolioScore, 97);
+  assert.deepEqual(dashboard.bestRepos[0]?.statusLabels, ["This repo is resume-ready."]);
   assert.equal(dashboard.weakRepos[0]?.fullName, "salescode/tutorial-api");
+  assert.deepEqual(dashboard.weakRepos[0]?.statusLabels, [
+    "This repo needs README.",
+    "This repo needs tests.",
+    "This repo needs deployed demo.",
+    "This repo is too tutorial-like.",
+    "This repo does not prove SDE skill yet.",
+  ]);
   assert.ok(dashboard.bestRepos.every((repo) => repo.portfolioScore <= 100));
   assert.ok(dashboard.weakRepos.every((repo) => repo.portfolioScore >= 0));
   assert.deepEqual(dashboard.needsReadme.map((repo) => repo.fullName), ["salescode/tutorial-api"]);
@@ -137,4 +145,35 @@ test("bounds portfolio dashboard scores to the explicit 100-point budget", () =>
   assert.equal(scores.get("vedant/max-signals"), 100);
   assert.equal(scores.get("vedant/no-signals"), 0);
   assert.ok([...scores.values()].every((score) => Number.isFinite(score)));
+});
+
+test("labels tested backend repos with strong backend depth", () => {
+  const dashboard = buildGithubPortfolioDashboard({
+    now: new Date("2026-06-24T00:00:00.000Z"),
+    rows: [
+      {
+        commits: 35,
+        commitsLast30Days: 5,
+        commitsLast90Days: 15,
+        fullName: "vedant/orders-api",
+        hasArchitectureDiagram: false,
+        hasDeploymentConfig: true,
+        hasReadme: true,
+        hasTests: true,
+        htmlUrl: "https://github.com/vedant/orders-api",
+        language: "TypeScript",
+        lastCommitAt: "2026-06-20T00:00:00.000Z",
+        mergedPullRequests: 4,
+        openPullRequests: 1,
+        profileScannedAt: "2026-06-24T00:00:00.000Z",
+        pullRequests: 5,
+        scanStatus: "scanned",
+        techStack: ["Node.js", "Postgres", "Express"],
+      },
+    ],
+  });
+  const repo = dashboard.bestRepos[0];
+
+  assert.ok(repo?.statusLabels.includes("This repo has strong backend depth."));
+  assert.ok(!repo?.statusLabels.includes("This repo is too tutorial-like."));
 });

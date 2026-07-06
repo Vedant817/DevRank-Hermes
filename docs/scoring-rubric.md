@@ -43,24 +43,25 @@ check has an accepted terminal conclusion. Pending checks receive 3 points.
 Missing, failing, stale, cancelled, timed-out, action-required, or neutral-only
 evidence receives 0 CI points.
 
-## GitHub Portfolio Dashboard Signals
+## Repo Portfolio Score
 
-The current repository dashboard uses a bounded 100-point evidence signal while
-the complete Repo Portfolio Score rubric is still being implemented:
+The repository dashboard scores each repo on the planned 100-point Repo
+Portfolio rubric, mapped to importable GitHub evidence:
 
-- README present: 15 points
-- Test files present: 15 points
-- Deployment configuration present: 10 points
-- Architecture documentation present: 10 points
-- Imported commit depth: 15 points
-- Commit recency: 10 points
-- Imported pull request depth: 15 points
-- Technology breadth: 10 points
+- Real-world problem clarity: 20 points (README present: 12, merged PR proof: 8)
+- Architecture quality: 15 points (architecture documentation: 10, multi-technology stack: 5)
+- Code quality: 15 points (merged-to-total pull request ratio)
+- Tests/CI: 15 points (test evidence present)
+- Deployment/demo: 10 points (deployment configuration present)
+- README/docs: 10 points (README present)
+- Technical depth: 10 points (bounded commit depth: 5, bounded technology breadth: 5)
+- Uniqueness: 5 points (no tutorial-like name or tutorial-weak evidence pattern)
 
-This score is deterministic, capped at 100, and based only on persisted GitHub
-profile metadata. It does not claim to measure real-world problem clarity,
-deployed-demo health, code coverage, or uniqueness until those evidence sources
-are collected.
+Problem clarity and uniqueness cannot be measured directly from metadata, so the
+score uses the documented proxies above. The score is deterministic and capped
+at 100. Each repo also receives explicit status labels: resume-ready, needs
+README, needs tests, needs deployed demo, too tutorial-like, strong backend
+depth, and does-not-prove-SDE-skill-yet.
 
 ## Current Flow
 
