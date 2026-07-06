@@ -414,13 +414,13 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Fetch comments.
 - [x] Fetch current-head GitHub check-run CI evidence.
 - [ ] Run static analysis summary.
-- [ ] Classify PR type:
-  - [ ] Feature.
-  - [ ] Bug.
-  - [ ] Refactor.
-  - [ ] Test.
-  - [ ] Docs.
-- [ ] Classify PR complexity.
+- [x] Classify PR type:
+  - [x] Feature.
+  - [x] Bug.
+  - [x] Refactor.
+  - [x] Test.
+  - [x] Docs.
+- [x] Classify PR complexity.
 - [x] Classify PR risk.
 - [x] Classify PR test quality.
 - [x] Classify PR design quality.

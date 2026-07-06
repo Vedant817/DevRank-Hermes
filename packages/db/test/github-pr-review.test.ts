@@ -107,12 +107,125 @@ test("builds PR review dashboard from persisted PR file and review metadata", ()
     [301, 302],
   );
   assert.match(dashboard.pullRequests[0]?.resumeWorthyImpact ?? "", /Strong resume evidence/);
+  assert.equal(dashboard.pullRequests[0]?.prType, "feature");
+  assert.equal(dashboard.pullRequests[0]?.complexity, "medium");
   assert.equal(dashboard.pullRequests[1]?.riskLevel, "high");
+  assert.equal(dashboard.pullRequests[1]?.prType, "refactor");
+  assert.equal(dashboard.pullRequests[1]?.complexity, "high");
   assert.equal(dashboard.pullRequests[1]?.testQuality, "missing");
   assert.equal(dashboard.pullRequests[1]?.reviewState, "changes-requested");
   assert.equal(dashboard.pullRequests[1]?.ciHealth, "failing");
   assert.match(dashboard.pullRequests[1]?.securityIssues.join(" ") ?? "", /Security-sensitive/);
   assert.match(dashboard.pullRequests[1]?.resumeWorthyImpact ?? "", /Not resume-ready/);
+});
+
+test("classifies PR type from conventional prefixes, titles, and file signals", () => {
+  const base = {
+    approvalReviews: 0,
+    architectureFiles: 0,
+    backendFiles: 0,
+    changesRequestedReviews: 0,
+    checkCount: 0,
+    failedChecks: 0,
+    fileCount: 1,
+    files: ["src/index.ts"],
+    frontendFiles: 0,
+    htmlUrl: null,
+    infraFiles: 0,
+    mergedAt: null,
+    passedChecks: 0,
+    pendingChecks: 0,
+    repoFullName: "salescode/devrank-os",
+    reviewComments: 0,
+    reviews: 0,
+    securityFiles: 0,
+    state: "open",
+    successfulChecks: 0,
+    testFiles: 0,
+    totalAdditions: 10,
+    totalChanges: 12,
+    totalDeletions: 2,
+    updatedAt: null,
+  };
+  const dashboard = buildGithubPrReviewDashboard([
+    { ...base, number: 1, title: "feat(api): add pagination" },
+    { ...base, number: 2, title: "fix: handle empty webhook payloads" },
+    { ...base, number: 3, title: "chore(deps): bump octokit" },
+    { ...base, number: 4, title: "Update setup guide", files: ["docs/setup.md", "README.md"], fileCount: 2 },
+    {
+      ...base,
+      number: 5,
+      title: "Cover webhook retries",
+      files: ["test/webhook.test.ts"],
+      testFiles: 1,
+    },
+    { ...base, number: 6, title: "Resolve login regression" },
+    { ...base, number: 7, title: "Rename planner internals" },
+    { ...base, number: 8, title: "Add Slack notifier" },
+  ]);
+  const byNumber = new Map(dashboard.pullRequests.map((item) => [item.number, item]));
+
+  assert.equal(byNumber.get(1)?.prType, "feature");
+  assert.equal(byNumber.get(2)?.prType, "bug");
+  assert.equal(byNumber.get(3)?.prType, "refactor");
+  assert.equal(byNumber.get(4)?.prType, "docs");
+  assert.equal(byNumber.get(5)?.prType, "test");
+  assert.equal(byNumber.get(6)?.prType, "bug");
+  assert.equal(byNumber.get(7)?.prType, "refactor");
+  assert.equal(byNumber.get(8)?.prType, "feature");
+});
+
+test("classifies PR complexity from size and touched areas independently of risk", () => {
+  const base = {
+    approvalReviews: 0,
+    architectureFiles: 0,
+    backendFiles: 0,
+    changesRequestedReviews: 0,
+    checkCount: 0,
+    failedChecks: 0,
+    frontendFiles: 0,
+    htmlUrl: null,
+    infraFiles: 0,
+    mergedAt: null,
+    passedChecks: 0,
+    pendingChecks: 0,
+    repoFullName: "salescode/devrank-os",
+    reviewComments: 0,
+    reviews: 0,
+    securityFiles: 0,
+    state: "open",
+    successfulChecks: 0,
+    testFiles: 0,
+    title: "Planner updates",
+    totalAdditions: 0,
+    totalDeletions: 0,
+    updatedAt: null,
+  };
+  const dashboard = buildGithubPrReviewDashboard([
+    { ...base, number: 1, fileCount: 1, files: ["src/a.ts"], totalChanges: 20 },
+    {
+      ...base,
+      number: 2,
+      backendFiles: 1,
+      fileCount: 3,
+      files: ["src/api.ts", "src/db.ts", "test/api.test.ts"],
+      testFiles: 1,
+      totalChanges: 90,
+    },
+    {
+      ...base,
+      number: 3,
+      backendFiles: 4,
+      fileCount: 16,
+      files: ["src/api.ts"],
+      totalChanges: 120,
+    },
+  ]);
+  const byNumber = new Map(dashboard.pullRequests.map((item) => [item.number, item]));
+
+  assert.equal(byNumber.get(1)?.complexity, "low");
+  assert.equal(byNumber.get(2)?.complexity, "medium");
+  assert.equal(byNumber.get(3)?.complexity, "high");
 });
 
 test("does not award full CI credit when checks are missing or pending", () => {

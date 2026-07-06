@@ -100,6 +100,22 @@ function Dashboard({ dashboard }: { dashboard: GithubPrReviewDashboard }) {
         />
       </section>
 
+      <section className={styles.panel} aria-labelledby="classification-heading">
+        <div className={styles.sectionHeader}>
+          <p className={styles.kicker}>Classification</p>
+          <h2 id="classification-heading">PR type and complexity</h2>
+        </div>
+        <RankedRows
+          emptyText="No PR metadata available to classify yet."
+          rows={dashboard.pullRequests.map((item) => ({
+            key: `${item.repoFullName}#${item.number}`,
+            label: item.summary,
+            meta: `${item.complexity} complexity | ${item.totalChanges} changed line(s), ${item.filesChanged} file(s)`,
+            value: item.prType,
+          }))}
+        />
+      </section>
+
       <section className={styles.panel} aria-labelledby="risk-heading">
         <div className={styles.sectionHeader}>
           <p className={styles.kicker}>Risk level</p>
@@ -258,7 +274,7 @@ function PrRows({ pullRequests }: { pullRequests: GithubPrReviewItem[] }) {
           <div>
             <strong>{item.summary}</strong>
             <span>
-              {item.riskLevel} risk | {item.testQuality} tests | {item.reviewState} | {item.ciHealth} CI
+              {item.prType} | {item.complexity} complexity | {item.riskLevel} risk | {item.testQuality} tests | {item.reviewState} | {item.ciHealth} CI
             </span>
           </div>
           <small>{item.prQualityScore}%</small>

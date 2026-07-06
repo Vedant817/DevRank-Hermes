@@ -12,17 +12,23 @@ export interface GithubPrReviewDashboard {
   pullRequests: GithubPrReviewItem[];
 }
 
+export type GithubPrType = "bug" | "docs" | "feature" | "refactor" | "test";
+
+export type GithubPrComplexity = "high" | "low" | "medium";
+
 export interface GithubPrReviewItem {
   architectureImpact: "high" | "low" | "medium";
   ciChecks: number;
   ciHealth: "failing" | "inconclusive" | "passing" | "pending" | "unavailable";
   ciSummary: string;
   codeSmellScore: number;
+  complexity: GithubPrComplexity;
   filesChanged: number;
   learningExtracted: string[];
   mergeStatus: "closed" | "merged" | "open";
   number: number;
   prQualityScore: number;
+  prType: GithubPrType;
   repoFullName: string;
   resumeWorthyImpact: string;
   reviewComments: number;
@@ -293,11 +299,13 @@ function toReviewItem(row: GithubPrReviewRow): GithubPrReviewItem {
     ciHealth,
     ciSummary: ciSummaryFor(row, ciHealth),
     codeSmellScore,
+    complexity: complexityFor(row),
     filesChanged: row.fileCount,
     learningExtracted: learningFor(row, testQuality, architectureImpact),
     mergeStatus: mergeStatusFor(row),
     number: row.number,
     prQualityScore,
+    prType: prTypeFor(row),
     repoFullName: row.repoFullName,
     resumeWorthyImpact: resumeImpactFor(row, prQualityScore, architectureImpact),
     reviewComments: row.reviewComments,
@@ -339,6 +347,73 @@ function riskLevelFor(
   }
 
   return "low" as const;
+}
+
+function prTypeFor(row: GithubPrReviewRow): GithubPrType {
+  const title = row.title.toLowerCase();
+  const conventionalPrefix = /^(?<type>build|chore|ci|docs|feat|fix|perf|refactor|style|test)(\(.+\))?!?:/.exec(title)?.groups?.type;
+
+  if (conventionalPrefix !== undefined) {
+    switch (conventionalPrefix) {
+      case "docs":
+        return "docs";
+      case "fix":
+        return "bug";
+      case "test":
+        return "test";
+      case "feat":
+        return "feature";
+      default:
+        return "refactor";
+    }
+  }
+
+  const docFiles = row.files.filter((file) => /\.(md|mdx|rst|txt)$|(^|\/)docs?\//i.test(file)).length;
+
+  if (row.fileCount > 0 && docFiles === row.fileCount) {
+    return "docs";
+  }
+
+  if (row.fileCount > 0 && row.testFiles === row.fileCount) {
+    return "test";
+  }
+
+  if (/\b(bug|fix(es|ed)?|hotfix|regression|patch)\b/.test(title)) {
+    return "bug";
+  }
+
+  if (/\b(refactor(s|ed|ing)?|cleanup|clean up|rename|restructure|simplify|extract|chore)\b/.test(title)) {
+    return "refactor";
+  }
+
+  if (/\b(docs?|documentation|readme)\b/.test(title)) {
+    return "docs";
+  }
+
+  if (/\b(tests?|spec|coverage)\b/.test(title) && row.testFiles > 0) {
+    return "test";
+  }
+
+  return "feature";
+}
+
+function complexityFor(row: GithubPrReviewRow): GithubPrComplexity {
+  const touchedAreas = [
+    row.backendFiles > 0,
+    row.frontendFiles > 0,
+    row.infraFiles > 0,
+    row.testFiles > 0,
+  ].filter(Boolean).length;
+
+  if (row.totalChanges >= 600 || row.fileCount >= 15 || touchedAreas >= 4) {
+    return "high";
+  }
+
+  if (row.totalChanges >= 150 || row.fileCount >= 6 || touchedAreas >= 2) {
+    return "medium";
+  }
+
+  return "low";
 }
 
 function ciHealthFor(row: GithubPrReviewRow): GithubPrReviewItem["ciHealth"] {
