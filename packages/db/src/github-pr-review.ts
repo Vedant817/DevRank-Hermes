@@ -368,7 +368,11 @@ function prTypeFor(row: GithubPrReviewRow): GithubPrType {
     }
   }
 
-  const docFiles = row.files.filter((file) => /\.(md|mdx|rst|txt)$|(^|\/)docs?\//i.test(file)).length;
+  const docFiles = row.files.filter((file) =>
+    /\.(md|mdx|rst|txt)$|(^|\/)docs?\//i.test(file)
+    // .txt files that are really dependency/build/config manifests, not docs.
+    && !/(^|\/)(requirements[^/]*|constraints[^/]*|cmakelists|robots)\.txt$/i.test(file),
+  ).length;
 
   if (row.fileCount > 0 && docFiles === row.fileCount) {
     return "docs";

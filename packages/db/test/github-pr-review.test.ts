@@ -162,6 +162,12 @@ test("classifies PR type from conventional prefixes, titles, and file signals", 
     { ...base, number: 6, title: "Resolve login regression" },
     { ...base, number: 7, title: "Rename planner internals" },
     { ...base, number: 8, title: "Add Slack notifier" },
+    {
+      ...base,
+      number: 9,
+      title: "Bump requests to 2.32",
+      files: ["requirements.txt"],
+    },
   ]);
   const byNumber = new Map(dashboard.pullRequests.map((item) => [item.number, item]));
 
@@ -173,6 +179,8 @@ test("classifies PR type from conventional prefixes, titles, and file signals", 
   assert.equal(byNumber.get(6)?.prType, "bug");
   assert.equal(byNumber.get(7)?.prType, "refactor");
   assert.equal(byNumber.get(8)?.prType, "feature");
+  // requirements.txt is a dependency manifest, not documentation.
+  assert.notEqual(byNumber.get(9)?.prType, "docs");
 });
 
 test("classifies PR complexity from size and touched areas independently of risk", () => {
