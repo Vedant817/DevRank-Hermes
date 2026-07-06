@@ -110,6 +110,33 @@ export interface GithubRepoProfileSummary {
   techStack: string[];
 }
 
+export interface GithubIssueSummary {
+  authorLogin: string | null;
+  closedAt: string | null;
+  htmlUrl: string | null;
+  id: number;
+  number: number;
+  openedAt: string | null;
+  repoFullName: string;
+  state: string;
+  title: string;
+  updatedAt: string | null;
+}
+
+export interface GithubWorkflowRunSummary {
+  conclusion: string | null;
+  event: string | null;
+  headBranch: string | null;
+  headSha: string | null;
+  htmlUrl: string | null;
+  id: number;
+  name: string | null;
+  repoFullName: string;
+  runStartedAt: string | null;
+  status: string;
+  updatedAt: string | null;
+}
+
 export interface GithubBackfillResult {
   checkpoint?: {
     complete: boolean;
@@ -118,6 +145,7 @@ export interface GithubBackfillResult {
     repoPage: number;
   };
   commits: GithubCommitSummary[];
+  issues?: GithubIssueSummary[];
   pullRequestChecks?: GithubPullRequestCheckSummary[];
   pullRequestCheckSnapshots?: GithubPullRequestCheckSnapshot[];
   pullRequestFiles: GithubPullRequestFileSummary[];
@@ -125,6 +153,7 @@ export interface GithubBackfillResult {
   repoProfiles: GithubRepoProfileSummary[];
   repos: GithubRepoSummary[];
   pullRequests: GithubPullRequestSummary[];
+  workflowRuns?: GithubWorkflowRunSummary[];
 }
 
 export interface GithubBackfillOptions {

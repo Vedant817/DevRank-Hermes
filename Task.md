@@ -165,8 +165,8 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `github_webhook_events`
   - [x] `github_pr_files`
   - [x] `github_pr_reviews`
-  - [ ] `github_issues`
-  - [ ] `github_workflow_runs`
+  - [x] `github_issues`
+  - [x] `github_workflow_runs`
   - [ ] `github_code_scanning_alerts`
   - [x] `linear_workspaces`
   - [x] `linear_teams`
@@ -370,9 +370,9 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `pull_request_review.submitted`
   - [x] `pull_request_review_comment.created`
   - [x] `check_run.completed`
-  - [ ] `issues.opened`
-  - [ ] `release.published`
-  - [ ] `workflow_run.completed`
+  - [x] `issues.opened`
+  - [x] `release.published`
+  - [x] `workflow_run.completed`
 - [x] Add GitHub backfill command:
   - [x] `devrank github:backfill --user vedantmahajan271`
 - [ ] Backfill:

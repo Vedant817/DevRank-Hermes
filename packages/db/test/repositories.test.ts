@@ -239,6 +239,60 @@ test("persists GitHub pull request head SHA for current-head CI scoring", async 
   assert.equal(insert.values[5], "pr-head-123");
 });
 
+test("persists GitHub issues and workflow runs from webhook backfill", async () => {
+  const { calls, sql } = recordingSql();
+
+  const written = await upsertGithubBackfill(sql, {
+    issues: [{
+      authorLogin: "vedantmahajan271",
+      closedAt: null,
+      htmlUrl: "https://github.com/salescode/devrank-os/issues/42",
+      id: 9001,
+      number: 42,
+      openedAt: "2026-06-22T06:00:00.000Z",
+      repoFullName: "salescode/devrank-os",
+      state: "open",
+      title: "Backfill misses issue activity",
+      updatedAt: "2026-06-22T06:05:00.000Z",
+    }],
+    pullRequests: [],
+    repos: [{
+      defaultBranch: "master",
+      fullName: "salescode/devrank-os",
+      htmlUrl: "https://github.com/salescode/devrank-os",
+      id: 101,
+      language: "TypeScript",
+      name: "devrank-os",
+      owner: "salescode",
+      private: false,
+      pushedAt: "2026-06-25T00:00:00.000Z",
+      updatedAt: "2026-06-25T00:00:00.000Z",
+    }],
+    workflowRuns: [{
+      conclusion: "success",
+      event: "push",
+      headBranch: "master",
+      headSha: "abc123",
+      htmlUrl: "https://github.com/salescode/devrank-os/actions/runs/555",
+      id: 555,
+      name: "CI",
+      repoFullName: "salescode/devrank-os",
+      runStartedAt: "2026-06-22T07:00:00.000Z",
+      status: "completed",
+      updatedAt: "2026-06-22T07:10:00.000Z",
+    }],
+  });
+  const issueInsert = requiredCall(calls, "insert into github_issues");
+  const workflowRunInsert = requiredCall(calls, "insert into github_workflow_runs");
+
+  assert.equal(written.issues, 1);
+  assert.equal(written.workflowRuns, 1);
+  assert.match(normalizedSql(issueInsert), /on conflict \(id\) do update/);
+  assert.deepEqual(issueInsert.values.slice(0, 4), [9001, 101, 42, "Backfill misses issue activity"]);
+  assert.match(normalizedSql(workflowRunInsert), /on conflict \(id\) do update/);
+  assert.deepEqual(workflowRunInsert.values.slice(0, 3), [555, 101, "CI"]);
+});
+
 test("scheduled Slack delivery claims are idempotent and reclaim only failed or abandoned rows", async () => {
   const claimed = recordingSqlSequence([
     [{ id: "notification-1", status: "pending" }],

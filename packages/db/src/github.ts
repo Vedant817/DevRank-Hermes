@@ -95,8 +95,36 @@ export interface PersistableGithubRepoProfile {
   techStack: string[];
 }
 
+export interface PersistableGithubIssue {
+  authorLogin: string | null;
+  closedAt: string | null;
+  htmlUrl: string | null;
+  id: number;
+  number: number;
+  openedAt: string | null;
+  repoFullName: string;
+  state: string;
+  title: string;
+  updatedAt: string | null;
+}
+
+export interface PersistableGithubWorkflowRun {
+  conclusion: string | null;
+  event: string | null;
+  headBranch: string | null;
+  headSha: string | null;
+  htmlUrl: string | null;
+  id: number;
+  name: string | null;
+  repoFullName: string;
+  runStartedAt: string | null;
+  status: string;
+  updatedAt: string | null;
+}
+
 export interface PersistableGithubBackfill {
   commits?: PersistableGithubCommit[];
+  issues?: PersistableGithubIssue[];
   pullRequestChecks?: PersistableGithubPullRequestCheck[];
   pullRequestCheckSnapshots?: PersistableGithubPullRequestCheckSnapshot[];
   pullRequestFiles?: PersistableGithubPullRequestFile[];
@@ -104,6 +132,7 @@ export interface PersistableGithubBackfill {
   repoProfiles?: PersistableGithubRepoProfile[];
   repos: PersistableGithubRepo[];
   pullRequests: PersistableGithubPullRequest[];
+  workflowRuns?: PersistableGithubWorkflowRun[];
 }
 
 export type GithubPullRequestTarget = {
@@ -146,21 +175,25 @@ export async function upsertGithubBackfill(
   input: PersistableGithubBackfill,
 ): Promise<{
   commits: number;
+  issues: number;
   pullRequestChecks: number;
   pullRequestFiles: number;
   pullRequestReviews: number;
   repoProfiles: number;
   pullRequests: number;
   repos: number;
+  workflowRuns: number;
 }> {
   const repoIdsByFullName = new Map<string, number>();
   let commits = 0;
+  let issues = 0;
   let pullRequestChecks = 0;
   let pullRequestFiles = 0;
   let pullRequestReviews = 0;
   let repoProfiles = 0;
   let repos = 0;
   let pullRequests = 0;
+  let workflowRuns = 0;
 
   for (const repo of input.repos) {
     repoIdsByFullName.set(repo.fullName, repo.id);
@@ -426,6 +459,109 @@ export async function upsertGithubBackfill(
     commits += 1;
   }
 
+  for (const issue of input.issues ?? []) {
+    const repoId = repoIdsByFullName.get(issue.repoFullName)
+      ?? await getGithubRepoIdByFullName(sql, issue.repoFullName);
+
+    if (repoId === undefined) {
+      continue;
+    }
+
+    await sql`
+      insert into github_issues (
+        id,
+        repo_id,
+        number,
+        title,
+        state,
+        author_login,
+        html_url,
+        opened_at,
+        closed_at,
+        updated_at,
+        synced_at
+      )
+      values (
+        ${issue.id},
+        ${repoId},
+        ${issue.number},
+        ${issue.title},
+        ${issue.state},
+        ${issue.authorLogin},
+        ${issue.htmlUrl},
+        ${issue.openedAt},
+        ${issue.closedAt},
+        ${issue.updatedAt},
+        now()
+      )
+      on conflict (id) do update set
+        repo_id = excluded.repo_id,
+        number = excluded.number,
+        title = excluded.title,
+        state = excluded.state,
+        author_login = excluded.author_login,
+        html_url = excluded.html_url,
+        opened_at = excluded.opened_at,
+        closed_at = excluded.closed_at,
+        updated_at = excluded.updated_at,
+        synced_at = now()
+    `;
+    issues += 1;
+  }
+
+  for (const workflowRun of input.workflowRuns ?? []) {
+    const repoId = repoIdsByFullName.get(workflowRun.repoFullName)
+      ?? await getGithubRepoIdByFullName(sql, workflowRun.repoFullName);
+
+    if (repoId === undefined) {
+      continue;
+    }
+
+    await sql`
+      insert into github_workflow_runs (
+        id,
+        repo_id,
+        name,
+        event,
+        status,
+        conclusion,
+        head_branch,
+        head_sha,
+        html_url,
+        run_started_at,
+        updated_at,
+        synced_at
+      )
+      values (
+        ${workflowRun.id},
+        ${repoId},
+        ${workflowRun.name},
+        ${workflowRun.event},
+        ${workflowRun.status},
+        ${workflowRun.conclusion},
+        ${workflowRun.headBranch},
+        ${workflowRun.headSha},
+        ${workflowRun.htmlUrl},
+        ${workflowRun.runStartedAt},
+        ${workflowRun.updatedAt},
+        now()
+      )
+      on conflict (id) do update set
+        repo_id = excluded.repo_id,
+        name = excluded.name,
+        event = excluded.event,
+        status = excluded.status,
+        conclusion = excluded.conclusion,
+        head_branch = excluded.head_branch,
+        head_sha = excluded.head_sha,
+        html_url = excluded.html_url,
+        run_started_at = excluded.run_started_at,
+        updated_at = excluded.updated_at,
+        synced_at = now()
+    `;
+    workflowRuns += 1;
+  }
+
   for (const profile of input.repoProfiles ?? []) {
     const repoId = repoIdsByFullName.get(profile.repoFullName)
       ?? await getGithubRepoIdByFullName(sql, profile.repoFullName);
@@ -478,12 +614,14 @@ export async function upsertGithubBackfill(
 
   return {
     commits,
+    issues,
     pullRequestChecks,
     pullRequestFiles,
     pullRequestReviews,
     repoProfiles,
     pullRequests,
     repos,
+    workflowRuns,
   };
 }
 

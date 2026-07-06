@@ -3,10 +3,12 @@ import { readRuntimeEnv, requireEnv, type RuntimeEnv } from "@repo/shared";
 import type {
   GithubBackfillResult,
   GithubCommitSummary,
+  GithubIssueSummary,
   GithubPullRequestSummary,
   GithubRepoSummary,
   GithubWebhookIngestion,
   GithubWebhookResult,
+  GithubWorkflowRunSummary,
 } from "./types.js";
 
 const SUPPORTED_WEBHOOK_EVENTS = new Set([
@@ -46,6 +48,18 @@ export async function verifyGithubWebhook(
 export function isSupportedGithubWebhookEvent(eventName: string, action?: string): boolean {
   if (eventName === "repository") {
     return action === "created" || action === "deleted";
+  }
+
+  if (eventName === "issues") {
+    return action === "opened";
+  }
+
+  if (eventName === "release") {
+    return action === "published";
+  }
+
+  if (eventName === "workflow_run") {
+    return action === "completed";
   }
 
   return SUPPORTED_WEBHOOK_EVENTS.has(eventName);
@@ -116,15 +130,79 @@ function githubWebhookBackfill(payload: unknown): GithubBackfillResult {
   const record = asRecord(payload);
   const repo = githubRepoFromPayload(asRecord(record.repository));
   const pullRequest = githubPullRequestFromPayload(asRecord(record.pull_request), repo?.fullName);
+  const issue = githubIssueFromPayload(asRecord(record.issue), repo?.fullName);
+  const workflowRun = githubWorkflowRunFromPayload(asRecord(record.workflow_run), repo?.fullName);
   const commits = repo ? githubCommitsFromPayload(record, repo.fullName) : [];
 
   return {
     commits,
+    issues: issue ? [issue] : [],
     pullRequestFiles: [],
     pullRequestReviews: [],
     repoProfiles: [],
     repos: repo ? [repo] : [],
     pullRequests: pullRequest ? [pullRequest] : [],
+    workflowRuns: workflowRun ? [workflowRun] : [],
+  };
+}
+
+function githubIssueFromPayload(
+  issue: Record<string, unknown>,
+  repoFullName: string | undefined,
+): GithubIssueSummary | undefined {
+  const id = numberValue(issue.id);
+  const number = numberValue(issue.number);
+  const title = stringValue(issue.title);
+  const state = stringValue(issue.state);
+
+  if (
+    id === undefined ||
+    number === undefined ||
+    title === undefined ||
+    state === undefined ||
+    repoFullName === undefined ||
+    issue.pull_request !== undefined
+  ) {
+    return undefined;
+  }
+
+  return {
+    authorLogin: stringValue(asRecord(issue.user).login) ?? null,
+    closedAt: stringValue(issue.closed_at) ?? null,
+    htmlUrl: stringValue(issue.html_url) ?? null,
+    id,
+    number,
+    openedAt: stringValue(issue.created_at) ?? null,
+    repoFullName,
+    state,
+    title,
+    updatedAt: stringValue(issue.updated_at) ?? null,
+  };
+}
+
+function githubWorkflowRunFromPayload(
+  workflowRun: Record<string, unknown>,
+  repoFullName: string | undefined,
+): GithubWorkflowRunSummary | undefined {
+  const id = numberValue(workflowRun.id);
+  const status = stringValue(workflowRun.status);
+
+  if (id === undefined || status === undefined || repoFullName === undefined) {
+    return undefined;
+  }
+
+  return {
+    conclusion: stringValue(workflowRun.conclusion) ?? null,
+    event: stringValue(workflowRun.event) ?? null,
+    headBranch: stringValue(workflowRun.head_branch) ?? null,
+    headSha: stringValue(workflowRun.head_sha) ?? null,
+    htmlUrl: stringValue(workflowRun.html_url) ?? null,
+    id,
+    name: stringValue(workflowRun.name) ?? null,
+    repoFullName,
+    runStartedAt: stringValue(workflowRun.run_started_at) ?? null,
+    status,
+    updatedAt: stringValue(workflowRun.updated_at) ?? null,
   };
 }
 

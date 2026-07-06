@@ -156,6 +156,110 @@ test("supports check_run webhook payloads for PR CI refresh", () => {
   assert.deepEqual(ingestion.backfill.pullRequests, []);
 });
 
+test("supports only the planned issues, release, and workflow_run actions", () => {
+  assert.equal(isSupportedGithubWebhookEvent("issues", "opened"), true);
+  assert.equal(isSupportedGithubWebhookEvent("issues", "closed"), false);
+  assert.equal(isSupportedGithubWebhookEvent("release", "published"), true);
+  assert.equal(isSupportedGithubWebhookEvent("release", "created"), false);
+  assert.equal(isSupportedGithubWebhookEvent("workflow_run", "completed"), true);
+  assert.equal(isSupportedGithubWebhookEvent("workflow_run", "requested"), false);
+});
+
+test("extracts issue rows from issues webhook payloads", () => {
+  const ingestion = githubWebhookIngestion("issues", "delivery-7", {
+    action: "opened",
+    issue: {
+      id: 9001,
+      number: 42,
+      title: "Backfill misses issue activity",
+      state: "open",
+      html_url: "https://github.com/salescode/devrank-os/issues/42",
+      created_at: "2026-06-22T06:00:00Z",
+      updated_at: "2026-06-22T06:05:00Z",
+      closed_at: null,
+      user: { login: "vedantmahajan271" },
+    },
+    repository: {
+      id: 101,
+      full_name: "salescode/devrank-os",
+      name: "devrank-os",
+      owner: { login: "salescode" },
+    },
+  });
+
+  assert.deepEqual(ingestion.backfill.issues, [{
+    authorLogin: "vedantmahajan271",
+    closedAt: null,
+    htmlUrl: "https://github.com/salescode/devrank-os/issues/42",
+    id: 9001,
+    number: 42,
+    openedAt: "2026-06-22T06:00:00Z",
+    repoFullName: "salescode/devrank-os",
+    state: "open",
+    title: "Backfill misses issue activity",
+    updatedAt: "2026-06-22T06:05:00Z",
+  }]);
+});
+
+test("ignores pull-request-shaped issue payloads", () => {
+  const ingestion = githubWebhookIngestion("issues", "delivery-8", {
+    action: "opened",
+    issue: {
+      id: 9002,
+      number: 43,
+      title: "PR masquerading as issue",
+      state: "open",
+      pull_request: { url: "https://api.github.com/repos/salescode/devrank-os/pulls/43" },
+    },
+    repository: {
+      id: 101,
+      full_name: "salescode/devrank-os",
+      name: "devrank-os",
+      owner: { login: "salescode" },
+    },
+  });
+
+  assert.deepEqual(ingestion.backfill.issues, []);
+});
+
+test("extracts workflow run rows from workflow_run webhook payloads", () => {
+  const ingestion = githubWebhookIngestion("workflow_run", "delivery-9", {
+    action: "completed",
+    workflow_run: {
+      id: 555,
+      name: "CI",
+      event: "push",
+      status: "completed",
+      conclusion: "success",
+      head_branch: "master",
+      head_sha: "abc123",
+      html_url: "https://github.com/salescode/devrank-os/actions/runs/555",
+      run_started_at: "2026-06-22T07:00:00Z",
+      updated_at: "2026-06-22T07:10:00Z",
+    },
+    repository: {
+      id: 101,
+      full_name: "salescode/devrank-os",
+      name: "devrank-os",
+      owner: { login: "salescode" },
+    },
+  });
+
+  assert.deepEqual(ingestion.backfill.workflowRuns, [{
+    conclusion: "success",
+    event: "push",
+    headBranch: "master",
+    headSha: "abc123",
+    htmlUrl: "https://github.com/salescode/devrank-os/actions/runs/555",
+    id: 555,
+    name: "CI",
+    repoFullName: "salescode/devrank-os",
+    runStartedAt: "2026-06-22T07:00:00Z",
+    status: "completed",
+    updatedAt: "2026-06-22T07:10:00Z",
+  }]);
+});
+
 test("emits a repository deletion instead of re-upserting deleted GitHub data", () => {
   const ingestion = githubWebhookIngestion("repository", "delivery-5", {
     action: "deleted",

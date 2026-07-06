@@ -37,6 +37,19 @@ test("registers persisted GitHub PR check-run evidence", () => {
   assert.match(migration.sql, /github_pr_checks_pull_request_head_idx/);
 });
 
+test("registers the GitHub issues and workflow runs migration", () => {
+  const migration = migrations.find(
+    (candidate) => candidate.id === "018_github_issues_and_workflow_runs",
+  );
+
+  assert.ok(migration);
+  assert.match(migration.sql, /create table if not exists github_issues/);
+  assert.match(migration.sql, /create table if not exists github_workflow_runs/);
+  assert.match(migration.sql, /references github_repos\(id\) on delete cascade/);
+  assert.match(migration.sql, /github_issues_repo_idx/);
+  assert.match(migration.sql, /github_workflow_runs_repo_idx/);
+});
+
 test("registers the skills and skill evidence migration", () => {
   const migration = migrations.find(
     (candidate) => candidate.id === "017_skills_and_skill_evidence",

@@ -217,7 +217,7 @@ export async function POST(request: Request) {
       await insertIngestionRun(transaction, {
         source: "github_webhook",
         status: "success",
-        summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${deletedRepositories} deleted repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestChecks} PR check(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), ${written.repoProfiles} repo profile(s), ${writtenEvidence} evidence item(s), and ${writtenSkillEvidence} skill evidence item(s).`,
+        summary: `Processed GitHub ${event} webhook with ${written.repos} repo(s), ${deletedRepositories} deleted repo(s), ${written.pullRequests} pull request(s), ${written.pullRequestChecks} PR check(s), ${written.pullRequestFiles} PR file(s), ${written.pullRequestReviews} PR review(s), ${written.commits} commit(s), ${written.issues} issue(s), ${written.workflowRuns} workflow run(s), ${written.repoProfiles} repo profile(s), ${writtenEvidence} evidence item(s), and ${writtenSkillEvidence} skill evidence item(s).`,
       });
 
       return { deletedRepositories, replacedMetadata, written, writtenEvidence, writtenSkillEvidence };
