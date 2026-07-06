@@ -177,3 +177,39 @@ test("labels tested backend repos with strong backend depth", () => {
   assert.ok(repo?.statusLabels.includes("This repo has strong backend depth."));
   assert.ok(!repo?.statusLabels.includes("This repo is too tutorial-like."));
 });
+
+test("does not label substring name matches as tutorial-like", () => {
+  const strongRepo = {
+    commits: 60,
+    commitsLast30Days: 6,
+    commitsLast90Days: 18,
+    hasArchitectureDiagram: true,
+    hasDeploymentConfig: true,
+    hasReadme: true,
+    hasTests: true,
+    htmlUrl: null,
+    language: "Python",
+    lastCommitAt: "2026-06-22T00:00:00.000Z",
+    mergedPullRequests: 5,
+    openPullRequests: 0,
+    profileScannedAt: "2026-06-22T00:00:00.000Z",
+    pullRequests: 6,
+    scanStatus: "scanned" as const,
+    techStack: ["Python", "FastAPI", "Postgres"],
+  };
+  const dashboard = buildGithubPortfolioDashboard({
+    now: new Date("2026-06-23T00:00:00.000Z"),
+    rows: [
+      { ...strongRepo, fullName: "vedant/deep-learning-model" },
+      { ...strongRepo, fullName: "vedant/cyclone-tracker" },
+      { ...strongRepo, fullName: "vedant/react-tutorial" },
+    ],
+  });
+  const byName = new Map(dashboard.bestRepos.map((repo) => [repo.fullName, repo]));
+
+  // "learning" / "clone" as substrings of real words must not trigger the label.
+  assert.ok(!byName.get("vedant/deep-learning-model")?.statusLabels.includes("This repo is too tutorial-like."));
+  assert.ok(!byName.get("vedant/cyclone-tracker")?.statusLabels.includes("This repo is too tutorial-like."));
+  // A real tutorial segment still gets labelled.
+  assert.ok(byName.get("vedant/react-tutorial")?.statusLabels.includes("This repo is too tutorial-like."));
+});

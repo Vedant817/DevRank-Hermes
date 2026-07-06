@@ -17,8 +17,12 @@ const PORTFOLIO_RUBRIC_POINTS = {
 const MAX_PORTFOLIO_SCORE = Object.values(PORTFOLIO_RUBRIC_POINTS)
   .reduce((total, points) => total + points, 0);
 
+// Anchored to name segments (split on - _ .) so real repos like
+// deep-learning-model, cyclone-tracker, or concourse-ci are not mislabelled.
+// "learning" is intentionally excluded: ML repos (deep-learning, q-learning)
+// legitimately use it as a segment.
 const tutorialNamePattern =
-  /(tutorial|course|learn(ing)?|practice|playground|example|demo|clone|starter|template|bootcamp|udemy|freecodecamp|training|exercise)/i;
+  /(^|[-_.])(tutorial|tutorials|course|courses|practice|playground|example|examples|demo|clone|starter|template|boilerplate|bootcamp|udemy|freecodecamp|training|exercise|exercises|hello-?world)([-_.]|$)/i;
 
 const backendStackSignals = new Set([
   ".net",
