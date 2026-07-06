@@ -45,6 +45,16 @@ export interface AiAgentLearningDashboard {
     summary: string;
     title: string;
   }>;
+  sessionSignals: AiSessionMaturitySignal[];
+}
+
+export interface AiSessionMaturitySignal {
+  commandsRun: string[];
+  errorsFaced: string[];
+  filesTouched: string[];
+  prompts: string[];
+  repeatedMistakes: string[];
+  toolCalls: string[];
 }
 
 export interface AiLearningMemoryRow {
@@ -181,6 +191,7 @@ export function buildAiAgentLearningDashboard(input: {
   const improvementSignals: LearningSignal[] = [];
   const repeatedErrors: LearningSignal[] = [];
   const bestPrompts: AiAgentLearningDashboard["bestPrompts"] = [];
+  const sessionSignals: AiSessionMaturitySignal[] = [];
 
   for (const row of input.memoryRows) {
     const session = row.sourceId
@@ -240,6 +251,15 @@ export function buildAiAgentLearningDashboard(input: {
         title: row.title,
       });
     }
+
+    sessionSignals.push({
+      commandsRun: metadataStringArray(row.metadata, "commandsRun"),
+      errorsFaced: metadataStringArray(row.metadata, "errorsFaced"),
+      filesTouched: metadataStringArray(row.metadata, "filesTouched"),
+      prompts: metadataStringArray(row.metadata, "prompts"),
+      repeatedMistakes: metadataStringArray(row.metadata, "repeatedMistakes"),
+      toolCalls: metadataStringArray(row.metadata, "toolCalls"),
+    });
   }
 
   for (const row of input.sessionRows.filter((session) => !session.sourceId)) {
@@ -280,6 +300,7 @@ export function buildAiAgentLearningDashboard(input: {
       summary: row.summary,
       title: row.title,
     })),
+    sessionSignals,
   };
 }
 

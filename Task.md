@@ -686,13 +686,13 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] 10% CI health.
   - [x] 10% security/static analysis.
   - [x] 5% documentation.
-- [ ] Implement AI-agent maturity score formula:
-  - [ ] 25% ability to break tasks into plans.
-  - [ ] 20% prompt quality.
-  - [ ] 20% validation/testing after AI output.
-  - [ ] 15% tool/orchestrator setup.
-  - [ ] 10% reusable skills created.
-  - [ ] 10% reduced repeated mistakes.
+- [x] Implement AI-agent maturity score formula:
+  - [x] 25% ability to break tasks into plans.
+  - [x] 20% prompt quality.
+  - [x] 20% validation/testing after AI output.
+  - [x] 15% tool/orchestrator setup.
+  - [x] 10% reusable skills created.
+  - [x] 10% reduced repeated mistakes.
 - [ ] Implement Repo Portfolio Score formula:
   - [ ] 20% real-world problem clarity.
   - [ ] 15% architecture quality.

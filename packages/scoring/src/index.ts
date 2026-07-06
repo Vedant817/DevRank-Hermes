@@ -5,6 +5,8 @@ import {
   sdeReadinessRubricVersion,
 } from "./rubrics.js";
 
+export * from "./ai-agent-maturity/index.js";
+
 export interface ScoreTrend {
   currentGeneratedAt: string;
   lanes: ScoreTrendLane[];

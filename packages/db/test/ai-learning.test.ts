@@ -69,4 +69,7 @@ test("builds AI agent learning dashboard from persisted evidence metadata", () =
   assert.match(dashboard.repeatedErrors[0]?.signal ?? "", /TypeError/);
   assert.equal(dashboard.bestPrompts[0]?.prompt, "Fix the stale score snapshot issue.");
   assert.equal(dashboard.reusableSkills[0]?.title, "quality gate skill");
+  assert.equal(dashboard.sessionSignals.length, 2);
+  assert.deepEqual(dashboard.sessionSignals[0]?.prompts, ["Fix the stale score snapshot issue."]);
+  assert.deepEqual(dashboard.sessionSignals[1]?.commandsRun, []);
 });

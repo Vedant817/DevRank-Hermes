@@ -4,6 +4,7 @@ import {
   getAiAgentLearningDashboard,
   type AiAgentLearningDashboard,
 } from "@repo/db";
+import { computeAiAgentMaturitySnapshot } from "@repo/scoring";
 import styles from "../../page.module.css";
 
 export const dynamic = "force-dynamic";
@@ -68,9 +69,39 @@ async function loadDashboardState(): Promise<DashboardState> {
 
 function Dashboard({ dashboard }: { dashboard: AiAgentLearningDashboard }) {
   const hasEvidence = dashboard.totals.evidenceItems > 0 || dashboard.totals.sessions > 0;
+  const maturity = computeAiAgentMaturitySnapshot({
+    reusableSkillCount: dashboard.totals.reusableSkills,
+    sessions: dashboard.sessionSignals,
+  });
 
   return (
     <main className={styles.main}>
+      <section className={styles.panel} aria-labelledby="maturity-heading">
+        <div className={styles.sectionHeader}>
+          <p className={styles.kicker}>AI-agent maturity</p>
+          <h2 id="maturity-heading">{maturity.overall}/100</h2>
+        </div>
+        {hasEvidence ? (
+          <div className={styles.sourceList}>
+            {maturity.breakdown.map((lane) => (
+              <div className={styles.sourceRow} key={lane.label}>
+                <div>
+                  <strong>{lane.label}</strong>
+                  <span>{lane.explanation}</span>
+                </div>
+                <small>
+                  {lane.score}/100 ({Math.round(lane.weight * 100)}%)
+                </small>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className={styles.emptyState}>
+            Ingest local AI-agent sessions to compute an evidence-based maturity score.
+          </p>
+        )}
+      </section>
+
       <section className={styles.panel} aria-labelledby="agents-heading">
         <div className={styles.sectionHeader}>
           <p className={styles.kicker}>Agent usage</p>
