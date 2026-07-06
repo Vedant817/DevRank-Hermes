@@ -44,9 +44,10 @@ test("derives per-skill evidence from PR changed files", () => {
   const testing = evidence.find((item) => item.skillSlug === "testing");
 
   assert.equal(testing?.source, "github_pr");
-  assert.equal(testing?.sourceId, "salescode/devrank-os#7");
+  assert.equal(testing?.sourceId, "github_pr:700");
   assert.equal(testing?.occurredAt, "2026-06-23T08:00:00.000Z");
   assert.match(testing?.summary ?? "", /packages\/db\/test\/skills\.test\.ts/);
+  assert.match(testing?.summary ?? "", /salescode\/devrank-os#7/);
 });
 
 test("derives no skill evidence for pull requests without imported files", () => {

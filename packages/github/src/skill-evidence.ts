@@ -91,7 +91,9 @@ function skillEvidenceForPullRequest(
       skillName: signal.name,
       skillSlug: signal.slug,
       source: "github_pr" as const,
-      sourceId: `${pullRequest.repoFullName}#${pullRequest.number}`,
+      // Key on the immutable GitHub PR id so repo renames/transfers do not
+      // create a duplicate evidence row for the same pull request.
+      sourceId: `github_pr:${pullRequest.id}`,
       summary:
         `PR ${pullRequest.repoFullName}#${pullRequest.number} touched ` +
         `${matching.length} ${signal.name} file(s): ` +
