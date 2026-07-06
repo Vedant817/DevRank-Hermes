@@ -62,3 +62,26 @@ test("registers the skills and skill evidence migration", () => {
   assert.match(migration.sql, /skill_evidence_skill_source_unique/);
   assert.match(migration.sql, /skill_evidence_source_idx/);
 });
+
+test("registers the DSA question bank migration with a seeded, idempotent insert", () => {
+  const migration = migrations.find(
+    (candidate) => candidate.id === "019_dsa_questions",
+  );
+
+  assert.ok(migration);
+  assert.match(migration.sql, /create table if not exists dsa_questions/);
+  assert.match(migration.sql, /difficulty text not null check \(difficulty in \('easy', 'medium', 'hard'\)\)/);
+  assert.match(migration.sql, /dsa_questions_topic_difficulty_idx/);
+  assert.match(migration.sql, /insert into dsa_questions/);
+  assert.match(migration.sql, /on conflict \(slug\) do nothing/);
+  // Seed must cover every weekday topic bucket in the weekly ladder.
+  for (const topic of [
+    "Arrays/Hashing",
+    "Binary Search/Two Pointers",
+    "Stack/Queue/Linked List",
+    "Trees/Graphs",
+    "Dynamic Programming",
+  ]) {
+    assert.ok(migration.sql.includes(topic), `seed missing topic: ${topic}`);
+  }
+});

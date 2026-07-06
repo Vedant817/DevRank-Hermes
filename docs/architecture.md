@@ -23,7 +23,9 @@ chat history local by default.
 - `packages/ai-chat-ingestors`: local transcript parsers, redaction, and
   evidence summaries.
 - `packages/scoring`: deterministic rubric-based SDE readiness scoring.
-- `packages/planner`: daily plan generation and Slack message formatting.
+- `packages/planner`: daily plan generation, DSA target selection from the
+  `dsa_questions` bank (weekday topic ladder + evidence-based difficulty), and
+  Slack message formatting.
 - `packages/github`: GitHub REST client, backfill helpers, and webhook summaries.
 - `packages/linear`: Linear GraphQL backfill and webhook verification helpers.
 - `packages/context`: Supabase/Supermemory context provider abstraction.

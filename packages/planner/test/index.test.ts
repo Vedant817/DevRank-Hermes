@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { formatDailyPlanForSlack, generateDailyPlan, generateWeeklyPlan } from "../src/index.js";
-import type { ScoreSnapshot } from "@repo/shared";
+import type { DsaQuestion, ScoreSnapshot } from "@repo/shared";
 
 const snapshot: ScoreSnapshot = {
   overall: 35,
@@ -90,6 +90,46 @@ test("ignores blank urgent Linear tasks and clamps weak lane limits", () => {
   });
 
   assert.deepEqual(plan.tasks.map((task) => task.category), ["testing"]);
+});
+
+test("injects concrete DSA questions into the daily plan when a question bank is provided", () => {
+  const dsaQuestionBank: DsaQuestion[] = [
+    {
+      slug: "two-sum",
+      title: "Two Sum",
+      topic: "Arrays/Hashing",
+      difficulty: "easy",
+      url: "https://leetcode.com/problems/two-sum/",
+      patterns: ["hash map"],
+    },
+    {
+      slug: "first-missing-positive",
+      title: "First Missing Positive",
+      topic: "Arrays/Hashing",
+      difficulty: "hard",
+      url: "https://leetcode.com/problems/first-missing-positive/",
+      patterns: ["index as hash"],
+    },
+  ];
+  const plan = generateDailyPlan(snapshot, {
+    date: "2026-06-22",
+    dsaQuestionBank,
+    maxWeakLaneTasks: 1,
+  });
+  const dsaTask = plan.tasks.find((task) => task.category === "dsa");
+
+  // Snapshot DSA score is 80, so the hard Arrays/Hashing question leads.
+  assert.match(dsaTask?.title ?? "", /Solve 2 DSA question\(s\)/);
+  assert.match(dsaTask?.title ?? "", /First Missing Positive \(Arrays\/Hashing, hard\)/);
+  assert.match(dsaTask?.title ?? "", /Two Sum \(Arrays\/Hashing, easy\)/);
+  assert.match(dsaTask?.evidence ?? "", /leetcode\.com\/problems\/first-missing-positive/);
+});
+
+test("leaves the DSA task generic when no question bank is provided", () => {
+  const plan = generateDailyPlan(snapshot, { date: "2026-06-22", maxWeakLaneTasks: 1 });
+  const dsaTask = plan.tasks.find((task) => task.category === "dsa");
+
+  assert.doesNotMatch(dsaTask?.title ?? "", /Solve 2 DSA question\(s\)/);
 });
 
 test("surfaces Linear sync failures as visible daily plan work", () => {

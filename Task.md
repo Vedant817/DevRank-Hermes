@@ -180,7 +180,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [ ] `external_memory_links`
   - [x] `daily_plans`
   - [x] `daily_tasks`
-  - [ ] `dsa_questions`
+  - [x] `dsa_questions`
   - [x] `weekly_plans`
   - [ ] `learning_goals`
   - [x] `scores`
@@ -900,7 +900,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
 
 - [x] Build daily planner.
 - [x] Build weekly planner.
-- [ ] Build DSA target generator.
+- [x] Build DSA target generator.
 - [x] Integrate Slack incoming webhook.
 - [x] Configure Vercel cron.
 

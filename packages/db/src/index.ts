@@ -1,6 +1,7 @@
 export * from "./ai-learning.js";
 export * from "./career-content.js";
 export * from "./client.js";
+export * from "./dsa.js";
 export * from "./github.js";
 export * from "./github-portfolio.js";
 export * from "./github-pr-review.js";

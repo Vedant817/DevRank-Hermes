@@ -1,4 +1,7 @@
-import type { DailyPlan, DailyPlanTask, ScoreSnapshot, WeeklyPlan, WeeklyPlanTask } from "@repo/shared";
+import type { DailyPlan, DailyPlanTask, DsaQuestion, ScoreSnapshot, WeeklyPlan, WeeklyPlanTask } from "@repo/shared";
+import { formatDsaTarget, selectDailyDsaTargets } from "./dsa.js";
+
+export * from "./dsa.js";
 
 type ScoreBreakdown = ScoreSnapshot["breakdown"][number];
 
@@ -13,11 +16,14 @@ interface PlanRule {
 
 export interface GenerateDailyPlanOptions {
   date?: string;
+  dsaQuestionBank?: DsaQuestion[];
   includeDailyEssentials?: boolean;
   linearSyncWarning?: string;
   maxWeakLaneTasks?: number;
   urgentLinearTask?: string;
 }
+
+const DAILY_DSA_TARGET_COUNT = 2;
 
 export interface GenerateWeeklyPlanOptions {
   generatedAt?: string;
@@ -246,11 +252,43 @@ export function generateDailyPlan(
     addTask(tasks, taskForLane(lane));
   }
 
+  const dsaQuestionBank = typeof dateOrOptions === "object" ? dateOrOptions.dsaQuestionBank : undefined;
+
+  if (dsaQuestionBank && dsaQuestionBank.length > 0) {
+    applyDsaTargets(tasks, selectDailyDsaTargets(dsaQuestionBank, {
+      count: DAILY_DSA_TARGET_COUNT,
+      date: options.date,
+      dsaLaneScore: dsaLaneScore(snapshot),
+    }));
+  }
+
   return {
     date: options.date,
     tasks,
     targetMinutes: tasks.reduce((total, task) => total + task.minutes, 0),
   };
+}
+
+function dsaLaneScore(snapshot: ScoreSnapshot): number | undefined {
+  return snapshot.breakdown.find((lane) => lane.label.toLowerCase().includes("dsa"))?.score;
+}
+
+function applyDsaTargets(tasks: DailyPlanTask[], targets: DsaQuestion[]): void {
+  if (targets.length === 0) {
+    return;
+  }
+
+  const dsaTask = tasks.find((task) => task.category === "dsa");
+
+  if (!dsaTask) {
+    return;
+  }
+
+  const list = targets.map(formatDsaTarget).join("; ");
+  const urls = targets.map((target) => target.url).join(" ");
+
+  dsaTask.title = `Solve ${targets.length} DSA question(s): ${list}. Record patterns and complexity.`;
+  dsaTask.evidence = dsaTask.evidence ? `${dsaTask.evidence}; ${urls}` : urls;
 }
 
 export function formatDailyPlanForSlack(plan: DailyPlan): string {

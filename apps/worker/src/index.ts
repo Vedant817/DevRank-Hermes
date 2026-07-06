@@ -9,6 +9,7 @@ import {
   getLatestScoreSnapshot,
   insertDailyPlan,
   insertScoreSnapshot,
+  listDsaQuestionBank,
   listEvidenceItems,
   listScoringEvidence,
   markSlackNotificationDelivered,
@@ -59,7 +60,9 @@ export async function runDailyPlanJob(evidence?: EvidenceItem[]) {
     }
 
     const linearIssue = await getHighestPriorityLinearPlanningIssue(sql);
+    const dsaQuestionBank = await listDsaQuestionBank(sql).catch(() => []);
     const plan = generateDailyPlan(snapshot, {
+      dsaQuestionBank,
       urgentLinearTask: linearIssue
         ? `Linear ${linearIssue.identifier}: ${linearIssue.title}`
         : undefined,

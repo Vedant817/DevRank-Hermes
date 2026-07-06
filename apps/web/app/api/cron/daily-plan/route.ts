@@ -5,6 +5,7 @@ import {
   getLinearPlanningSignal,
   getLatestScoreSnapshot,
   insertDailyPlan,
+  listDsaQuestionBank,
   markSlackNotificationDelivered,
   markSlackNotificationFailed,
 } from "@repo/db";
@@ -63,7 +64,9 @@ export async function GET(request: Request) {
       }
 
       const linearSignal = await getLinearPlanningSignal(sql);
+      const dsaQuestionBank = await listDsaQuestionBank(sql).catch(() => []);
       const plan = generateDailyPlan(currentScore.snapshot, {
+        dsaQuestionBank,
         linearSyncWarning: linearSignal.syncHealth.status === "failed"
           ? linearSignal.syncHealth.message
           : undefined,

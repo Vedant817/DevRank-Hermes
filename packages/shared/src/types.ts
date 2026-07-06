@@ -86,3 +86,14 @@ export interface WeeklyPlan {
   tasks: WeeklyPlanTask[];
   generatedAt: string;
 }
+
+export type DsaDifficulty = "easy" | "hard" | "medium";
+
+export interface DsaQuestion {
+  slug: string;
+  title: string;
+  topic: string;
+  difficulty: DsaDifficulty;
+  url: string;
+  patterns: string[];
+}
