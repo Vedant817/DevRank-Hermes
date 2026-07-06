@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   redactHermesPromptText,
+  resolveHermesProviderChain,
   resolveHermesRuntimeConfig,
   runHermesMentorSummary,
 } from "../src/index.js";
@@ -115,5 +116,147 @@ test("rejects empty evidence before calling AI provider", async () => {
       },
     ),
     /requires evidenceSummary/,
+  );
+});
+
+test("rejects when no provider API key is configured", async () => {
+  await assert.rejects(
+    runHermesMentorSummary(
+      { evidenceSummary: "Evidence.", weakestLanes: ["DSA"] },
+      {},
+      {
+        fetch: async () => {
+          throw new Error("fetch should not be called");
+        },
+      },
+    ),
+    /not configured/,
+  );
+});
+
+test("defaults to Groq as the primary provider when GROQ_API_KEY is set", () => {
+  const chain = resolveHermesProviderChain({
+    GROQ_API_KEY: "groq-key",
+    OPENROUTER_API_KEY: "or-key",
+  });
+
+  assert.equal(chain.length, 2);
+  assert.equal(chain[0]?.name, "groq");
+  assert.equal(chain[0]?.baseUrl, "https://api.groq.com/openai/v1");
+  assert.equal(chain[0]?.model, "openai/gpt-oss-120b");
+  assert.equal(chain[0]?.apiKey, "groq-key");
+  assert.equal(chain[1]?.name, "openrouter");
+  assert.equal(chain[1]?.apiKey, "or-key");
+});
+
+test("uses only the fallback provider when GROQ_API_KEY is absent", () => {
+  const chain = resolveHermesProviderChain({ OPENROUTER_API_KEY: "or-key" });
+
+  assert.equal(chain.length, 1);
+  assert.equal(chain[0]?.name, "openrouter");
+});
+
+test("uses only Groq when no fallback provider key is configured", () => {
+  const chain = resolveHermesProviderChain({ GROQ_API_KEY: "groq-key" });
+
+  assert.equal(chain.length, 1);
+  assert.equal(chain[0]?.name, "groq");
+});
+
+test("honors GROQ_BASE_URL and GROQ_MODEL overrides", () => {
+  const chain = resolveHermesProviderChain({
+    GROQ_API_KEY: "groq-key",
+    GROQ_BASE_URL: "https://groq.example/v1",
+    GROQ_MODEL: "llama-3.3-70b-versatile",
+  });
+
+  assert.equal(chain[0]?.baseUrl, "https://groq.example/v1");
+  assert.equal(chain[0]?.model, "llama-3.3-70b-versatile");
+});
+
+test("calls Groq first and returns its result without touching the fallback", async () => {
+  const calledUrls: string[] = [];
+  const fetchMock: typeof fetch = async (url) => {
+    calledUrls.push(String(url));
+
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: "Groq mentor summary." } }],
+    }));
+  };
+
+  const result = await runHermesMentorSummary(
+    { evidenceSummary: "Shipped a tested endpoint.", weakestLanes: ["Backend/API"] },
+    { GROQ_API_KEY: "groq-key", OPENROUTER_API_KEY: "or-key" },
+    { fetch: fetchMock },
+  );
+
+  assert.equal(result.provider, "groq");
+  assert.equal(result.summary, "Groq mentor summary.");
+  assert.deepEqual(calledUrls, ["https://api.groq.com/openai/v1/chat/completions"]);
+});
+
+test("falls back to OpenRouter when Groq keeps returning a 429 rate-limit response", async () => {
+  const calledUrls: string[] = [];
+  const fetchMock: typeof fetch = async (url) => {
+    const requestUrl = String(url);
+    calledUrls.push(requestUrl);
+
+    if (requestUrl.includes("groq.com")) {
+      return new Response("rate limited", { status: 429 });
+    }
+
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: "OpenRouter fallback summary." } }],
+    }));
+  };
+
+  const result = await runHermesMentorSummary(
+    { evidenceSummary: "Shipped a tested endpoint.", weakestLanes: ["Backend/API"] },
+    { GROQ_API_KEY: "groq-key", OPENROUTER_API_KEY: "or-key" },
+    { fetch: fetchMock },
+  );
+
+  assert.equal(result.provider, "openrouter");
+  assert.equal(result.summary, "OpenRouter fallback summary.");
+  // fetchWithPolicy retries a 429 against the same provider once before the
+  // provider chain moves on, so Groq is hit twice before OpenRouter is tried.
+  assert.deepEqual(calledUrls, [
+    "https://api.groq.com/openai/v1/chat/completions",
+    "https://api.groq.com/openai/v1/chat/completions",
+    "https://openrouter.ai/api/v1/chat/completions",
+  ]);
+});
+
+test("does not fall back to OpenRouter on non-rate-limit Groq failures", async () => {
+  let calls = 0;
+  const fetchMock: typeof fetch = async () => {
+    calls += 1;
+
+    return new Response("server error", { status: 500 });
+  };
+
+  await assert.rejects(
+    runHermesMentorSummary(
+      { evidenceSummary: "Shipped a tested endpoint.", weakestLanes: ["Backend/API"] },
+      { GROQ_API_KEY: "groq-key", OPENROUTER_API_KEY: "or-key" },
+      { fetch: fetchMock },
+    ),
+    /AI provider \(groq\) request failed with 500/,
+  );
+  // fetchWithPolicy retries a 500 once against the same provider; still no
+  // fallback to OpenRouter because the failure was not a 429.
+  assert.equal(calls, 2);
+});
+
+test("surfaces the rate-limit error when Groq is the only configured provider", async () => {
+  const fetchMock: typeof fetch = async () => new Response("rate limited", { status: 429 });
+
+  await assert.rejects(
+    runHermesMentorSummary(
+      { evidenceSummary: "Shipped a tested endpoint.", weakestLanes: ["Backend/API"] },
+      { GROQ_API_KEY: "groq-key" },
+      { fetch: fetchMock },
+    ),
+    /AI provider \(groq\) request failed with 429/,
   );
 });

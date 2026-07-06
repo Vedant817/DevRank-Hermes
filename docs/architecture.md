@@ -29,7 +29,9 @@ chat history local by default.
 - `packages/github`: GitHub REST client, backfill helpers, and webhook summaries.
 - `packages/linear`: Linear GraphQL backfill and webhook verification helpers.
 - `packages/context`: Supabase/Supermemory context provider abstraction.
-- `packages/hermes`: OpenRouter-backed mentor summary workflow.
+- `packages/hermes`: mentor summary workflow. Groq is the default reasoning
+  provider (when `GROQ_API_KEY` is set) with automatic fallback to an
+  OpenRouter-compatible provider on a 429 rate-limit response.
 - `packages/search`: live market benchmark search through Tavily.
 - `packages/slack`: Slack incoming webhook sender.
 

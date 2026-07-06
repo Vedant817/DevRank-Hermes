@@ -308,6 +308,7 @@ Use this file as the step-by-step checkpoint list from project start to project 
   - [x] `OPENROUTER_BASE_URL`.
   - [x] `HERMES_HTTP_REFERER`.
   - [x] `HERMES_TITLE`.
+- [x] Default the Hermes reasoning provider to Groq (`GROQ_API_KEY`, `GROQ_BASE_URL`, `GROQ_MODEL`) with automatic fallback to the OpenRouter-compatible provider on a 429 rate-limit response.
 - [x] Use free OpenRouter models only for early testing, not heavy production ranking.
 - [x] Use Hermes as the reasoning/orchestration layer, not the database.
 - [x] Require real evidence summary and non-empty weakest lanes before calling OpenRouter.

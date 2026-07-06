@@ -1,7 +1,6 @@
 import {
   fetchWithPolicy,
   readRuntimeEnv,
-  requireEnv,
   type RuntimeEnv,
 } from "@repo/shared";
 export * from "./chat-summary.js";
@@ -12,6 +11,11 @@ const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
 const DEFAULT_HERMES_MODEL = "openrouter/auto";
 const DEFAULT_HTTP_REFERER = "https://devrank-os.local";
 const DEFAULT_TITLE = "DevRank OS";
+const DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1";
+// Groq's largest hosted general-reasoning model. Override with GROQ_MODEL if
+// Groq later ships a stronger flagship model.
+const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
+const RATE_LIMIT_STATUS = 429;
 const PROMPT_REDACTIONS: Array<[RegExp, string]> = [
   [/postgres(?:ql)?:\/\/\S+/gi, "[REDACTED_DATABASE_URL]"],
   [/(?:ghp_|github_pat_)[A-Za-z0-9_]{20,}/g, "[REDACTED_GITHUB_TOKEN]"],
@@ -27,6 +31,7 @@ export interface HermesMentorInput {
 
 export interface HermesMentorOutput {
   model: string;
+  provider: string;
   summary: string;
 }
 
@@ -35,6 +40,11 @@ export interface HermesRuntimeConfig {
   httpReferer: string;
   model: string;
   title: string;
+}
+
+export interface HermesProviderConfig extends HermesRuntimeConfig {
+  apiKey: string;
+  name: string;
 }
 
 export interface HermesMentorOptions {
@@ -50,12 +60,52 @@ export function resolveHermesRuntimeConfig(env: RuntimeEnv): HermesRuntimeConfig
   };
 }
 
+// Groq is the default reasoning provider (fast inference, generous free
+// tier). When GROQ_API_KEY is set it is attempted first; on a 429 rate-limit
+// response the caller falls back to the OpenRouter-compatible provider
+// resolved by resolveHermesRuntimeConfig/hermesFallbackApiKey. Set only
+// OPENROUTER_API_KEY (or AI_API_KEY) to skip Groq entirely.
+export function resolveHermesProviderChain(env: RuntimeEnv): HermesProviderConfig[] {
+  const shared = resolveHermesRuntimeConfig(env);
+  const chain: HermesProviderConfig[] = [];
+
+  if (env.GROQ_API_KEY) {
+    chain.push({
+      apiKey: env.GROQ_API_KEY,
+      baseUrl: env.GROQ_BASE_URL ?? DEFAULT_GROQ_BASE_URL,
+      httpReferer: shared.httpReferer,
+      model: env.GROQ_MODEL ?? DEFAULT_GROQ_MODEL,
+      name: "groq",
+      title: shared.title,
+    });
+  }
+
+  const fallbackApiKey = hermesFallbackApiKey(env);
+
+  if (fallbackApiKey) {
+    chain.push({
+      ...shared,
+      apiKey: fallbackApiKey,
+      name: "openrouter",
+    });
+  }
+
+  return chain;
+}
+
 export async function runHermesMentorSummary(
   input: HermesMentorInput,
   env: RuntimeEnv = readRuntimeEnv(),
   options: HermesMentorOptions = {},
 ): Promise<HermesMentorOutput> {
-  const apiKey = hermesApiKey(env);
+  const chain = resolveHermesProviderChain(env);
+
+  if (chain.length === 0) {
+    throw new Error(
+      "Hermes mentor summary is not configured. Missing: GROQ_API_KEY or AI_API_KEY.",
+    );
+  }
+
   const evidenceSummary = redactHermesPromptText(input.evidenceSummary.trim());
   const weakestLanes = input.weakestLanes
     .map((lane) => redactHermesPromptText(lane.trim()))
@@ -69,30 +119,54 @@ export async function runHermesMentorSummary(
     throw new Error("Hermes mentor summary requires at least one weakest lane.");
   }
 
-  const config = resolveHermesRuntimeConfig(env);
   const fetchImpl = options.fetch ?? fetch;
-  const response = await fetchWithPolicy(`${config.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
+  const messages = [
+    {
+      role: "system",
+      content:
+        "You are the DevRank OS mentor. Use only provided evidence. Do not invent accomplishments.",
+    },
+    {
+      role: "user",
+      content: `Evidence:\n${evidenceSummary}\n\nWeakest lanes:\n${weakestLanes.join(", ")}`,
+    },
+  ];
+  let lastError: unknown;
+
+  for (const [index, provider] of chain.entries()) {
+    const isLastAttempt = index === chain.length - 1;
+
+    try {
+      return await callHermesProvider(provider, messages, fetchImpl);
+    } catch (error) {
+      lastError = error;
+
+      if (isLastAttempt || !(error instanceof HermesRateLimitError)) {
+        throw error;
+      }
+      // Rate-limited on this provider; fall through to the next one in the chain.
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Hermes mentor summary failed.");
+}
+
+class HermesRateLimitError extends Error {}
+
+async function callHermesProvider(
+  provider: HermesProviderConfig,
+  messages: Array<{ content: string; role: string }>,
+  fetchImpl: typeof fetch,
+): Promise<HermesMentorOutput> {
+  const response = await fetchWithPolicy(`${provider.baseUrl.replace(/\/+$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${provider.apiKey}`,
       "Content-Type": "application/json",
-      "HTTP-Referer": config.httpReferer,
-      "X-Title": config.title,
+      "HTTP-Referer": provider.httpReferer,
+      "X-Title": provider.title,
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are the DevRank OS mentor. Use only provided evidence. Do not invent accomplishments.",
-        },
-        {
-          role: "user",
-          content: `Evidence:\n${evidenceSummary}\n\nWeakest lanes:\n${weakestLanes.join(", ")}`,
-        },
-      ],
-    }),
+    body: JSON.stringify({ messages, model: provider.model }),
   }, {
     fetch: fetchImpl,
     retry: true,
@@ -101,8 +175,13 @@ export async function runHermesMentorSummary(
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
     const detail = errorText.length > 0 ? `: ${errorText.slice(0, 240)}` : "";
+    const message = `AI provider (${provider.name}) request failed with ${response.status}${detail}.`;
 
-    throw new Error(`AI provider request failed with ${response.status}${detail}.`);
+    if (response.status === RATE_LIMIT_STATUS) {
+      throw new HermesRateLimitError(message);
+    }
+
+    throw new Error(message);
   }
 
   const json = await response.json() as {
@@ -111,11 +190,12 @@ export async function runHermesMentorSummary(
   const summary = json.choices?.[0]?.message?.content;
 
   if (!summary) {
-    throw new Error("AI provider response did not include mentor summary text.");
+    throw new Error(`AI provider (${provider.name}) response did not include mentor summary text.`);
   }
 
   return {
-    model: config.model,
+    model: provider.model,
+    provider: provider.name,
     summary,
   };
 }
@@ -127,14 +207,6 @@ export function redactHermesPromptText(value: string) {
   );
 }
 
-function hermesApiKey(env: RuntimeEnv): string {
-  if (env.AI_API_KEY) {
-    return env.AI_API_KEY;
-  }
-
-  if (env.OPENROUTER_API_KEY) {
-    return env.OPENROUTER_API_KEY;
-  }
-
-  return requireEnv(env, ["AI_API_KEY"], "Hermes mentor summary").AI_API_KEY;
+function hermesFallbackApiKey(env: RuntimeEnv): string | undefined {
+  return env.AI_API_KEY ?? env.OPENROUTER_API_KEY;
 }
