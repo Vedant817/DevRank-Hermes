@@ -1,4 +1,12 @@
 import type { ScoreBreakdown, ScoreSnapshot } from "@repo/shared";
+import {
+  countActuallyReusedSkills,
+  crossReferenceValidation,
+  type PrValidationCheck,
+} from "./validation.js";
+
+export { countActuallyReusedSkills, crossReferenceValidation };
+export type { PrValidationCheck };
 
 export interface AiAgentMaturitySessionSignal {
   commandsRun: string[];
@@ -7,6 +15,8 @@ export interface AiAgentMaturitySessionSignal {
   prompts: string[];
   repeatedMistakes: string[];
   toolCalls: string[];
+  linkedPullRequestNumber?: number;
+  linkedRepoFullName?: string;
 }
 
 export interface AiAgentMaturityInput {
@@ -14,7 +24,7 @@ export interface AiAgentMaturityInput {
   sessions: AiAgentMaturitySessionSignal[];
 }
 
-export const aiAgentMaturityRubricVersion = "ai-agent-maturity-v1";
+export const aiAgentMaturityRubricVersion = "ai-agent-maturity-v2";
 
 export const aiAgentMaturityRubric = [
   { label: "Task Planning", weight: 0.25 },
@@ -33,6 +43,7 @@ const validationCommandPattern = /\b(test|lint|build|typecheck|tsc|vitest|pytest
 export function computeAiAgentMaturitySnapshot(
   input: AiAgentMaturityInput,
   generatedAt = new Date().toISOString(),
+  prChecks?: PrValidationCheck[],
 ): ScoreSnapshot {
   const sessionCount = input.sessions.length;
   const planningSessions = input.sessions.filter((session) =>
@@ -43,8 +54,12 @@ export function computeAiAgentMaturitySnapshot(
   const qualityPromptSessions = input.sessions.filter((session) =>
     session.prompts.some((prompt) => prompt.trim().length >= 80 && contextPattern.test(prompt)),
   ).length;
-  const validatedSessions = input.sessions.filter((session) =>
-    session.commandsRun.some((command) => validationCommandPattern.test(command)),
+
+  const validationMap = prChecks ? crossReferenceValidation(input.sessions, prChecks) : null;
+  const validatedSessions = input.sessions.filter((session, index) =>
+    validationMap
+      ? validationMap.get(index) === true
+      : session.commandsRun.some((command) => validationCommandPattern.test(command)),
   ).length;
   const toolSessions = input.sessions.filter((session) => session.toolCalls.length > 0).length;
   const distinctTools = new Set(
@@ -53,6 +68,7 @@ export function computeAiAgentMaturitySnapshot(
   const repeatedMistakeSessions = input.sessions.filter(
     (session) => session.repeatedMistakes.length > 0,
   ).length;
+  const actuallyReusedSkills = countActuallyReusedSkills(input.sessions);
 
   const breakdown: ScoreBreakdown[] = [
     lane("Task Planning", 0.25, ratioScore(planningSessions, sessionCount), planningSessions,
@@ -72,9 +88,9 @@ export function computeAiAgentMaturitySnapshot(
         ? `${input.reusableSkillCount} reusable skill(s) captured.`
         : "No reusable skills captured yet."),
     lane("Reduced Repeated Mistakes", 0.1,
-      sessionCount === 0 ? 0 : clampScore((1 - repeatedMistakeSessions / sessionCount) * 100),
-      sessionCount - repeatedMistakeSessions,
-      `${repeatedMistakeSessions} of ${sessionCount} session(s) show repeated mistake signals.`),
+      sessionCount === 0 ? 0 : clampScore((1 - (repeatedMistakeSessions - actuallyReusedSkills) / sessionCount) * 100),
+      sessionCount - repeatedMistakeSessions + actuallyReusedSkills,
+      `${repeatedMistakeSessions} of ${sessionCount} session(s) show repeated mistake signals; ${actuallyReusedSkills} mistake(s) captured as reused skill(s).`),
   ];
 
   return {

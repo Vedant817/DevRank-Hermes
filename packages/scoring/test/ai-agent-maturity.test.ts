@@ -4,7 +4,10 @@ import {
   aiAgentMaturityRubric,
   aiAgentMaturityRubricVersion,
   computeAiAgentMaturitySnapshot,
+  countActuallyReusedSkills,
+  crossReferenceValidation,
 } from "../src/index.js";
+import type { AiAgentMaturitySessionSignal } from "../src/index.js";
 
 const strongSession = {
   commandsRun: ["pnpm test", "pnpm lint"],
@@ -104,4 +107,105 @@ test("every lane explains its score with evidence counts", () => {
     assert.ok(lane.explanation.length > 0, `${lane.label} has no explanation`);
     assert.ok(Number.isFinite(lane.evidenceCount));
   }
+});
+
+const linkedSelfReportedSession = (
+  linkedPullRequestNumber: number,
+  linkedRepoFullName: string,
+): AiAgentMaturitySessionSignal => ({
+  commandsRun: ["pnpm test --run"],
+  errorsFaced: [],
+  filesTouched: ["src/app.ts"],
+  prompts: ["validate the change"],
+  repeatedMistakes: [],
+  toolCalls: ["edit", "bash"],
+  linkedPullRequestNumber,
+  linkedRepoFullName,
+});
+
+const unlinkedSelfReportedSession = (): AiAgentMaturitySessionSignal => ({
+  commandsRun: ["pnpm test --run"],
+  errorsFaced: [],
+  filesTouched: ["src/app.ts"],
+  prompts: ["validate the change"],
+  repeatedMistakes: [],
+  toolCalls: ["edit", "bash"],
+});
+
+const prChecks = [
+  { pullRequestNumber: 1, repoFullName: "org/repo", conclusion: "failure" },
+  { pullRequestNumber: 2, repoFullName: "org/repo", conclusion: "success" },
+];
+
+test("linked-PR CI failure scores validation lane lower than CI success", () => {
+  const failed = computeAiAgentMaturitySnapshot(
+    { reusableSkillCount: 0, sessions: [linkedSelfReportedSession(1, "org/repo")] },
+    undefined,
+    prChecks,
+  );
+  const succeeded = computeAiAgentMaturitySnapshot(
+    { reusableSkillCount: 0, sessions: [linkedSelfReportedSession(2, "org/repo")] },
+    undefined,
+    prChecks,
+  );
+  const unlinked = computeAiAgentMaturitySnapshot(
+    { reusableSkillCount: 0, sessions: [unlinkedSelfReportedSession()] },
+    undefined,
+    prChecks,
+  );
+
+  const failedLane = failed.breakdown.find((lane) => lane.label === "Validation After AI Output");
+  const succeededLane = succeeded.breakdown.find((lane) => lane.label === "Validation After AI Output");
+  const unlinkedLane = unlinked.breakdown.find((lane) => lane.label === "Validation After AI Output");
+
+  assert.equal(failedLane?.score, 0, "self-reported commands must be ignored when linked PR failed");
+  assert.equal(succeededLane?.score, 100, "linked PR success should satisfy validation");
+  assert.equal(unlinkedLane?.score, 100, "unlinked sessions still pass via self-reported command");
+  assert.ok(failedLane!.score < succeededLane!.score);
+});
+
+test("crossReferenceValidation ignores self-report when a linked PR check exists", () => {
+  const sessions: AiAgentMaturitySessionSignal[] = [
+    linkedSelfReportedSession(1, "org/repo"),
+    linkedSelfReportedSession(2, "org/repo"),
+    unlinkedSelfReportedSession(),
+  ];
+
+  const result = crossReferenceValidation(sessions, prChecks);
+
+  assert.equal(result.get(0), false);
+  assert.equal(result.get(1), true);
+  assert.equal(result.get(2), true);
+});
+
+test("a never-reused skill discounts the reduced-repeated-mistakes lane", () => {
+  const neverReusedSessions: AiAgentMaturitySessionSignal[] = [
+    { ...strongSession, repeatedMistakes: ["lint failure repeated 3 times"] },
+    { ...strongSession, prompts: ["changed the spacing in the header"] },
+  ];
+  const reusedSessions: AiAgentMaturitySessionSignal[] = [
+    { ...strongSession, repeatedMistakes: ["lint failure repeated 3 times"] },
+    { ...strongSession, prompts: ["fixed the lint failure by adding a prettier config"] },
+  ];
+  const neverReused = computeAiAgentMaturitySnapshot({
+    reusableSkillCount: 0,
+    sessions: neverReusedSessions,
+  });
+  const reused = computeAiAgentMaturitySnapshot({
+    reusableSkillCount: 0,
+    sessions: reusedSessions,
+  });
+
+  const neverReusedLane = neverReused.breakdown.find(
+    (lane) => lane.label === "Reduced Repeated Mistakes",
+  );
+  const reusedLane = reused.breakdown.find((lane) => lane.label === "Reduced Repeated Mistakes");
+
+  assert.equal(countActuallyReusedSkills(neverReusedSessions), 0);
+  assert.equal(countActuallyReusedSkills(reusedSessions), 1);
+  assert.ok(neverReusedLane!.score < reusedLane!.score, "never-reused skill should score lower");
+});
+
+test("bumps rubric version to v2", () => {
+  assert.equal(aiAgentMaturityRubricVersion, "ai-agent-maturity-v2");
 });
