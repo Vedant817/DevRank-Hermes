@@ -7,6 +7,7 @@ import {
 } from "@repo/db";
 import type { WeeklyPlanDay, WeeklyPlanTask } from "@repo/shared";
 import styles from "../../page.module.css";
+import { TaskActionButtons } from "./task-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -185,6 +186,13 @@ function FocusRow({
         <span>{primary ? primary.title : "No task planned for this lane."}</span>
       </div>
       <small>{primary ? taskStatusLabel(primary) : "missing"}</small>
+      {primary ? (
+        <TaskActionButtons
+          planDate={primary.planDate}
+          taskKey={primary.taskKey}
+          status={primary.status}
+        />
+      ) : null}
     </div>
   );
 }
