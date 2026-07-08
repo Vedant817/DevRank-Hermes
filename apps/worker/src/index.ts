@@ -5,26 +5,37 @@ import {
   closeSqlClient,
   claimSlackNotificationAttempt,
   createSqlClient,
+  dailyTaskKey,
   getHighestPriorityLinearPlanningIssue,
+  getLatestBenchmarkSnapshot,
   getLatestScoreSnapshot,
+  insertBenchmarkSnapshot,
   insertDailyPlan,
   insertScoreSnapshot,
   listDsaQuestionBank,
   listEvidenceItems,
+  listOutcomeEvents,
   listScoringEvidence,
+  listSkillEvidence,
   markSlackNotificationDelivered,
   markSlackNotificationFailed,
   type SqlClient,
 } from "@repo/db";
 import { generateDailyPlan, formatDailyPlanForSlack } from "@repo/planner";
 import {
+  applyMarketWeightAdjustment,
+  buildDirectionalOutcomeReport,
   computeSdeReadinessSnapshot,
   explainWeakestLanes,
   isCurrentSdeReadinessSnapshot,
 } from "@repo/scoring";
 import { runHermesMentorSummary } from "@repo/hermes";
 import { runMarketBenchmark } from "@repo/search";
-import { sendSlackMessage } from "@repo/slack";
+import {
+  sendDailyPlanToSlack,
+  type TaskActionItem,
+} from "@repo/slack";
+import type { DailyPlan as SharedDailyPlan } from "@repo/shared";
 import type { EvidenceItem } from "@repo/shared";
 
 export async function runDailyPlanJob(evidence?: EvidenceItem[]) {
@@ -61,7 +72,15 @@ export async function runDailyPlanJob(evidence?: EvidenceItem[]) {
 
     const linearIssue = await getHighestPriorityLinearPlanningIssue(sql);
     const dsaQuestionBank = await listDsaQuestionBank(sql).catch(() => []);
+    const latestBenchmark = await getLatestBenchmarkSnapshot(sql).catch(() => undefined);
     const plan = generateDailyPlan(snapshot, {
+      benchmarkSkillGap: latestBenchmark
+        ? {
+            missingSkills: latestBenchmark.missingSkills,
+            weeklyLearningPriorities: latestBenchmark.weeklyLearningPriorities,
+            skillFrequency: latestBenchmark.skillFrequency,
+          }
+        : undefined,
       dsaQuestionBank,
       urgentLinearTask: linearIssue
         ? `Linear ${linearIssue.identifier}: ${linearIssue.title}`
@@ -69,7 +88,7 @@ export async function runDailyPlanJob(evidence?: EvidenceItem[]) {
     });
     await insertDailyPlan(sql, plan);
     const slackText = formatDailyPlanForSlack(plan);
-    const slackDelivery = await sendAuditedDailyPlanSlack(sql, slackText, "daily_plan_worker", plan.date);
+    const slackDelivery = await sendAuditedDailyPlanSlack(sql, plan, "daily_plan_worker");
 
     return { snapshot, plan, linearIssue, scoreSnapshotStatus, ...slackDelivery, slackText, stored: true };
   } finally {
@@ -87,15 +106,22 @@ async function createDailyPlanFromEvidence(evidence: EvidenceItem[], stored: boo
 
 async function sendAuditedDailyPlanSlack(
   sql: SqlClient,
-  text: string,
+  plan: SharedDailyPlan,
   source: string,
-  planDate: string,
 ) {
+  const taskItems: TaskActionItem[] = plan.tasks.map((task) => ({
+    date: plan.date,
+    taskKey: dailyTaskKey(plan.date, task),
+    title: task.title,
+    minutes: task.minutes,
+    evidence: task.evidence,
+  }));
+  const text = taskItems.map((t, i) => `${i + 1}. ${t.title} (${t.minutes} min)`).join("\n");
   const notification = await claimSlackNotificationAttempt(sql, {
-    deliveryKey: `daily-plan:${planDate}`,
+    deliveryKey: `daily-plan:${plan.date}`,
     text,
     response: {
-      planDate,
+      planDate: plan.date,
       source,
       status: "pending",
     },
@@ -111,16 +137,16 @@ async function sendAuditedDailyPlanSlack(
     };
   }
 
-  let slack: Awaited<ReturnType<typeof sendSlackMessage>>;
+  let result: Awaited<ReturnType<typeof sendDailyPlanToSlack>>;
 
   try {
-    slack = await sendSlackMessage(text);
+    result = await sendDailyPlanToSlack(taskItems);
   } catch (error) {
     await markSlackNotificationFailed(sql, {
       id: notificationId,
       errorCode: "slack_delivery_failed",
       response: {
-        planDate,
+        planDate: plan.date,
         source,
       },
     }).catch(() => undefined);
@@ -133,11 +159,11 @@ async function sendAuditedDailyPlanSlack(
   try {
     await markSlackNotificationDelivered(sql, {
       id: notificationId,
-      deliveredAt: slack.deliveredAt,
+      deliveredAt: result.deliveredAt,
       response: {
-        deliveredAt: slack.deliveredAt,
-        planDate,
-        provider: "slack_webhook",
+        deliveredAt: result.deliveredAt,
+        planDate: plan.date,
+        provider: result.method === "blocks" ? "slack_blocks" : "slack_webhook",
         source,
         status: "delivered",
       },
@@ -147,8 +173,8 @@ async function sendAuditedDailyPlanSlack(
   }
 
   return {
-    slack,
     slackDelivered: true,
+    slackMethod: result.method,
     slackNotificationId: notificationId,
     slackNotificationRecorded,
   };
@@ -177,12 +203,43 @@ export async function runWeeklyReviewJob(input?: {
       throw new Error("Weekly review requires persisted evidence. Run ingestion first.");
     }
 
-    const snapshot = computeSdeReadinessSnapshot(evidence);
+    const latestBenchmark = await getLatestBenchmarkSnapshot(sql).catch(() => undefined);
+    const rubricOverride = latestBenchmark
+      ? applyMarketWeightAdjustment(undefined, {
+          generatedAt: latestBenchmark.generatedAt,
+          queries: latestBenchmark.queries,
+          repeatedSkills: [], // populated from frequency if needed
+          results: [],
+          skillFrequency: latestBenchmark.skillFrequency,
+          missingSkills: latestBenchmark.missingSkills,
+          resumeKeywordGaps: latestBenchmark.resumeKeywordGaps,
+          weeklyLearningPriorities: latestBenchmark.weeklyLearningPriorities,
+        })
+      : undefined;
+
+    const snapshot = computeSdeReadinessSnapshot(evidence, undefined, rubricOverride);
     const weakestLanes = explainWeakestLanes(snapshot);
     const evidenceSummary = evidence
       .slice(0, 25)
       .map((item) => `${item.title}: ${item.summary}`)
       .join("\n");
+
+    const scoreHistory = await getLatestScoreSnapshot(sql).then((s) => s ? [s] : []).catch(() => []);
+    const outcomeEvents = await listOutcomeEvents(sql, { limit: 50 }).catch(() => []);
+    const outcomeReport = buildDirectionalOutcomeReport({
+      scoreSnapshots: [...scoreHistory, snapshot].map((s) => ({
+        overall: s.overall,
+        generatedAt: s.generatedAt,
+      })),
+      outcomeEvents: outcomeEvents.map((e) => ({
+        eventType: e.eventType,
+        occurredAt: e.occurredAt,
+        company: e.company,
+        role: e.role,
+      })),
+    });
+
+    await insertScoreSnapshot(sql, snapshot);
 
     return {
       review: await runHermesMentorSummary({
@@ -191,6 +248,9 @@ export async function runWeeklyReviewJob(input?: {
       }),
       evidenceCount: evidence.length,
       weakestLanes,
+      snapshot,
+      rubricAdjusted: rubricOverride !== undefined,
+      outcomeReport,
     };
   } finally {
     await closeSqlClient(sql);
@@ -198,12 +258,38 @@ export async function runWeeklyReviewJob(input?: {
 }
 
 export async function runMarketBenchmarkJob() {
-  return runMarketBenchmark([
-    "SDE fresher backend roles India",
-    "Java Spring Boot backend roles India",
-    "Node.js backend roles India",
-    "AI agent engineer roles India",
-  ]);
+  const sql = createSqlClient();
+
+  try {
+    const ownedSlugs = await listSkillEvidence(sql, { limit: 5000 })
+      .then((rows) => [...new Set(rows.map((r) => r.skillSlug))])
+      .catch(() => undefined);
+
+    const result = await runMarketBenchmark(
+      [
+        "SDE fresher backend roles India",
+        "Java Spring Boot backend roles India",
+        "Node.js backend roles India",
+        "AI agent engineer roles India",
+      ],
+      undefined,
+      ownedSlugs ? { ownedSkillSlugs: ownedSlugs } : {},
+    );
+
+    await insertBenchmarkSnapshot(sql, {
+      generatedAt: result.generatedAt,
+      queries: result.queries,
+      skillFrequency: result.skillFrequency,
+      missingSkills: result.missingSkills,
+      resumeKeywordGaps: result.resumeKeywordGaps,
+      weeklyLearningPriorities: result.weeklyLearningPriorities,
+      rawResults: result.results,
+    });
+
+    return { ...result, persisted: true };
+  } finally {
+    await closeSqlClient(sql);
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
