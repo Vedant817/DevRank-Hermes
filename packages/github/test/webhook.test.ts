@@ -276,6 +276,66 @@ test("emits a repository deletion instead of re-upserting deleted GitHub data", 
   assert.deepEqual(ingestion.backfill.pullRequests, []);
 });
 
+test("extracts release rows from release.published webhook payloads", () => {
+  const ingestion = githubWebhookIngestion("release", "delivery-10", {
+    action: "published",
+    release: {
+      id: 777,
+      tag_name: "v2.0.0",
+      name: "v2.0.0 Release",
+      html_url: "https://github.com/salescode/devrank-os/releases/tag/v2.0.0",
+      published_at: "2026-06-22T08:00:00Z",
+    },
+    repository: {
+      id: 101,
+      full_name: "salescode/devrank-os",
+      name: "devrank-os",
+      owner: { login: "salescode" },
+    },
+  });
+
+  assert.deepEqual(ingestion.backfill.releases, [{
+    id: 777,
+    repoFullName: "salescode/devrank-os",
+    tagName: "v2.0.0",
+    name: "v2.0.0 Release",
+    htmlUrl: "https://github.com/salescode/devrank-os/releases/tag/v2.0.0",
+    publishedAt: "2026-06-22T08:00:00Z",
+  }]);
+  assert.deepEqual(ingestion.summary, {
+    eventName: "release",
+    deliveryId: "delivery-10",
+    action: "published",
+    repository: "salescode/devrank-os",
+    pullRequestNumber: undefined,
+    pullRequestNumbers: [],
+  });
+});
+
+test("handles release payload with minimal fields", () => {
+  const ingestion = githubWebhookIngestion("release", "delivery-11", {
+    action: "published",
+    release: {
+      id: 778,
+    },
+    repository: {
+      id: 102,
+      full_name: "salescode/minimal",
+      name: "minimal",
+      owner: { login: "salescode" },
+    },
+  });
+
+  assert.deepEqual(ingestion.backfill.releases, [{
+    id: 778,
+    repoFullName: "salescode/minimal",
+    tagName: null,
+    name: null,
+    htmlUrl: null,
+    publishedAt: null,
+  }]);
+});
+
 test("summarizes sparse payloads without throwing", () => {
   assert.deepEqual(summarizeGithubWebhook("push", "delivery-3", {}), {
     eventName: "push",

@@ -5,6 +5,7 @@ import type {
   GithubCommitSummary,
   GithubIssueSummary,
   GithubPullRequestSummary,
+  GithubReleaseSummary,
   GithubRepoSummary,
   GithubWebhookIngestion,
   GithubWebhookResult,
@@ -120,6 +121,7 @@ function emptyGithubBackfill(): GithubBackfillResult {
     commits: [],
     pullRequestFiles: [],
     pullRequestReviews: [],
+    releases: [],
     repoProfiles: [],
     repos: [],
     pullRequests: [],
@@ -132,6 +134,7 @@ function githubWebhookBackfill(payload: unknown): GithubBackfillResult {
   const pullRequest = githubPullRequestFromPayload(asRecord(record.pull_request), repo?.fullName);
   const issue = githubIssueFromPayload(asRecord(record.issue), repo?.fullName);
   const workflowRun = githubWorkflowRunFromPayload(asRecord(record.workflow_run), repo?.fullName);
+  const release = githubReleaseFromPayload(asRecord(record.release), repo?.fullName);
   const commits = repo ? githubCommitsFromPayload(record, repo.fullName) : [];
 
   return {
@@ -139,6 +142,7 @@ function githubWebhookBackfill(payload: unknown): GithubBackfillResult {
     issues: issue ? [issue] : [],
     pullRequestFiles: [],
     pullRequestReviews: [],
+    releases: release ? [release] : [],
     repoProfiles: [],
     repos: repo ? [repo] : [],
     pullRequests: pullRequest ? [pullRequest] : [],
@@ -203,6 +207,26 @@ function githubWorkflowRunFromPayload(
     runStartedAt: stringValue(workflowRun.run_started_at) ?? null,
     status,
     updatedAt: stringValue(workflowRun.updated_at) ?? null,
+  };
+}
+
+function githubReleaseFromPayload(
+  release: Record<string, unknown>,
+  repoFullName: string | undefined,
+): GithubReleaseSummary | undefined {
+  const id = numberValue(release.id);
+
+  if (id === undefined || repoFullName === undefined) {
+    return undefined;
+  }
+
+  return {
+    id,
+    repoFullName,
+    tagName: stringValue(release.tag_name) ?? null,
+    name: stringValue(release.name) ?? null,
+    htmlUrl: stringValue(release.html_url) ?? null,
+    publishedAt: stringValue(release.published_at) ?? null,
   };
 }
 

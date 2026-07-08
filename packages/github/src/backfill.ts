@@ -2,14 +2,17 @@ import type { Octokit } from "@octokit/rest";
 import type {
   GithubBackfillOptions,
   GithubBackfillResult,
+  GithubIssueSummary,
   GithubPullRequestCheckSnapshot,
   GithubCommitSummary,
   GithubPullRequestCheckSummary,
   GithubPullRequestFileSummary,
   GithubPullRequestReviewSummary,
+  GithubReleaseSummary,
   GithubRepoProfileSummary,
   GithubPullRequestSummary,
   GithubRepoSummary,
+  GithubWorkflowRunSummary,
 } from "./types.js";
 
 export const DEFAULT_GITHUB_COMMIT_LIMIT_PER_REPO = 100;
@@ -88,6 +91,7 @@ export async function backfillGithubUser(
   const repoPage = normalizedBoundedPositiveInteger(options.repoPage, 1, Number.MAX_SAFE_INTEGER);
   const shouldScanPrMetadata = options.prMetadataScan ?? true;
   const shouldScanProfiles = options.profileScan ?? true;
+  const shouldScanDora = options.doraScan ?? false;
   await assertGithubRateLimit(octokit, minimumRateLimitRemaining, repoPage);
   const repoResponse = await octokit.repos.listForUser({
     direction: "asc",
@@ -98,12 +102,15 @@ export async function backfillGithubUser(
   });
   const repoSummaries = repoResponse.data.map(mapRepo);
   const commits: GithubCommitSummary[] = [];
+  const issues: GithubIssueSummary[] = [];
   const pullRequestChecks: GithubPullRequestCheckSummary[] = [];
   const pullRequestCheckSnapshots: GithubPullRequestCheckSnapshot[] = [];
   const pullRequestFiles: GithubPullRequestFileSummary[] = [];
   const pullRequestReviews: GithubPullRequestReviewSummary[] = [];
+  const releases: GithubReleaseSummary[] = [];
   const repoProfiles: GithubRepoProfileSummary[] = [];
   const pullRequests: GithubPullRequestSummary[] = [];
+  const workflowRuns: GithubWorkflowRunSummary[] = [];
 
   const repoResults = await mapWithConcurrency(repoSummaries, concurrency, async (repo) => {
     const pulls = await octokit.pulls.list({
@@ -136,15 +143,21 @@ export async function backfillGithubUser(
         )
       : [];
     const profile = shouldScanProfiles ? await profileGithubRepo(octokit, repo) : undefined;
+    const repoReleases = shouldScanDora ? await fetchGithubReleases(octokit, repo) : [];
+    const repoWorkflowRuns = shouldScanDora ? await fetchGithubWorkflowRuns(octokit, repo) : [];
+    const repoIssues = shouldScanDora ? await fetchGithubIssues(octokit, repo) : [];
 
     return {
       checks: metadata.flatMap((item) => item.checks),
       commits: repoCommits,
       files: metadata.flatMap((item) => item.files),
+      issues: repoIssues,
       profile,
       checkSnapshots: metadata.map((item) => item.checkSnapshot).filter((item): item is GithubPullRequestCheckSnapshot => item !== undefined),
       pullRequests: repoPullRequests,
+      releases: repoReleases,
       reviews: metadata.flatMap((item) => item.reviews),
+      workflowRuns: repoWorkflowRuns,
     };
   });
 
@@ -152,9 +165,12 @@ export async function backfillGithubUser(
     pullRequestChecks.push(...result.checks);
     pullRequestCheckSnapshots.push(...result.checkSnapshots);
     commits.push(...result.commits);
+    issues.push(...result.issues);
     pullRequestFiles.push(...result.files);
     pullRequestReviews.push(...result.reviews);
+    releases.push(...result.releases);
     pullRequests.push(...result.pullRequests);
+    workflowRuns.push(...result.workflowRuns);
     if (result.profile) repoProfiles.push(result.profile);
   }
 
@@ -168,14 +184,92 @@ export async function backfillGithubUser(
       repoPage,
     },
     commits,
+    issues,
     pullRequestChecks,
     pullRequestCheckSnapshots,
     pullRequestFiles,
     pullRequestReviews,
+    releases,
     repoProfiles,
     repos: repoSummaries,
     pullRequests,
+    workflowRuns,
   };
+}
+
+export async function fetchGithubReleases(
+  octokit: Octokit,
+  repo: GithubRepoSummary,
+  limit = 100,
+): Promise<GithubReleaseSummary[]> {
+  const releases = await octokit.paginate(octokit.repos.listReleases, {
+    owner: repo.owner,
+    per_page: Math.min(limit, 100),
+    repo: repo.name,
+  });
+
+  return releases.map((release) => ({
+    id: release.id,
+    repoFullName: repo.fullName,
+    tagName: release.tag_name ?? null,
+    name: release.name ?? null,
+    htmlUrl: release.html_url ?? null,
+    publishedAt: release.published_at ?? null,
+  }));
+}
+
+export async function fetchGithubWorkflowRuns(
+  octokit: Octokit,
+  repo: GithubRepoSummary,
+  limit = 100,
+): Promise<GithubWorkflowRunSummary[]> {
+  const runs = await octokit.paginate("GET /repos/{owner}/{repo}/actions/runs", {
+    owner: repo.owner,
+    per_page: Math.min(limit, 100),
+    repo: repo.name,
+  });
+
+  return runs.map((run) => ({
+    id: run.id,
+    repoFullName: repo.fullName,
+    name: run.name ?? null,
+    event: run.event ?? null,
+    status: run.status ?? null,
+    conclusion: run.conclusion ?? null,
+    headBranch: run.head_branch ?? null,
+    headSha: run.head_sha ?? null,
+    htmlUrl: run.html_url ?? null,
+    runStartedAt: run.run_started_at ?? null,
+    updatedAt: run.updated_at ?? null,
+  }));
+}
+
+export async function fetchGithubIssues(
+  octokit: Octokit,
+  repo: GithubRepoSummary,
+  limit = 100,
+): Promise<GithubIssueSummary[]> {
+  const issues = await octokit.paginate(octokit.issues.listForRepo, {
+    owner: repo.owner,
+    per_page: Math.min(limit, 100),
+    repo: repo.name,
+    state: "all",
+  });
+
+  return issues
+    .filter((issue) => issue.pull_request === undefined)
+    .map((issue) => ({
+      id: issue.id,
+      repoFullName: repo.fullName,
+      number: issue.number,
+      title: issue.title,
+      state: issue.state,
+      authorLogin: issue.user?.login ?? null,
+      htmlUrl: issue.html_url ?? null,
+      openedAt: issue.created_at ?? null,
+      closedAt: issue.closed_at ?? null,
+      updatedAt: issue.updated_at ?? null,
+    }));
 }
 
 export async function fetchGithubPullRequestMetadata(

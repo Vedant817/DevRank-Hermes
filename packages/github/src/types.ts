@@ -133,7 +133,7 @@ export interface GithubWorkflowRunSummary {
   name: string | null;
   repoFullName: string;
   runStartedAt: string | null;
-  status: string;
+  status: string | null;
   updatedAt: string | null;
 }
 
@@ -150,15 +150,26 @@ export interface GithubBackfillResult {
   pullRequestCheckSnapshots?: GithubPullRequestCheckSnapshot[];
   pullRequestFiles: GithubPullRequestFileSummary[];
   pullRequestReviews: GithubPullRequestReviewSummary[];
+  releases?: GithubReleaseSummary[];
   repoProfiles: GithubRepoProfileSummary[];
   repos: GithubRepoSummary[];
   pullRequests: GithubPullRequestSummary[];
   workflowRuns?: GithubWorkflowRunSummary[];
 }
 
+export interface GithubReleaseSummary {
+  id: number;
+  repoFullName: string;
+  tagName: string | null;
+  name: string | null;
+  htmlUrl: string | null;
+  publishedAt: string | null;
+}
+
 export interface GithubBackfillOptions {
   commitLimitPerRepo?: number;
   concurrency?: number;
+  doraScan?: boolean;
   minimumRateLimitRemaining?: number;
   prMetadataLimitPerRepo?: number;
   prMetadataScan?: boolean;
