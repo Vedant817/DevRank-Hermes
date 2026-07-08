@@ -2,6 +2,7 @@ import {
   closeSqlClient,
   claimSlackNotificationAttempt,
   createSqlClient,
+  dailyTaskKey,
   getLinearPlanningSignal,
   getLatestScoreSnapshot,
   insertDailyPlan,
@@ -9,7 +10,7 @@ import {
   markSlackNotificationDelivered,
   markSlackNotificationFailed,
 } from "@repo/db";
-import { sendSlackMessage } from "@repo/slack";
+import { sendDailyPlanToSlack, type TaskActionItem } from "@repo/slack";
 import {
   getOptionalString,
   getRequiredEnv,
@@ -76,12 +77,20 @@ export async function GET(request: Request) {
       });
       await insertDailyPlan(sql, plan);
       const slackText = formatDailyPlanForSlack(plan);
-      const slackEnv = getRequiredEnv("SLACK_WEBHOOK_URL");
+      const hasBlocksToken = !!process.env.SLACK_BOT_TOKEN && !!process.env.SLACK_CHANNEL_ID;
+      const slackEnvCheck = hasBlocksToken ? { ok: true as const } : getRequiredEnv("SLACK_WEBHOOK_URL");
 
-      if (!slackEnv.ok) {
-        return slackEnv.response;
+      if (!slackEnvCheck.ok) {
+        return slackEnvCheck.response;
       }
 
+      const taskItems: TaskActionItem[] = plan.tasks.map((task) => ({
+        date: plan.date,
+        taskKey: dailyTaskKey(plan.date, task),
+        title: task.title,
+        minutes: task.minutes,
+        evidence: task.evidence,
+      }));
       const notification = await claimSlackNotificationAttempt(sql, {
         deliveryKey: `daily-plan:${plan.date}`,
         text: slackText,
@@ -108,11 +117,11 @@ export async function GET(request: Request) {
         });
       }
 
-      let slack: Awaited<ReturnType<typeof sendSlackMessage>>;
+      let result: Awaited<ReturnType<typeof sendDailyPlanToSlack>>;
       let notificationRecorded = true;
 
       try {
-        slack = await sendSlackMessage(slackText);
+        result = await sendDailyPlanToSlack(taskItems);
       } catch {
         await markSlackNotificationFailed(sql, {
           id: notificationId,
@@ -129,11 +138,11 @@ export async function GET(request: Request) {
       try {
         await markSlackNotificationDelivered(sql, {
           id: notificationId,
-          deliveredAt: slack.deliveredAt,
+          deliveredAt: result.deliveredAt,
           response: {
-            deliveredAt: slack.deliveredAt,
+            deliveredAt: result.deliveredAt,
             planDate: plan.date,
-            provider: "slack_webhook",
+            provider: result.method === "blocks" ? "slack_blocks" : "slack_webhook",
             source: "daily_plan_cron",
             status: "delivered",
           },
@@ -152,7 +161,8 @@ export async function GET(request: Request) {
         slackDelivered: true,
         slackNotificationId: notificationId,
         slackNotificationRecorded: notificationRecorded,
-        slack,
+        slackMethod: result.method,
+        slackTs: result.ts,
       });
     } finally {
       await closeSqlClient(sql);

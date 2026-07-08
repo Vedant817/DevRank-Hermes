@@ -11,18 +11,21 @@
   },
   "scripts": {
     "lint": "eslint src --max-warnings 0",
+    "test": "tsx --test test/*.test.ts",
     "check-types": "tsc --noEmit",
     "build": "tsc"
   },
   "dependencies": {
     "@repo/shared": "workspace:*",
-    "@slack/webhook": "^7.0.9"
+    "@slack/webhook": "^7.0.9",
+    "@slack/web-api": "^7.8.0"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^22.15.3",
     "eslint": "^9.39.1",
+    "tsx": "^4.22.4",
     "typescript": "5.9.2"
   }
 }
