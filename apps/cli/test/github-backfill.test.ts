@@ -112,6 +112,7 @@ test("github backfill invocation passes configured commit limit", async () => {
   assert.deepEqual(calls[0]?.options, {
     commitLimitPerRepo: 5,
     concurrency: 4,
+    doraScan: true,
     minimumRateLimitRemaining: 75,
     prMetadataLimitPerRepo: 7,
     pullRequestLimitPerRepo: 50,

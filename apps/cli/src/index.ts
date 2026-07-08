@@ -9,9 +9,11 @@ import {
   closeSqlClient,
   claimSlackNotificationAttempt,
   createSqlClient,
+  dailyTaskKey,
   getLatestScoreSnapshot,
   insertDailyPlan,
   insertIngestionRun,
+  insertOutcomeEvent,
   insertScoreSnapshot,
   listEvidenceItems,
   listScoringEvidence,
@@ -21,11 +23,17 @@ import {
   upsertGithubBackfill,
   upsertEvidenceEmbeddings,
   upsertEvidenceItems,
+  updateDailyTaskStatus,
   upsertLinearBackfill,
   markSlackNotificationDelivered,
   markSlackNotificationFailed,
+  insertBenchmarkSnapshot,
+  getRecentBenchmarkSnapshots,
+  getDsaQuestionBySlug,
+  listSkillEvidence,
   type SqlClient,
 } from "@repo/db";
+import { backfillResultToEvidence, type GithubBackfillResult } from "@repo/github";
 import { buildReusableSkillArtifacts, writeReusableSkillArtifacts } from "@repo/hermes";
 import { formatDailyPlanForSlack, generateDailyPlan } from "@repo/planner";
 import {
@@ -33,8 +41,8 @@ import {
   isCurrentSdeReadinessSnapshot,
 } from "@repo/scoring";
 import { runMarketBenchmark } from "@repo/search";
-import { evidenceSources } from "@repo/shared";
-import { sendSlackMessage } from "@repo/slack";
+import { evidenceSources, fetchWithPolicy, readRuntimeEnv, type DailyPlanTaskCategory } from "@repo/shared";
+import { sendDailyPlanToSlack, sendSlackMessage, type TaskActionItem } from "@repo/slack";
 import { CliError } from "./errors.js";
 import {
   booleanOption,
@@ -369,7 +377,7 @@ const commands: CommandSpec[] = [
   {
     name: "market:benchmark",
     description: "Run the market skill benchmark with live search results.",
-    usage: "devrank market:benchmark [--query <search-query>]...",
+    usage: "devrank market:benchmark [--query <search-query>]... [--history]",
     moduleCandidates: [],
     exportCandidates: [],
     envRequirements: [marketSearchRequirement],
@@ -381,8 +389,59 @@ const commands: CommandSpec[] = [
         "AWS Kubernetes Kafka backend roles India",
         "AI agent engineer roles India",
       ],
+      history: booleanOption(parsed, "history") || booleanOption(parsed, "hist"),
     }),
     localHandler: handleMarketBenchmark,
+  },
+  {
+    name: "log:dsa",
+    description: "Log a DSA practice evidence item directly or via the API.",
+    usage: "devrank log:dsa <slug> [--minutes n] [--notes text] [--date d] [--task-key k]",
+    moduleCandidates: [],
+    exportCandidates: [],
+    envRequirements: [],
+    buildConfig: (parsed, env) => ({
+      databaseEnv: firstPresentEnv(env, databaseRequirement),
+      apiBaseUrl: envValue(env, "DEVRANK_API_BASE_URL"),
+      date: stringOption(parsed, "date"),
+      minutes: numberOption(parsed, "minutes", 30),
+      notes: stringOption(parsed, "notes"),
+      slug: parsed.positionals[0],
+      taskKey: stringOption(parsed, "task-key"),
+    }),
+    localHandler: handleLogDsa,
+  },
+  {
+    name: "trial:score",
+    description: "Score a GitHub profile with zero DB setup.",
+    usage: "devrank trial:score --user <github-username> [--repo-limit <count>]",
+    moduleCandidates: ["@repo/github"],
+    exportCandidates: ["backfillGithubUser", "createGithubClient"],
+    envRequirements: [githubBackfillAuthRequirement],
+    optionRequirements: [{ name: "user", label: "GitHub username to score" }],
+    buildConfig: (parsed, env) => ({
+      authEnv: firstPresentEnv(env, githubBackfillAuthRequirement),
+      repoLimit: numberOption(parsed, "repo-limit", 5),
+      user: stringOption(parsed, "user"),
+    }),
+    invoke: invokeTrialScore,
+  },
+  {
+    name: "log:outcome",
+    description: "Log a career outcome event (application, interview, offer, rejection).",
+    usage: "devrank log:outcome <application|interview|offer|rejection> [--company <name>] [--role <title>] [--notes <text>] [--date <YYYY-MM-DD>]",
+    moduleCandidates: [],
+    exportCandidates: [],
+    envRequirements: [databaseRequirement],
+    buildConfig: (parsed, env) => ({
+      databaseEnv: firstPresentEnv(env, databaseRequirement),
+      company: stringOption(parsed, "company"),
+      date: stringOption(parsed, "date") ?? new Date().toISOString().slice(0, 10),
+      eventType: parsed.positionals[0],
+      notes: stringOption(parsed, "notes"),
+      role: stringOption(parsed, "role"),
+    }),
+    localHandler: handleLogOutcome,
   },
 ];
 
@@ -668,7 +727,7 @@ async function handlePlannerDaily(context: CommandContext) {
     }
 
     if (sendSlack && !dryRun) {
-      slackDelivery = await sendAuditedCliSlack(sql, slackText, "planner_daily_cli", plan.date);
+      slackDelivery = await sendAuditedCliSlack(sql, plan, "planner_daily_cli");
     }
 
     return {
@@ -690,15 +749,22 @@ async function handleSlackTest(context: CommandContext) {
 
 async function sendAuditedCliSlack(
   sql: SqlClient,
-  text: string,
+  plan: { date: string; tasks: Array<{ category: string; title: string; minutes: number; evidence?: string }> },
   source: string,
-  planDate: string,
 ) {
+  const taskItems: TaskActionItem[] = plan.tasks.map((task) => ({
+    date: plan.date,
+    taskKey: dailyTaskKey(plan.date, { category: task.category as DailyPlanTaskCategory, title: task.title }),
+    title: task.title,
+    minutes: task.minutes,
+    evidence: task.evidence,
+  }));
+  const text = taskItems.map((t, i) => `${i + 1}. ${t.title} (${t.minutes} min)`).join("\n");
   const notification = await claimSlackNotificationAttempt(sql, {
-    deliveryKey: `daily-plan:${planDate}`,
+    deliveryKey: `daily-plan:${plan.date}`,
     text,
     response: {
-      planDate,
+      planDate: plan.date,
       source,
       status: "pending",
     },
@@ -714,16 +780,16 @@ async function sendAuditedCliSlack(
     };
   }
 
-  let slack: Awaited<ReturnType<typeof sendSlackMessage>>;
+  let result: Awaited<ReturnType<typeof sendDailyPlanToSlack>>;
 
   try {
-    slack = await sendSlackMessage(text);
+    result = await sendDailyPlanToSlack(taskItems);
   } catch (error) {
     await markSlackNotificationFailed(sql, {
       id: notificationId,
       errorCode: "slack_delivery_failed",
       response: {
-        planDate,
+        planDate: plan.date,
         source,
       },
     }).catch(() => undefined);
@@ -736,11 +802,11 @@ async function sendAuditedCliSlack(
   try {
     await markSlackNotificationDelivered(sql, {
       id: notificationId,
-      deliveredAt: slack.deliveredAt,
+      deliveredAt: result.deliveredAt,
       response: {
-        deliveredAt: slack.deliveredAt,
-        planDate,
-        provider: "slack_webhook",
+        deliveredAt: result.deliveredAt,
+        planDate: plan.date,
+        provider: result.method === "blocks" ? "slack_blocks" : "slack_webhook",
         source,
         status: "delivered",
       },
@@ -750,15 +816,231 @@ async function sendAuditedCliSlack(
   }
 
   return {
-    slack,
     slackDelivered: true,
+    slackMethod: result.method,
     slackNotificationId: notificationId,
     slackNotificationRecorded,
   };
 }
 
 async function handleMarketBenchmark(context: CommandContext) {
-  return runMarketBenchmark(configStringList(context, "queries"));
+  const env = readRuntimeEnv(context.env);
+  const queries = configStringList(context, "queries");
+  const ownedSkillSlugs = await loadOwnedSkillSlugs(context);
+  const result = await runMarketBenchmark(queries, env, ownedSkillSlugs ? { ownedSkillSlugs } : {});
+
+  if (!configBoolean(context, "history")) {
+    return result;
+  }
+
+  const sql = createSqlClient();
+
+  try {
+    await insertBenchmarkSnapshot(sql, {
+      generatedAt: result.generatedAt,
+      queries: result.queries,
+      skillFrequency: result.skillFrequency,
+      missingSkills: result.missingSkills,
+      resumeKeywordGaps: result.resumeKeywordGaps,
+      weeklyLearningPriorities: result.weeklyLearningPriorities,
+      rawResults: result.results,
+    });
+
+    const history = await getRecentBenchmarkSnapshots(sql, 10);
+
+    return {
+      ...result,
+      persisted: true,
+      history: history.map((entry) => ({
+        generatedAt: entry.generatedAt,
+        missingSkills: entry.missingSkills,
+        weeklyLearningPriorities: entry.weeklyLearningPriorities,
+      })),
+    };
+  } finally {
+    await closeSqlClient(sql);
+  }
+}
+
+async function loadOwnedSkillSlugs(context: CommandContext): Promise<string[] | undefined> {
+  if (!requirementMet(databaseRequirement, context.env)) {
+    return undefined;
+  }
+
+  const sql = createSqlClient();
+
+  try {
+    const evidence = await listSkillEvidence(sql, { limit: 1000 });
+    const slugs = new Set(evidence.map((e) => e.skillSlug));
+    return [...slugs];
+  } catch {
+    return undefined;
+  } finally {
+    await closeSqlClient(sql);
+  }
+}
+
+async function handleLogDsa(context: CommandContext) {
+  const slug = configString(context, "slug");
+
+  if (!slug) {
+    throw new CliError("Usage: devrank log:dsa <slug> [--minutes n] [--notes text] [--date d] [--task-key k]", 2);
+  }
+
+  const apiBaseUrl = configString(context, "apiBaseUrl");
+
+  if (apiBaseUrl) {
+    return logDsaViaApi(apiBaseUrl, context);
+  }
+
+  return logDsaViaDb(context, slug);
+}
+
+async function logDsaViaApi(apiBaseUrl: string, context: CommandContext) {
+  const slug = configString(context, "slug")!;
+  const body: Record<string, unknown> = {
+    title: `DSA: ${slug}`,
+    summary: configString(context, "notes") ?? `Solved ${slug}`,
+    dsaSlug: slug,
+    minutes: configNumber(context, "minutes", 30),
+  };
+  const date = configString(context, "date");
+  const taskKey = configString(context, "taskKey");
+
+  if (date) body.date = date;
+  if (taskKey) body.taskKey = taskKey;
+
+  const response = await fetchWithPolicy(`${apiBaseUrl}/api/tasks/log-evidence`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new CliError(`API returned ${response.status}: ${await response.text()}`, 2);
+  }
+
+  return response.json();
+}
+
+async function logDsaViaDb(context: CommandContext, slug: string) {
+  if (!requirementMet(databaseRequirement, context.env)) {
+    throw new CliError(
+      "Set DEVRANK_API_BASE_URL or configure a database URL to run log:dsa.",
+      2,
+    );
+  }
+
+  const sql = createSqlClient();
+
+  try {
+    const dsaQuestion = await getDsaQuestionBySlug(sql, slug);
+
+    if (!dsaQuestion) {
+      throw new CliError(`Unknown DSA slug "${slug}". Run devrank db:migrate first to seed questions.`, 2);
+    }
+
+    const title = `DSA: ${dsaQuestion.title}`;
+    const summary = configString(context, "notes") ?? `Solved ${dsaQuestion.title} (${dsaQuestion.difficulty}, ${dsaQuestion.topic})`;
+    const occurredAt = configString(context, "date") ?? new Date().toISOString().slice(0, 10);
+    const minutes = configNumber(context, "minutes", 30);
+
+    const result = await runInTransaction(sql, async (transaction) => {
+      const evidence = await upsertEvidenceItems(transaction, [{
+        id: `dsa:${slug}:${occurredAt}`,
+        source: "manual" as const,
+        title,
+        summary,
+        occurredAt,
+        metadata: { minutes, dsaSlug: slug, difficulty: dsaQuestion.difficulty, topic: dsaQuestion.topic },
+      }]);
+
+      const taskKey = configString(context, "taskKey");
+
+      if (taskKey) {
+        await updateDailyTaskStatus(transaction, {
+          date: occurredAt,
+          taskKey,
+          status: "completed",
+        });
+      }
+
+      return { evidenceCount: evidence, taskKeyUpdated: taskKey !== undefined };
+    });
+
+    return { title, summary, occurredAt, minutes, dsaSlug: slug, ...result };
+  } finally {
+    await closeSqlClient(sql);
+  }
+}
+
+async function invokeTrialScore(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+  const token = envValue(context.env, "GITHUB_PERSONAL_ACCESS_TOKEN") ?? envValue(context.env, "GITHUB_TOKEN");
+
+  if (!token) {
+    throw new CliError(
+      `Set GITHUB_PERSONAL_ACCESS_TOKEN or GITHUB_TOKEN to run trial:score.`,
+      2,
+    );
+  }
+
+  const createGithubClient = requiredFunction(moduleExports, ["createGithubClient"], moduleName, context.command);
+  const backfillGithubUser = requiredFunction(moduleExports, ["backfillGithubUser"], moduleName, context.command);
+  const client = createGithubClient({
+    ...context.env,
+    GITHUB_PERSONAL_ACCESS_TOKEN: token,
+  });
+
+  const user = configString(context, "user");
+
+  if (!user) {
+    throw new CliError("Usage: devrank trial:score --user <github-username>", 2);
+  }
+
+  const backfillResult = await backfillGithubUser(client, user, {
+    commitLimitPerRepo: 25,
+    concurrency: 2,
+    minimumRateLimitRemaining: 100,
+    pullRequestLimitPerRepo: 50,
+    repoLimit: configNumber(context, "repoLimit", 5),
+  }) as GithubBackfillResult;
+
+  const evidence = backfillResultToEvidence(backfillResult);
+  const snapshot = computeSdeReadinessSnapshot(evidence);
+
+  return {
+    username: user,
+    evidenceCount: evidence.length,
+    snapshot,
+    note: "Trial score uses public GitHub data only. No database writes were performed.",
+  };
+}
+
+async function handleLogOutcome(context: CommandContext) {
+  const eventType = configString(context, "eventType") as string | undefined;
+
+  if (!eventType || !["application", "interview", "offer", "rejection"].includes(eventType)) {
+    throw new CliError(
+      "Usage: devrank log:outcome <application|interview|offer|rejection> [--company <name>] [--role <title>] [--notes <text>] [--date <YYYY-MM-DD>]",
+      2,
+    );
+  }
+
+  const sql = createSqlClient();
+
+  try {
+    const result = await insertOutcomeEvent(sql, {
+      eventType: eventType as "application" | "interview" | "offer" | "rejection",
+      company: configString(context, "company"),
+      role: configString(context, "role"),
+      notes: configString(context, "notes"),
+      occurredAt: configString(context, "date") ?? new Date().toISOString(),
+    });
+
+    return result;
+  } finally {
+    await closeSqlClient(sql);
+  }
 }
 
 async function handleHermesSkillsCreate(context: CommandContext) {
@@ -903,6 +1185,7 @@ export async function invokeGithubBackfill(moduleExports: ModuleExports, context
     await backfillGithubUser(client, configString(context, "user"), {
       commitLimitPerRepo: configNumber(context, "commitLimit", 100),
       concurrency: configNumber(context, "concurrency", 2),
+      doraScan: true,
       minimumRateLimitRemaining: configNumber(context, "rateLimitMinimum", 100),
       prMetadataLimitPerRepo: configNumber(context, "prMetadataLimit", 25),
       pullRequestLimitPerRepo: configNumber(context, "pullRequestLimit", 100),
