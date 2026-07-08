@@ -11,124 +11,38 @@ scores, learning plans, Slack targets, and mentor summaries.
 - `apps/cli`: `devrank` operator CLI.
 - `apps/local-agent`: local macOS ingestion daemon.
 - `apps/worker`: background job runners.
-- `packages/db`: Supabase/Postgres client, migrations, pgvector check, and
-  repositories.
-- `packages/ai-chat-ingestors`: Codex session parser, redaction, and evidence
-  summary generation.
+- `packages/db`: Supabase/Postgres client, migrations, pgvector check.
+- `packages/ai-chat-ingestors`: Codex session parser, redaction, evidence summaries.
 - `packages/scoring`: deterministic SDE-readiness scoring.
 - `packages/planner`: daily plan generation and Slack formatting.
-- `packages/embeddings`: OpenRouter-compatible embedding generation for
-  redacted evidence summaries.
+- `packages/embeddings`: OpenRouter-compatible embedding generation.
 - `packages/github`, `packages/linear`, `packages/slack`, `packages/search`,
   `packages/context`, `packages/hermes`: external integrations.
 
-## Setup
-
-Use Node.js 24 LTS and pnpm 11. The root `.nvmrc` selects the supported Node
-major, which also matches the Vercel runtime declared by the web package.
+## Quickstart
 
 ```bash
 nvm use
 corepack enable
 pnpm install
+```
+
+Set `DATABASE_URL` and `DEVRANK_OWNER_ID` in `.env`, then:
+
+```bash
 pnpm devrank env:check --feature database
 pnpm devrank db:migrate
 pnpm devrank db:check-vector
 ```
 
-Required database env:
-
-```text
-DATABASE_URL=postgresql://...
-```
-
-Feature-specific env can be checked with:
+For a zero-dB trial:
 
 ```bash
-pnpm devrank env:check --feature all
-pnpm devrank env:check --feature context
+export GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_...
+pnpm devrank trial:score --user <github-username>
 ```
 
-The context check follows `CONTEXT_PROVIDER`: `supabase` requires the database,
-`supermemory` requires `SUPERMEMORY_API_KEY`, and `combined` requires both.
-Every mode also requires `DEVRANK_OWNER_ID`.
-
-Hermes can use provider-neutral AI settings, with the existing OpenRouter
-settings still supported for compatibility:
-
-```text
-AI_API_KEY=...
-AI_BASE_URL=https://openrouter.ai/api/v1
-AI_MODEL=openrouter/auto
-AI_HTTP_REFERER=https://your-app.example
-AI_TITLE=DevRank OS
-
-OPENROUTER_API_KEY=...
-HERMES_MODEL=openrouter/auto
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-HERMES_HTTP_REFERER=https://your-app.example
-HERMES_TITLE=DevRank OS
-```
-
-Redacted local AI summaries can be embedded into pgvector using OpenRouter's
-embedding endpoint:
-
-```text
-DEVRANK_STORE_EMBEDDINGS=true
-EMBEDDING_MODEL=openai/text-embedding-3-small
-EMBEDDING_DIMENSIONS=1536
-```
-
-The current Postgres schema stores embeddings as `memory_embeddings.embedding
-vector(1536)`. Keep `EMBEDDING_DIMENSIONS=1536` unless a matching schema
-migration is applied first.
-
-Market benchmarking currently uses Tavily:
-
-```text
-TAVILY_API_KEY=...
-```
-
-`EXA_API_KEY` and `FIRECRAWL_API_KEY` are parsed for future adapters, but the
-benchmark fails clearly if they are configured without `TAVILY_API_KEY`.
-
-`--upload-raw-chats` stores the full redacted transcript in Postgres. The local
-collector still refuses to run if secret redaction is disabled.
-
-The authenticated `/api/ingest/local-ai` endpoint also accepts redacted summary
-imports with `sourceType` set to `cloud_export`, `manual_export`, or
-`workspace_export`.
-
-## Main Commands
-
-DevRank OS is a single-user deployment. Set `DEVRANK_OWNER_ID` to a stable
-identifier such as `vedant`; API, cron, dashboard, and context access fail
-closed when that owner boundary is missing.
-
-```bash
-pnpm devrank ingest:local-ai --codex-sessions-dir ~/.codex/sessions
-pnpm devrank ingest:local-ai --codex-sessions-dir ~/.codex/sessions --store-embeddings
-pnpm devrank ingest:local-ai --codex-sessions-dir ~/.codex/sessions --upload-raw-chats
-pnpm devrank scores:recompute
-pnpm devrank planner:daily
-pnpm devrank github:backfill --user vedantmahajan271 --repo-limit 10 --commit-limit 100
-pnpm devrank linear:backfill
-pnpm devrank slack:test
-pnpm devrank market:benchmark
-```
-
-Use `linear:backfill --workspace <id|name|url-key>` to assert that the Linear
-token is scoped to the intended workspace. The command fails before persistence
-when the resolved workspace does not match.
-
-GitHub backfill processes 10 repositories per run, returns a `nextRepoPage`
-checkpoint, checks the GitHub core rate limit before fan-out, and imports up to
-100 pull requests, 100 current-head check runs per scanned pull request, and
-100 recent default-branch commits per repository. Resume with
-`--repo-page <nextRepoPage>`. Use `--commit-limit 0` to reduce API usage. The
-GitHub token must be able to read repository pull requests, contents, and
-checks; missing check permissions fail ingestion instead of treating CI as
-healthy.
+See [docs/setup/quickstart.md](docs/setup/quickstart.md) for details.
 
 ## Verification
 
@@ -138,18 +52,34 @@ pnpm run lint
 pnpm run build
 ```
 
+## Architecture
+
+```
+┌─────────────────┐    ┌──────────────────────┐    ┌──────────────┐
+│  Local Mac       │───▶│  Vercel Cloud App    │───▶│  Supabase    │
+│  (daemon, Hermes)│    │  (Next.js, API, cron)│    │  Postgres    │
+└─────────────────┘    └──────────────────────┘    │  + pgvector  │
+                           │                       └──────────────┘
+                           ▼
+                     Slack / GitHub / Linear / Search
+```
+
+See [docs/architecture.md](docs/architecture.md) and
+[docs/architecture-decision-diagram.md](docs/architecture-decision-diagram.md).
+
+## Setup docs
+
+- [Quickstart](docs/setup/quickstart.md)
+- [Full setup with all integrations](docs/setup/full-setup.md)
+- [Slack app setup](docs/setup/slack-app.md)
+- [Trial mode (no database)](docs/runbooks/trial-mode.md)
+- [Mark a task done](docs/runbooks/mark-task-done.md)
+
 ## Deployment
 
-Use `apps/web` as the Vercel project root for the cloud dashboard and API
-routes. The root `vercel.json` mirrors `apps/web/vercel.json` so cron
-configuration is visible in root-linked checks, but the deployable Next.js app
-lives under `apps/web`.
+Use `apps/web` as the Vercel project root. Cron schedules are UTC:
 
-Vercel cron schedules are UTC. `30 2 * * *` targets 08:00 IST for the daily
-plan on plans with per-minute precision, and `30 3 * * 0` targets 09:00 IST
-for the weekly review. On the Hobby plan, Vercel may invoke a daily cron at any
-point within the configured UTC hour, so treat the daily plan as a
-07:30-08:29 IST delivery window and the weekly review as an 08:30-09:29 IST
-Sunday window.
-
-Architecture and setup notes live in `docs/` and `infra/`.
+| Schedule (UTC) | IST target | Purpose |
+|----------------|-----------|---------|
+| `30 2 * * *` | 08:00 | Daily plan |
+| `30 3 * * 0` | 09:00 | Weekly review |
