@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import {
   ConfigurationError,
   MEMORY_EMBEDDING_DIMENSIONS,
+  resolveSingleUserOwner,
   type DailyPlan,
+  type DsaDifficulty,
   type EvidenceItem,
   type EvidenceSource,
   type ScoreBreakdown,
@@ -291,14 +293,22 @@ export async function insertScoreSnapshot(
   snapshot: ScoreSnapshot,
 ): Promise<void> {
   const breakdownJson = JSON.stringify(snapshot.breakdown);
+  let ownerId: string | undefined;
+
+  try {
+    ownerId = resolveSingleUserOwner().id;
+  } catch {
+    // single-user owner not configured
+  }
 
   await sql`
-    insert into score_snapshots (overall, breakdown, rubric_version, created_at)
+    insert into score_snapshots (overall, breakdown, rubric_version, created_at, owner_id)
     values (
       ${snapshot.overall},
       ${breakdownJson}::jsonb,
       ${snapshot.rubricVersion},
-      ${snapshot.generatedAt}
+      ${snapshot.generatedAt},
+      ${ownerId ?? null}
     )
   `;
 }
@@ -503,10 +513,17 @@ async function persistDailyPlan(
 ): Promise<void> {
   const tasksJson = JSON.stringify(plan.tasks);
   const taskKeys = plan.tasks.map((task) => dailyTaskKey(plan.date, task));
+  let ownerId: string | undefined;
+
+  try {
+    ownerId = resolveSingleUserOwner().id;
+  } catch {
+    // single-user owner not configured
+  }
 
   await sql`
-    insert into daily_plans (plan_date, tasks, target_minutes)
-    values (${plan.date}, ${tasksJson}::jsonb, ${plan.targetMinutes})
+    insert into daily_plans (plan_date, tasks, target_minutes, owner_id)
+    values (${plan.date}, ${tasksJson}::jsonb, ${plan.targetMinutes}, ${ownerId ?? null})
     on conflict (plan_date) do update set
       tasks = excluded.tasks,
       target_minutes = excluded.target_minutes
@@ -964,6 +981,13 @@ export async function upsertEvidenceItems(
   evidence: EvidenceItem[],
 ): Promise<number> {
   let written = 0;
+  let ownerId: string | undefined;
+
+  try {
+    ownerId = resolveSingleUserOwner().id;
+  } catch {
+    // single-user owner not configured
+  }
 
   for (const item of evidence) {
     const metadataJson = JSON.stringify({
@@ -973,13 +997,14 @@ export async function upsertEvidenceItems(
     });
 
     await sql`
-      insert into memory_items (source, source_id, title, summary, metadata)
+      insert into memory_items (source, source_id, title, summary, metadata, owner_id)
       values (
         ${item.source},
         ${item.id},
         ${item.title},
         ${item.summary},
-        ${metadataJson}::jsonb
+        ${metadataJson}::jsonb,
+        ${ownerId ?? null}
       )
       on conflict (source, source_id)
         where source_id is not null
@@ -992,6 +1017,394 @@ export async function upsertEvidenceItems(
   }
 
   return written;
+}
+
+export async function getDsaQuestionBySlug(
+  sql: SqlClient,
+  slug: string,
+): Promise<{
+  slug: string;
+  title: string;
+  topic: string;
+  difficulty: DsaDifficulty;
+  url: string;
+  patterns: string[];
+} | undefined> {
+  const rows = await sql<{
+    slug: string;
+    title: string;
+    topic: string;
+    difficulty: string;
+    url: string;
+    patterns: string[];
+  }[]>`
+    select slug, title, topic, difficulty, url, patterns
+    from dsa_questions
+    where slug = ${slug}
+    limit 1
+  `;
+
+  const row = rows[0];
+
+  if (!row) {
+    return undefined;
+  }
+
+  return {
+    slug: row.slug,
+    title: row.title,
+    topic: row.topic,
+    difficulty: row.difficulty as DsaDifficulty,
+    url: row.url,
+    patterns: row.patterns ?? [],
+  };
+}
+
+export async function listSkillEvidence(
+  sql: SqlClient,
+  options: {
+    limit?: number;
+    skillSlug?: string;
+  } = {},
+): Promise<Array<{
+  skillSlug: string;
+  skillName: string;
+  source: string;
+  sourceId: string;
+  title: string;
+  summary: string;
+  occurredAt?: string;
+}>> {
+  const limit = Math.max(1, Math.min(options.limit ?? 500, 5_000));
+
+  const rows = options.skillSlug
+    ? await sql<SkillEvidenceRow[]>`
+      select
+        skills.slug as skill_slug,
+        skills.name as skill_name,
+        skill_evidence.source,
+        skill_evidence.source_id,
+        skill_evidence.title,
+        skill_evidence.summary,
+        skill_evidence.occurred_at
+      from skill_evidence
+      inner join skills on skills.id = skill_evidence.skill_id
+      where skills.slug = ${options.skillSlug}
+      order by skill_evidence.occurred_at desc nulls last, skill_evidence.created_at desc
+      limit ${limit}
+    `
+    : await sql<SkillEvidenceRow[]>`
+      select
+        skills.slug as skill_slug,
+        skills.name as skill_name,
+        skill_evidence.source,
+        skill_evidence.source_id,
+        skill_evidence.title,
+        skill_evidence.summary,
+        skill_evidence.occurred_at
+      from skill_evidence
+      inner join skills on skills.id = skill_evidence.skill_id
+      order by skill_evidence.occurred_at desc nulls last, skill_evidence.created_at desc
+      limit ${limit}
+    `;
+
+  return rows.map((row) => ({
+    skillSlug: row.skill_slug,
+    skillName: row.skill_name,
+    source: row.source,
+    sourceId: row.source_id,
+    title: row.title,
+    summary: row.summary,
+    ...(row.occurred_at ? { occurredAt: toIso(row.occurred_at) } : {}),
+  }));
+}
+
+type SkillEvidenceRow = {
+  skill_slug: string;
+  skill_name: string;
+  source: string;
+  source_id: string;
+  title: string;
+  summary: string;
+  occurred_at: Date | string | null;
+};
+
+export interface GithubReleaseRecord {
+  id: number;
+  repoId: number;
+  tagName?: string;
+  name?: string;
+  publishedAt?: string;
+  htmlUrl?: string;
+}
+
+export async function insertGithubRelease(
+  sql: SqlClient,
+  release: GithubReleaseRecord,
+): Promise<void> {
+  await sql`
+    insert into github_releases (id, repo_id, tag_name, name, published_at, html_url)
+    values (
+      ${release.id},
+      ${release.repoId},
+      ${release.tagName ?? null},
+      ${release.name ?? null},
+      ${release.publishedAt ?? null},
+      ${release.htmlUrl ?? null}
+    )
+    on conflict (id) do update set
+      repo_id = excluded.repo_id,
+      tag_name = excluded.tag_name,
+      name = excluded.name,
+      published_at = excluded.published_at,
+      html_url = excluded.html_url
+  `;
+}
+
+export async function listGithubReleases(
+  sql: SqlClient,
+  options: {
+    repoId?: number;
+    since?: string;
+    until?: string;
+    limit?: number;
+  } = {},
+): Promise<GithubReleaseRecord[]> {
+  const limit = Math.max(1, Math.min(options.limit ?? 500, 5_000));
+
+  if (options.repoId !== undefined) {
+    const rows = await sql<GithubReleaseRow[]>`
+      select id, repo_id, tag_name, name, published_at, html_url
+      from github_releases
+      where repo_id = ${options.repoId}
+        ${options.since ? sql`and published_at >= ${options.since}` : sql``}
+        ${options.until ? sql`and published_at <= ${options.until}` : sql``}
+      order by published_at desc nulls last, id desc
+      limit ${limit}
+    `;
+
+    return rows.map(githubReleaseFromRow);
+  }
+
+  const rows = await sql<GithubReleaseRow[]>`
+    select id, repo_id, tag_name, name, published_at, html_url
+    from github_releases
+    where 1 = 1
+      ${options.since ? sql`and published_at >= ${options.since}` : sql``}
+      ${options.until ? sql`and published_at <= ${options.until}` : sql``}
+    order by published_at desc nulls last, id desc
+    limit ${limit}
+  `;
+
+  return rows.map(githubReleaseFromRow);
+}
+
+type GithubReleaseRow = {
+  id: number;
+  repo_id: number;
+  tag_name: string | null;
+  name: string | null;
+  published_at: Date | string | null;
+  html_url: string | null;
+};
+
+function githubReleaseFromRow(row: GithubReleaseRow): GithubReleaseRecord {
+  return {
+    id: row.id,
+    repoId: row.repo_id,
+    tagName: row.tag_name ?? undefined,
+    name: row.name ?? undefined,
+    htmlUrl: row.html_url ?? undefined,
+    ...(row.published_at ? { publishedAt: toIso(row.published_at) } : {}),
+  };
+}
+
+export interface LearningGoalRecord {
+  id: string;
+  title: string;
+  category?: string;
+  targetDate?: string;
+  status: "active" | "done" | "abandoned";
+  createdAt: string;
+}
+
+export async function insertLearningGoal(
+  sql: SqlClient,
+  input: {
+    title: string;
+    category?: string;
+    targetDate?: string;
+    status?: "active" | "done" | "abandoned";
+  },
+): Promise<LearningGoalRecord> {
+  const rows = await sql<{ id: string; created_at: Date | string }[]>`
+    insert into learning_goals (title, category, target_date, status)
+    values (
+      ${input.title},
+      ${input.category ?? null},
+      ${input.targetDate ?? null},
+      ${input.status ?? "active"}
+    )
+    returning id::text, created_at
+  `;
+
+  const row = rows[0];
+
+  if (!row) {
+    throw new Error("Learning goal insert returned no id.");
+  }
+
+  return {
+    id: row.id,
+    title: input.title,
+    category: input.category,
+    targetDate: input.targetDate,
+    status: input.status ?? "active",
+    createdAt: toIso(row.created_at),
+  };
+}
+
+export async function listLearningGoals(
+  sql: SqlClient,
+  options: {
+    status?: "active" | "done" | "abandoned";
+    limit?: number;
+  } = {},
+): Promise<LearningGoalRecord[]> {
+  const limit = Math.max(1, Math.min(options.limit ?? 500, 5_000));
+
+  const rows = options.status
+    ? await sql<LearningGoalRow[]>`
+      select id, title, category, target_date, status, created_at
+      from learning_goals
+      where status = ${options.status}
+      order by created_at desc
+      limit ${limit}
+    `
+    : await sql<LearningGoalRow[]>`
+      select id, title, category, target_date, status, created_at
+      from learning_goals
+      order by created_at desc
+      limit ${limit}
+    `;
+
+  return rows.map(learningGoalFromRow);
+}
+
+type LearningGoalRow = {
+  id: string;
+  title: string;
+  category: string | null;
+  target_date: Date | string | null;
+  status: string;
+  created_at: Date | string;
+};
+
+function learningGoalFromRow(row: LearningGoalRow): LearningGoalRecord {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category ?? undefined,
+    targetDate: row.target_date ? toIso(row.target_date).slice(0, 10) : undefined,
+    status: row.status as LearningGoalRecord["status"],
+    createdAt: toIso(row.created_at),
+  };
+}
+
+export type OutcomeEventType = "application" | "interview" | "offer" | "rejection";
+
+export interface OutcomeEventRecord {
+  id: string;
+  eventType: OutcomeEventType;
+  company?: string;
+  role?: string;
+  notes?: string;
+  occurredAt: string;
+  createdAt: string;
+}
+
+export async function insertOutcomeEvent(
+  sql: SqlClient,
+  input: {
+    eventType: OutcomeEventType;
+    company?: string;
+    role?: string;
+    notes?: string;
+    occurredAt: string;
+  },
+): Promise<OutcomeEventRecord> {
+  const rows = await sql<{ id: string; created_at: Date | string }[]>`
+    insert into outcome_events (event_type, company, role, notes, occurred_at)
+    values (
+      ${input.eventType},
+      ${input.company ?? null},
+      ${input.role ?? null},
+      ${input.notes ?? null},
+      ${input.occurredAt}
+    )
+    returning id::text, created_at
+  `;
+
+  const row = rows[0];
+
+  if (!row) {
+    throw new Error("Outcome event insert returned no id.");
+  }
+
+  return {
+    id: row.id,
+    eventType: input.eventType,
+    company: input.company,
+    role: input.role,
+    notes: input.notes,
+    occurredAt: input.occurredAt,
+    createdAt: toIso(row.created_at),
+  };
+}
+
+export async function listOutcomeEvents(
+  sql: SqlClient,
+  options: {
+    limit?: number;
+    since?: string;
+    until?: string;
+  } = {},
+): Promise<OutcomeEventRecord[]> {
+  const limit = Math.max(1, Math.min(options.limit ?? 500, 5_000));
+
+  const rows = await sql<OutcomeEventRow[]>`
+    select id, event_type, company, role, notes, occurred_at, created_at
+    from outcome_events
+    where 1 = 1
+      ${options.since ? sql`and occurred_at >= ${options.since}` : sql``}
+      ${options.until ? sql`and occurred_at <= ${options.until}` : sql``}
+    order by occurred_at desc, id desc
+    limit ${limit}
+  `;
+
+  return rows.map(outcomeEventFromRow);
+}
+
+type OutcomeEventRow = {
+  id: string;
+  event_type: string;
+  company: string | null;
+  role: string | null;
+  notes: string | null;
+  occurred_at: Date | string;
+  created_at: Date | string;
+};
+
+function outcomeEventFromRow(row: OutcomeEventRow): OutcomeEventRecord {
+  return {
+    id: row.id,
+    eventType: row.event_type as OutcomeEventType,
+    company: row.company ?? undefined,
+    role: row.role ?? undefined,
+    notes: row.notes ?? undefined,
+    occurredAt: toIso(row.occurred_at),
+    createdAt: toIso(row.created_at),
+  };
 }
 
 export async function upsertEvidenceEmbeddings(

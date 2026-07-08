@@ -723,7 +723,79 @@ export const migrations = [
         ('coin-change', 'Coin Change', 'Dynamic Programming', 'medium', 'https://leetcode.com/problems/coin-change/', array['dp', 'unbounded knapsack']),
         ('longest-increasing-subsequence', 'Longest Increasing Subsequence', 'Dynamic Programming', 'medium', 'https://leetcode.com/problems/longest-increasing-subsequence/', array['dp', 'patience sorting']),
         ('edit-distance', 'Edit Distance', 'Dynamic Programming', 'hard', 'https://leetcode.com/problems/edit-distance/', array['dp', '2d table'])
-      on conflict (slug) do nothing;
+      ) on conflict (slug) do nothing;
+    `,
+  },
+  {
+    id: "020_benchmark_snapshots",
+    sql: `
+      create table if not exists benchmark_snapshots (
+        id uuid primary key default gen_random_uuid(),
+        generated_at timestamptz not null,
+        queries text[] not null,
+        skill_frequency jsonb not null,
+        missing_skills text[] not null default '{}',
+        resume_keyword_gaps text[] not null default '{}',
+        weekly_learning_priorities text[] not null default '{}',
+        raw_results jsonb not null,
+        created_at timestamptz not null default now()
+      );
+
+      create index if not exists benchmark_snapshots_generated_at_idx
+        on benchmark_snapshots (generated_at desc);
+    `,
+  },
+  {
+    id: "021_github_releases",
+    sql: `
+      create table if not exists github_releases (
+        id bigint primary key,
+        repo_id bigint references github_repos(id) on delete cascade,
+        tag_name text,
+        name text,
+        published_at timestamptz,
+        html_url text,
+        synced_at timestamptz not null default now()
+      );
+
+      create index if not exists github_releases_repo_idx on github_releases (repo_id);
+    `,
+  },
+  {
+    id: "022_learning_goals_and_outcomes",
+    sql: `
+      create table if not exists learning_goals (
+        id uuid primary key default gen_random_uuid(),
+        title text not null,
+        category text,
+        target_date date,
+        status text not null default 'active'
+          check (status in ('active', 'done', 'abandoned')),
+        created_at timestamptz not null default now()
+      );
+
+      create table if not exists outcome_events (
+        id uuid primary key default gen_random_uuid(),
+        event_type text not null
+          check (event_type in ('application', 'interview', 'offer', 'rejection')),
+        company text,
+        role text,
+        notes text,
+        occurred_at timestamptz not null,
+        created_at timestamptz not null default now()
+      );
+
+      create index if not exists outcome_events_occurred_at_idx on outcome_events (occurred_at desc);
+    `,
+  },
+  {
+    id: "023_owner_id_prep",
+    sql: `
+      alter table scores add column if not exists owner_id text;
+      alter table score_snapshots add column if not exists owner_id text;
+      alter table daily_plans add column if not exists owner_id text;
+      alter table memory_items add column if not exists owner_id text;
+      alter table github_repos add column if not exists owner_id text;
     `,
   },
 ];

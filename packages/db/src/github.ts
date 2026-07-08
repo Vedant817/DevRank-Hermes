@@ -1,3 +1,4 @@
+import { resolveSingleUserOwner } from "@repo/shared";
 import type { EvidenceItem } from "@repo/shared";
 import type { SqlClient } from "./client.js";
 
@@ -118,7 +119,7 @@ export interface PersistableGithubWorkflowRun {
   name: string | null;
   repoFullName: string;
   runStartedAt: string | null;
-  status: string;
+  status: string | null;
   updatedAt: string | null;
 }
 
@@ -129,10 +130,20 @@ export interface PersistableGithubBackfill {
   pullRequestCheckSnapshots?: PersistableGithubPullRequestCheckSnapshot[];
   pullRequestFiles?: PersistableGithubPullRequestFile[];
   pullRequestReviews?: PersistableGithubPullRequestReview[];
+  releases?: PersistableGithubRelease[];
   repoProfiles?: PersistableGithubRepoProfile[];
   repos: PersistableGithubRepo[];
   pullRequests: PersistableGithubPullRequest[];
   workflowRuns?: PersistableGithubWorkflowRun[];
+}
+
+export interface PersistableGithubRelease {
+  htmlUrl: string | null;
+  id: number;
+  name: string | null;
+  publishedAt: string | null;
+  repoFullName: string;
+  tagName: string | null;
 }
 
 export type GithubPullRequestTarget = {
@@ -179,6 +190,7 @@ export async function upsertGithubBackfill(
   pullRequestChecks: number;
   pullRequestFiles: number;
   pullRequestReviews: number;
+  releases: number;
   repoProfiles: number;
   pullRequests: number;
   repos: number;
@@ -190,10 +202,18 @@ export async function upsertGithubBackfill(
   let pullRequestChecks = 0;
   let pullRequestFiles = 0;
   let pullRequestReviews = 0;
+  let releases = 0;
   let repoProfiles = 0;
   let repos = 0;
   let pullRequests = 0;
   let workflowRuns = 0;
+  let ownerId: string | undefined;
+
+  try {
+    ownerId = resolveSingleUserOwner().id;
+  } catch {
+    // single-user owner not configured
+  }
 
   for (const repo of input.repos) {
     repoIdsByFullName.set(repo.fullName, repo.id);
@@ -210,7 +230,8 @@ export async function upsertGithubBackfill(
         language,
         pushed_at,
         updated_at,
-        synced_at
+        synced_at,
+        owner_id
       )
       values (
         ${repo.id},
@@ -223,7 +244,8 @@ export async function upsertGithubBackfill(
         ${repo.language},
         ${repo.pushedAt},
         ${repo.updatedAt},
-        now()
+        now(),
+        ${ownerId ?? null}
       )
       on conflict (id) do update set
         owner = excluded.owner,
@@ -562,6 +584,44 @@ export async function upsertGithubBackfill(
     workflowRuns += 1;
   }
 
+  for (const release of input.releases ?? []) {
+    const repoId = repoIdsByFullName.get(release.repoFullName)
+      ?? await getGithubRepoIdByFullName(sql, release.repoFullName);
+
+    if (repoId === undefined) {
+      continue;
+    }
+
+    await sql`
+      insert into github_releases (
+        id,
+        repo_id,
+        tag_name,
+        name,
+        published_at,
+        html_url,
+        synced_at
+      )
+      values (
+        ${release.id},
+        ${repoId},
+        ${release.tagName},
+        ${release.name},
+        ${release.publishedAt},
+        ${release.htmlUrl},
+        now()
+      )
+      on conflict (id) do update set
+        repo_id = excluded.repo_id,
+        tag_name = excluded.tag_name,
+        name = excluded.name,
+        published_at = excluded.published_at,
+        html_url = excluded.html_url,
+        synced_at = now()
+    `;
+    releases += 1;
+  }
+
   for (const profile of input.repoProfiles ?? []) {
     const repoId = repoIdsByFullName.get(profile.repoFullName)
       ?? await getGithubRepoIdByFullName(sql, profile.repoFullName);
@@ -618,6 +678,7 @@ export async function upsertGithubBackfill(
     pullRequestChecks,
     pullRequestFiles,
     pullRequestReviews,
+    releases,
     repoProfiles,
     pullRequests,
     repos,

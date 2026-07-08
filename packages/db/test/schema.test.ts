@@ -85,3 +85,53 @@ test("registers the DSA question bank migration with a seeded, idempotent insert
     assert.ok(migration.sql.includes(topic), `seed missing topic: ${topic}`);
   }
 });
+
+test("registers the benchmark snapshots migration", () => {
+  const migration = migrations.find(
+    (candidate) => candidate.id === "020_benchmark_snapshots",
+  );
+
+  assert.ok(migration);
+  assert.match(migration.sql, /create table if not exists benchmark_snapshots/);
+  assert.match(migration.sql, /skill_frequency jsonb not null/);
+  assert.match(migration.sql, /missing_skills text\[\] not null default '{}'/);
+  assert.match(migration.sql, /benchmark_snapshots_generated_at_idx/);
+});
+
+test("registers the github releases migration", () => {
+  const migration = migrations.find(
+    (candidate) => candidate.id === "021_github_releases",
+  );
+
+  assert.ok(migration);
+  assert.match(migration.sql, /create table if not exists github_releases/);
+  assert.match(migration.sql, /id bigint primary key/);
+  assert.match(migration.sql, /references github_repos\(id\) on delete cascade/);
+  assert.match(migration.sql, /github_releases_repo_idx/);
+});
+
+test("registers the learning goals and outcomes migration", () => {
+  const migration = migrations.find(
+    (candidate) => candidate.id === "022_learning_goals_and_outcomes",
+  );
+
+  assert.ok(migration);
+  assert.match(migration.sql, /create table if not exists learning_goals/);
+  assert.match(migration.sql, /check \(status in \('active', 'done', 'abandoned'\)\)/);
+  assert.match(migration.sql, /create table if not exists outcome_events/);
+  assert.match(migration.sql, /check \(event_type in \('application', 'interview', 'offer', 'rejection'\)\)/);
+  assert.match(migration.sql, /outcome_events_occurred_at_idx/);
+});
+
+test("registers the owner id prep migration", () => {
+  const migration = migrations.find(
+    (candidate) => candidate.id === "023_owner_id_prep",
+  );
+
+  assert.ok(migration);
+  assert.match(migration.sql, /alter table scores add column if not exists owner_id text/);
+  assert.match(migration.sql, /alter table score_snapshots add column if not exists owner_id text/);
+  assert.match(migration.sql, /alter table daily_plans add column if not exists owner_id text/);
+  assert.match(migration.sql, /alter table memory_items add column if not exists owner_id text/);
+  assert.match(migration.sql, /alter table github_repos add column if not exists owner_id text/);
+});
