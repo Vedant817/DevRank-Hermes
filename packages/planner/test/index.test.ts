@@ -165,6 +165,123 @@ test("formats Slack message with greeting, target time, and SDE switch plan", ()
   assert.match(slackText, /Backend\/API: 25% from 1 evidence item/);
 });
 
+test("generateDailyPlan with benchmarkSkillGap enriches matching tasks with market signal", () => {
+  const plan = generateDailyPlan(snapshot, {
+    date: "2026-06-22",
+    maxWeakLaneTasks: 1,
+    includeDailyEssentials: true,
+    benchmarkSkillGap: {
+      missingSkills: ["backend", "api", "testing"],
+      weeklyLearningPriorities: ["backend", "api", "testing"],
+    },
+  });
+
+  const backendTask = plan.tasks.find((task) => task.category === "backend");
+  assert.ok(backendTask);
+  assert.match(backendTask.title ?? "", /market signal/);
+  assert.match(backendTask.title ?? "", /backend appears in market postings/);
+  assert.match(backendTask.title ?? "", /api appears in market postings/);
+  assert.match(backendTask.evidence ?? "", /market gap/);
+  assert.match(backendTask.evidence ?? "", /backend/);
+  assert.match(backendTask.evidence ?? "", /api/);
+});
+
+test("generateDailyPlan with benchmarkSkillGap no matching skills doesn't modify tasks", () => {
+  const planWithout = generateDailyPlan(snapshot, {
+    date: "2026-06-22",
+    maxWeakLaneTasks: 1,
+    includeDailyEssentials: false,
+  });
+  const planWith = generateDailyPlan(snapshot, {
+    date: "2026-06-22",
+    maxWeakLaneTasks: 1,
+    includeDailyEssentials: false,
+    benchmarkSkillGap: {
+      missingSkills: ["some-obscure-skill"],
+      weeklyLearningPriorities: [],
+    },
+  });
+
+  const withoutTesting = planWithout.tasks.find((task) => task.category === "testing");
+  const withTesting = planWith.tasks.find((task) => task.category === "testing");
+
+  assert.ok(withoutTesting);
+  assert.ok(withTesting);
+  assert.equal(withoutTesting.title, withTesting.title);
+  assert.equal(withoutTesting.evidence, withTesting.evidence);
+});
+
+test("weakestBreakdown prioritizes lanes matching missing skills over higher-scored unrelated lanes", () => {
+  const snapshotWithHighTestLane: ScoreSnapshot = {
+    overall: 50,
+    generatedAt: "2026-06-22T00:00:00.000Z",
+    rubricVersion: "sde-readiness-v2",
+    breakdown: [
+      {
+        label: "DevOps/Cloud",
+        score: 40,
+        weight: 0.1,
+        evidenceCount: 1,
+        explanation: "Needs deploy evidence.",
+      },
+      {
+        label: "Code Quality + Testing",
+        score: 60,
+        weight: 0.15,
+        evidenceCount: 1,
+        explanation: "Needs stronger tests.",
+      },
+    ],
+  };
+  const plan = generateDailyPlan(snapshotWithHighTestLane, {
+    date: "2026-06-22",
+    maxWeakLaneTasks: 1,
+    includeDailyEssentials: false,
+    benchmarkSkillGap: {
+      missingSkills: ["testing"],
+      weeklyLearningPriorities: ["testing"],
+    },
+  });
+
+  // Despite Testing lane having a higher score (60) than DevOps (40),
+  // the "testing" missingSkill should boost Testing to be selected first
+  assert.equal(plan.tasks.length, 1);
+  assert.match(plan.tasks[0]?.title ?? "", /test/i);
+});
+
+test("market signal uses skillFrequency counts when available", () => {
+  const plan = generateDailyPlan(snapshot, {
+    date: "2026-06-22",
+    maxWeakLaneTasks: 1,
+    includeDailyEssentials: true,
+    benchmarkSkillGap: {
+      missingSkills: ["backend", "api", "testing"],
+      weeklyLearningPriorities: ["backend", "api", "testing"],
+      skillFrequency: { backend: 85, api: 72, testing: 5 },
+    },
+  });
+
+  const backendTask = plan.tasks.find((task) => task.category === "backend");
+  assert.ok(backendTask);
+  assert.match(backendTask.title ?? "", /backend \(85\/100 postings\)/);
+  assert.match(backendTask.title ?? "", /api \(72\/100 postings\)/);
+});
+
+test("generateDailyPlan without benchmarkSkillGap produces identical output to version without feature", () => {
+  const planWithout = generateDailyPlan(snapshot, {
+    date: "2026-06-22",
+    maxWeakLaneTasks: 1,
+    includeDailyEssentials: false,
+    urgentLinearTask: "Unblock production webhook issue.",
+  });
+
+  assert.deepEqual(planWithout.tasks.map((task) => task.category), ["linear", "testing"]);
+  assert.equal(planWithout.targetMinutes, 75);
+  const testingTask = planWithout.tasks.find((task) => task.category === "testing");
+  assert.equal(testingTask?.title, "Add or harden tests around one user-facing or integration-critical path.");
+  assert.doesNotMatch(testingTask?.title ?? "", /market signal/);
+});
+
 test("adapts the weekly ladder to persisted weak-lane evidence", () => {
   const plan = generateWeeklyPlan(snapshot, {
     generatedAt: "2026-06-24T10:00:00.000Z",

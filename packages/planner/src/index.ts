@@ -21,6 +21,11 @@ export interface GenerateDailyPlanOptions {
   linearSyncWarning?: string;
   maxWeakLaneTasks?: number;
   urgentLinearTask?: string;
+  benchmarkSkillGap?: {
+    missingSkills: string[];
+    weeklyLearningPriorities: string[];
+    skillFrequency?: Record<string, number>;
+  };
 }
 
 const DAILY_DSA_TARGET_COUNT = 2;
@@ -29,6 +34,11 @@ export interface GenerateWeeklyPlanOptions {
   generatedAt?: string;
   maxWeakLaneTasks?: number;
   weekStart?: string;
+  benchmarkSkillGap?: {
+    missingSkills: string[];
+    weeklyLearningPriorities: string[];
+    skillFrequency?: Record<string, number>;
+  };
 }
 
 const DEFAULT_MAX_WEAK_LANE_TASKS = 3;
@@ -231,7 +241,7 @@ export function generateDailyPlan(
   urgentLinearTask?: string,
 ): DailyPlan {
   const options = normalizeOptions(dateOrOptions, urgentLinearTask);
-  const weakLanes = weakestBreakdown(snapshot, options.maxWeakLaneTasks);
+  const weakLanes = weakestBreakdown(snapshot, options.maxWeakLaneTasks, options.benchmarkSkillGap);
   const tasks: DailyPlanTask[] = [];
 
   const linearTask = linearTaskForOptions(options);
@@ -250,6 +260,10 @@ export function generateDailyPlan(
 
   for (const lane of weakLanes) {
     addTask(tasks, taskForLane(lane));
+  }
+
+  if (options.benchmarkSkillGap && options.benchmarkSkillGap.missingSkills.length > 0) {
+    enrichTasksWithMarketSignal(tasks, options.benchmarkSkillGap);
   }
 
   const dsaQuestionBank = typeof dateOrOptions === "object" ? dateOrOptions.dsaQuestionBank : undefined;
@@ -291,6 +305,40 @@ function applyDsaTargets(tasks: DailyPlanTask[], targets: DsaQuestion[]): void {
   dsaTask.evidence = dsaTask.evidence ? `${dsaTask.evidence}; ${urls}` : urls;
 }
 
+function enrichTasksWithMarketSignal(
+  tasks: DailyPlanTask[],
+  benchmarkGap: { missingSkills: string[]; weeklyLearningPriorities: string[]; skillFrequency?: Record<string, number> },
+): void {
+  const missingSkillsLower = benchmarkGap.missingSkills.map((s) => s.toLowerCase());
+
+  for (const task of tasks) {
+    const rule = planRules.find((candidate) => candidate.category === task.category);
+
+    if (!rule) continue;
+
+    const overlap = rule.match.filter((keyword) =>
+      missingSkillsLower.some((skill) => keyword.toLowerCase().includes(skill) || skill.includes(keyword.toLowerCase())),
+    );
+
+    if (overlap.length === 0) continue;
+
+    const marketSignal = overlap
+      .slice(0, 2)
+      .map((skill) => {
+        const count = benchmarkGap.skillFrequency?.[skill];
+        return count !== undefined
+          ? `${skill} (${count}/100 postings)`
+          : `${skill} appears in market postings`;
+      })
+      .join("; ");
+
+    task.title = `${task.title} (market signal: ${marketSignal})`;
+    task.evidence = task.evidence
+      ? `${task.evidence}; market gap: ${overlap.join(", ")}`
+      : `market gap: ${overlap.join(", ")}`;
+  }
+}
+
 export function formatDailyPlanForSlack(plan: DailyPlan): string {
   const tasks = plan.tasks
     .map((task, index) => {
@@ -323,6 +371,10 @@ export function generateWeeklyPlan(
     : "Maintain daily SDE growth with one evidence-backed ship each day.";
   const tasks = WEEKLY_PLAN_TEMPLATE.map((task) => enrichWeeklyTask(task, weakLanes));
 
+  if (options.benchmarkSkillGap && options.benchmarkSkillGap.missingSkills.length > 0) {
+    enrichTasksWithMarketSignal(tasks as DailyPlanTask[], options.benchmarkSkillGap);
+  }
+
   return {
     weekStart,
     weeklyGoal,
@@ -336,9 +388,10 @@ function normalizeOptions(
   dateOrOptions: string | GenerateDailyPlanOptions,
   urgentLinearTask?: string,
 ): Required<Pick<GenerateDailyPlanOptions, "date" | "includeDailyEssentials" | "maxWeakLaneTasks">> &
-  Pick<GenerateDailyPlanOptions, "linearSyncWarning" | "urgentLinearTask"> {
+  Pick<GenerateDailyPlanOptions, "benchmarkSkillGap" | "linearSyncWarning" | "urgentLinearTask"> {
   if (typeof dateOrOptions === "string") {
     return {
+      benchmarkSkillGap: undefined,
       date: dateOrOptions,
       includeDailyEssentials: true,
       linearSyncWarning: undefined,
@@ -348,6 +401,7 @@ function normalizeOptions(
   }
 
   return {
+    benchmarkSkillGap: dateOrOptions.benchmarkSkillGap,
     date: dateOrOptions.date ?? new Date().toISOString().slice(0, 10),
     includeDailyEssentials: dateOrOptions.includeDailyEssentials ?? true,
     linearSyncWarning: normalizePlannerText(dateOrOptions.linearSyncWarning),
@@ -358,7 +412,7 @@ function normalizeOptions(
 
 function linearTaskForOptions(
   options: Required<Pick<GenerateDailyPlanOptions, "date" | "includeDailyEssentials" | "maxWeakLaneTasks">> &
-    Pick<GenerateDailyPlanOptions, "linearSyncWarning" | "urgentLinearTask">,
+    Pick<GenerateDailyPlanOptions, "benchmarkSkillGap" | "linearSyncWarning" | "urgentLinearTask">,
 ): DailyPlanTask | undefined {
   if (!options.linearSyncWarning && !options.urgentLinearTask) {
     return undefined;
@@ -483,14 +537,28 @@ function laneMatchesRule(lane: ScoreBreakdown, rule: PlanRule): boolean {
   return rule.match.some((keyword) => keywordMatchesText(normalizedLane, keyword));
 }
 
-function weakestBreakdown(snapshot: ScoreSnapshot, limit: number): ScoreBreakdown[] {
+function weakestBreakdown(
+  snapshot: ScoreSnapshot,
+  limit: number,
+  benchmarkGap?: { missingSkills: string[]; weeklyLearningPriorities?: string[]; skillFrequency?: Record<string, number> },
+): ScoreBreakdown[] {
+  const missingLower = (benchmarkGap?.missingSkills ?? []).map(s => s.toLowerCase());
+
   return [...snapshot.breakdown]
-    .sort((first, second) =>
-      first.score - second.score ||
-      first.evidenceCount - second.evidenceCount ||
-      first.label.localeCompare(second.label),
-    )
-    .slice(0, limit);
+    .map(lane => ({
+      lane,
+      boosted: missingLower.some(skill => lane.label.toLowerCase().includes(skill)),
+    }))
+    .sort((a, b) => {
+      const groupDiff = (a.boosted ? 0 : 1) - (b.boosted ? 0 : 1);
+      if (groupDiff !== 0) return groupDiff;
+      const scoreDiff = a.lane.score - b.lane.score;
+      if (scoreDiff !== 0) return scoreDiff;
+      if (a.lane.evidenceCount !== b.lane.evidenceCount) return a.lane.evidenceCount - b.lane.evidenceCount;
+      return a.lane.label.localeCompare(b.lane.label);
+    })
+    .slice(0, limit)
+    .map(entry => entry.lane);
 }
 
 function keywordMatchesText(text: string, keyword: string): boolean {
