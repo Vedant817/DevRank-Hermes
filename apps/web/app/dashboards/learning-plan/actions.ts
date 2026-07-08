@@ -7,12 +7,7 @@ import {
   type DailyTaskStatus,
 } from "@repo/db";
 import { revalidatePath } from "next/cache";
-
-// TODO(security): This mutating action is CSRF-protected by Next.js, but the
-// /dashboards/learning-plan route is currently public. Until the dashboard is
-// behind an authenticated/private boundary (Vercel deployment protection or a
-// shared-secret cookie), only ship this where the page cannot be reached by
-// untrusted clients.
+import { cookies } from "next/headers";
 
 export type MarkTaskStatusResult = { ok: boolean; error?: string };
 
@@ -21,6 +16,9 @@ export async function markTaskStatus(
   taskKey: string,
   status: DailyTaskStatus,
 ): Promise<MarkTaskStatusResult> {
+  const authError = await checkDashboardAuth();
+  if (authError) return authError;
+
   if (
     typeof planDate !== "string" ||
     !/^\d{4}-\d{2}-\d{2}$/.test(planDate) ||
@@ -49,4 +47,19 @@ export async function markTaskStatus(
       await closeSqlClient(sql);
     }
   }
+}
+
+async function checkDashboardAuth(): Promise<MarkTaskStatusResult | null> {
+  const expectedToken = process.env.DEVRANK_DASHBOARD_TOKEN?.trim();
+
+  if (!expectedToken) return null;
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get("dashboard-token")?.value;
+
+  if (token !== expectedToken) {
+    return { ok: false, error: "Dashboard requires authentication." };
+  }
+
+  return null;
 }
