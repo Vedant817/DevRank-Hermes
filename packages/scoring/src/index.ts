@@ -3,9 +3,13 @@ import {
   evidenceText,
   sdeReadinessRubric,
   sdeReadinessRubricVersion,
+  type RubricLane,
 } from "./rubrics.js";
+import { deriveRubricVersion } from "./weight-adjustment.js";
 
 export * from "./ai-agent-maturity/index.js";
+export * from "./outcome-correlation.js";
+export * from "./weight-adjustment.js";
 
 export interface ScoreTrend {
   currentGeneratedAt: string;
@@ -36,8 +40,14 @@ function scoreLane(matchingEvidenceCount: number): number {
 export function computeSdeReadinessSnapshot(
   evidence: EvidenceItem[],
   generatedAt = new Date().toISOString(),
+  rubricOverride?: RubricLane[],
 ): ScoreSnapshot {
-  const breakdown: ScoreBreakdown[] = sdeReadinessRubric.map((lane) => {
+  const rubric = rubricOverride ?? sdeReadinessRubric;
+  const rubricVersion = rubricOverride
+    ? deriveRubricVersion(sdeReadinessRubric, rubricOverride)
+    : sdeReadinessRubricVersion;
+
+  const breakdown: ScoreBreakdown[] = rubric.map((lane) => {
     const matchingEvidence = evidence.filter((item) => {
       const text = evidenceText(item);
       return lane.keywords.some((keyword) => keywordMatchesText(text, keyword));
@@ -64,12 +74,12 @@ export function computeSdeReadinessSnapshot(
     overall,
     generatedAt,
     breakdown,
-    rubricVersion: sdeReadinessRubricVersion,
+    rubricVersion,
   };
 }
 
 export function isCurrentSdeReadinessSnapshot(snapshot: ScoreSnapshot): boolean {
-  if (snapshot.rubricVersion !== sdeReadinessRubricVersion) {
+  if (!snapshot.rubricVersion.startsWith(sdeReadinessRubricVersion)) {
     return false;
   }
 
@@ -81,11 +91,19 @@ export function isCurrentSdeReadinessSnapshot(snapshot: ScoreSnapshot): boolean 
     sdeReadinessRubric.map((lane) => [lane.label, lane.weight]),
   );
 
-  for (const lane of snapshot.breakdown) {
-    const expectedWeight = expectedByLabel.get(lane.label);
+  if (snapshot.rubricVersion === sdeReadinessRubricVersion) {
+    for (const lane of snapshot.breakdown) {
+      const expectedWeight = expectedByLabel.get(lane.label);
 
-    if (expectedWeight === undefined || Math.abs(lane.weight - expectedWeight) > 0.000001) {
-      return false;
+      if (expectedWeight === undefined || Math.abs(lane.weight - expectedWeight) > 0.000001) {
+        return false;
+      }
+    }
+  } else {
+    for (const lane of snapshot.breakdown) {
+      if (!expectedByLabel.has(lane.label)) {
+        return false;
+      }
     }
   }
 
