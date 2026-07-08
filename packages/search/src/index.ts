@@ -5,6 +5,7 @@ import {
   requireEnv,
   type RuntimeEnv,
 } from "@repo/shared";
+import { computeSkillGap, scoreSkillFrequency, skillTaxonomy } from "./skill-extraction.js";
 
 export interface SearchResult {
   title: string;
@@ -17,6 +18,10 @@ export interface MarketBenchmark {
   queries: string[];
   repeatedSkills: string[];
   results: SearchResult[];
+  skillFrequency: Record<string, number>;
+  missingSkills: string[];
+  resumeKeywordGaps: string[];
+  weeklyLearningPriorities: string[];
 }
 
 export type MarketSearchProvider = "tavily";
@@ -80,6 +85,9 @@ async function tavilySearch(
 export async function runMarketBenchmark(
   queries: string[],
   env: RuntimeEnv = readRuntimeEnv(),
+  options: {
+    ownedSkillSlugs?: string[];
+  } = {},
 ): Promise<MarketBenchmark> {
   resolveMarketSearchProvider(env);
 
@@ -89,24 +97,26 @@ export async function runMarketBenchmark(
     results.push(...(await tavilySearch(query, env)));
   }
 
-  const text = results.map((result) => result.content.toLowerCase()).join(" ");
-  const candidates = [
-    "spring boot",
-    "node.js",
-    "postgres",
-    "system design",
-    "aws",
-    "kubernetes",
-    "kafka",
-    "ci/cd",
-    "testing",
-    "ai agents",
-  ];
+  const skillFrequency = scoreSkillFrequency(results);
+  const gap = computeSkillGap(skillFrequency, options.ownedSkillSlugs ?? []);
 
   return {
     generatedAt: new Date().toISOString(),
     queries,
-    repeatedSkills: candidates.filter((skill) => text.includes(skill)),
+    repeatedSkills: repeatedSkillsFromFrequency(skillFrequency),
     results,
+    skillFrequency,
+    missingSkills: gap.missingSkills,
+    resumeKeywordGaps: gap.resumeKeywordGaps,
+    weeklyLearningPriorities: gap.weeklyLearningPriorities,
   };
+}
+
+function repeatedSkillsFromFrequency(skillFrequency: Record<string, number>): string[] {
+  const bySlug = new Map(skillTaxonomy.map((entry) => [entry.slug, entry.name]));
+
+  return Object.entries(skillFrequency)
+    .filter(([, count]) => count >= 3)
+    .map(([slug]) => bySlug.get(slug) ?? slug)
+    .sort();
 }
