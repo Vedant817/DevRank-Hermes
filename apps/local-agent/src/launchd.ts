@@ -39,14 +39,14 @@ export function defaultLaunchdLogDirectory() {
 export function renderLaunchdPlist(options: LaunchdAgentOptions = {}) {
   const resolved = resolveLaunchdOptions(options);
   const programArguments = [
-    resolved.nodePath,
-    join(resolved.repoRoot, "apps", "local-agent", "dist", "index.js"),
+    toPosixPath(resolved.nodePath),
+    toPosixPath(join(resolved.repoRoot, "apps", "local-agent", "dist", "index.js")),
     "--config",
-    resolved.configPath,
+    toPosixPath(resolved.configPath),
     "--watch",
   ];
   const environmentVariables = {
-    DEVRANK_LOCAL_AGENT_LOG_PATH: join(resolved.logDirectory, "local-agent.log"),
+    DEVRANK_LOCAL_AGENT_LOG_PATH: toPosixPath(join(resolved.logDirectory, "local-agent.log")),
     NODE_ENV: "production",
     ...(resolved.environmentVariables ?? {}),
   };
@@ -58,7 +58,7 @@ export function renderLaunchdPlist(options: LaunchdAgentOptions = {}) {
     "<dict>",
     keyString("Label", resolved.label),
     keyArray("ProgramArguments", programArguments),
-    keyString("WorkingDirectory", resolved.repoRoot),
+    keyString("WorkingDirectory", toPosixPath(resolved.repoRoot)),
     keyDict("EnvironmentVariables", environmentVariables),
     keyBoolean("RunAtLoad", resolved.runAtLoad),
     keyBoolean("KeepAlive", resolved.keepAlive),
@@ -187,6 +187,10 @@ function keyDict(key: string, values: Record<string, string>) {
     ]),
     "  </dict>",
   ].join("\n");
+}
+
+function toPosixPath(value: string) {
+  return value.replaceAll("\\", "/");
 }
 
 function escapeXml(value: string) {

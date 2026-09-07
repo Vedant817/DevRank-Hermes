@@ -41,9 +41,12 @@ test("writes private rotating local-agent logs", async () => {
 
   const current = await readFile(logPath, "utf8");
   const rotated = await stat(`${logPath}.1`);
-  const mode = (await stat(logPath)).mode & 0o777;
 
   assert.match(current, /"event":"ingestion_complete"/);
   assert.equal(rotated.size, MAX_LOCAL_AGENT_LOG_BYTES);
-  assert.equal(mode, 0o600);
+
+  if (process.platform !== "win32") {
+    const mode = (await stat(logPath)).mode & 0o777;
+    assert.equal(mode, 0o600);
+  }
 });
