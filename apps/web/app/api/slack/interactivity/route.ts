@@ -158,7 +158,7 @@ export function DELETE() {
   return methodNotAllowed(["POST"]);
 }
 
-function verifySlackSignature(
+export function verifySlackSignature(
   rawBody: string,
   signatureHeader: string,
   timestampHeader: string,
@@ -197,7 +197,7 @@ function verifySlackSignature(
   }
 }
 
-function parseSlackPayload(rawBody: string): SlackPayload | undefined {
+export function parseSlackPayload(rawBody: string): SlackPayload | undefined {
   // application/x-www-form-urlencoded: payload=<json> possibly alongside other
   // fields, with "+" encoding spaces. Find the payload field explicitly.
   const payloadField = rawBody
