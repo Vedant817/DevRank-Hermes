@@ -34,6 +34,12 @@ export async function writeLocalAgentLog(
   if (currentSize + Buffer.byteLength(line) > MAX_LOCAL_AGENT_LOG_BYTES) {
     await rm(`${logPath}.1`, { force: true });
     await rename(logPath, `${logPath}.1`).catch(() => undefined);
+    // A rotated file keeps its old (possibly permissive) mode, so re-lock it.
+    await chmod(`${logPath}.1`, 0o600).catch((error: unknown) => {
+      if (process.platform !== "win32") {
+        console.warn(`DevRank: could not lock rotated log permissions: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    });
   }
 
   const handle = await open(logPath, "a", 0o600);
@@ -46,8 +52,13 @@ export async function writeLocalAgentLog(
 
   // Best-effort POSIX lockdown. No-op on Windows, where log privacy relies on
   // the user's profile directory ACLs — see the platform guard in
-  // test/logging.test.ts.
-  await chmod(logPath, 0o600).catch(() => undefined);
+  // test/logging.test.ts. Warn on POSIX so silent EPERM/ROFS never hides a
+  // real permissions failure.
+  await chmod(logPath, 0o600).catch((error: unknown) => {
+    if (process.platform !== "win32") {
+      console.warn(`DevRank: could not lock log permissions: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  });
 }
 
 export function summarizeLocalAgentResult(result: {

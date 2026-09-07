@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -80,7 +80,10 @@ export async function writeLaunchdPlist(options: LaunchdAgentOptions = {}): Prom
   const plist = renderLaunchdPlist(resolved);
   await mkdir(dirname(resolved.plistPath), { recursive: true });
   await mkdir(resolved.logDirectory, { recursive: true });
-  await writeFile(resolved.plistPath, plist, "utf8");
+  // The plist can carry secret-bearing environment variables, so lock it down
+  // like the log file (best-effort on Windows).
+  await writeFile(resolved.plistPath, plist, { encoding: "utf8", mode: 0o600 });
+  await chmod(resolved.plistPath, 0o600).catch(() => undefined);
 
   return {
     label: resolved.label,

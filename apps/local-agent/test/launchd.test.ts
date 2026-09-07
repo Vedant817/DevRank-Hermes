@@ -69,4 +69,11 @@ test("writes launchd plist to disk", async () => {
   assert.equal(result.plistPath, plistPath);
   assert.equal(content, result.plist);
   assert.match(content, /com\.devrank\.local-agent\.test/);
+
+  if (process.platform !== "win32") {
+    const { stat } = await import("node:fs/promises");
+    const mode = (await stat(plistPath)).mode & 0o777;
+
+    assert.equal(mode, 0o600);
+  }
 });
