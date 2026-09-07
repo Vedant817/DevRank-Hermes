@@ -37,10 +37,10 @@ export async function markTaskStatus(
     revalidatePath("/dashboards/learning-plan");
 
     return { ok: true };
-  } catch (error) {
+  } catch {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Failed to update task status.",
+      error: "Failed to update task status.",
     };
   } finally {
     if (sql) {
@@ -50,16 +50,30 @@ export async function markTaskStatus(
 }
 
 async function checkDashboardAuth(): Promise<MarkTaskStatusResult | null> {
-  const expectedToken = process.env.DEVRANK_DASHBOARD_TOKEN?.trim();
+  const expectedToken = process.env.DEVRANK_DASHBOARD_TOKEN?.trim()
+    || process.env.DEVRANK_API_TOKEN?.trim();
 
-  if (!expectedToken) return null;
+  if (!expectedToken) {
+    return { ok: false, error: "Dashboard requires authentication." };
+  }
 
   const cookieStore = await cookies();
   const token = cookieStore.get("dashboard-token")?.value;
 
-  if (token !== expectedToken) {
+  if (token === undefined || !constantTimeEqual(token, expectedToken)) {
     return { ok: false, error: "Dashboard requires authentication." };
   }
 
   return null;
+}
+
+function constantTimeEqual(received: string, expected: string) {
+  const length = Math.max(received.length, expected.length);
+  let mismatch = received.length ^ expected.length;
+
+  for (let index = 0; index < length; index += 1) {
+    mismatch |= received.charCodeAt(index) ^ expected.charCodeAt(index);
+  }
+
+  return mismatch === 0;
 }
