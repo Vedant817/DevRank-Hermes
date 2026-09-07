@@ -51,7 +51,7 @@ export async function markTaskStatus(
   }
 }
 
-const PLACEHOLDER_TOKEN_PATTERN = /change_me|replace_me/i;
+const PLACEHOLDER_TOKEN_PATTERN = /change[-_]?me|replace[-_\s]?me/i;
 
 async function checkDashboardAuth(): Promise<MarkTaskStatusResult | null> {
   const rawToken = process.env.DEVRANK_DASHBOARD_TOKEN?.trim()

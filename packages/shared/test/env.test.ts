@@ -5,13 +5,13 @@ import { isPlaceholderSecret, requireEnv } from "../src/env.js";
 test("detects shipped placeholder values case-insensitively", () => {
   assert.equal(isPlaceholderSecret("change_me_to_a_secure_token"), true);
   assert.equal(isPlaceholderSecret("CHANGE_ME"), true);
+  assert.equal(isPlaceholderSecret("change-me"), true);
+  assert.equal(isPlaceholderSecret("changeme"), true);
   assert.equal(isPlaceholderSecret("replace_me"), true);
   assert.equal(isPlaceholderSecret("REPLACE_ME_LATER"), true);
 });
 
 test("accepts real secrets that merely resemble placeholders", () => {
-  assert.equal(isPlaceholderSecret("change-me"), false);
-  assert.equal(isPlaceholderSecret("changeme"), false);
   assert.equal(isPlaceholderSecret("test-key"), false);
   assert.equal(isPlaceholderSecret("xoxb-test-token"), false);
 });

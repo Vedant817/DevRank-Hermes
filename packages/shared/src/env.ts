@@ -3,11 +3,15 @@ import { ConfigurationError } from "./errors.js";
 
 const nonEmptyString = z.string().trim().min(1);
 
-const PLACEHOLDER_SECRET_PATTERNS = [/change_me/i, /replace_me/i];
+const PLACEHOLDER_SECRET_PATTERNS = [/change[-_]?me/i, /replace[-_\s]?me/i];
 
 export function isPlaceholderSecret(value: string): boolean {
   return PLACEHOLDER_SECRET_PATTERNS.some((pattern) => pattern.test(value));
 }
+
+// Single canonical pattern source for edge/server-lite runtimes that cannot
+// import this module (see proxy.ts / actions.ts). Keep the three in sync.
+export const PLACEHOLDER_SECRET_SOURCE = "change[-_]?me|replace[-_\\s]?me";
 
 export const runtimeEnvSchema = z.object({
   DATABASE_URL: nonEmptyString.optional(),

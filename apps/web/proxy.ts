@@ -3,16 +3,24 @@ import { NextResponse, type NextRequest } from "next/server";
 const DEFAULT_DASHBOARD_USER = "devrank";
 // Shipped .env.example placeholders must never authenticate (see getEnvValue
 // in app/api/_lib/route-utils.ts, which applies the same rule to API routes).
-const PLACEHOLDER_TOKEN_PATTERN = /change_me|replace_me/i;
+// Keep in sync with isPlaceholderSecret in @repo/shared (pattern source:
+// PLACEHOLDER_SECRET_SOURCE).
+const PLACEHOLDER_TOKEN_PATTERN = /change[-_]?me|replace[-_\s]?me/i;
 
 function isUsableToken(value: string | undefined): value is string {
-  return value !== undefined && !PLACEHOLDER_TOKEN_PATTERN.test(value);
+  return value !== undefined && value.length > 0 && !PLACEHOLDER_TOKEN_PATTERN.test(value);
+}
+
+function isUsableOwnerId(value: string | undefined): value is string {
+  return value !== undefined
+    && /^[a-zA-Z0-9_-]{1,64}$/.test(value)
+    && !PLACEHOLDER_TOKEN_PATTERN.test(value);
 }
 
 export function proxy(request: NextRequest) {
   const ownerId = process.env.DEVRANK_OWNER_ID?.trim();
 
-  if (!ownerId || !/^[a-zA-Z0-9_-]{1,64}$/.test(ownerId)) {
+  if (!isUsableOwnerId(ownerId)) {
     return new NextResponse("Single-user owner is not configured.", {
       status: 503,
     });
@@ -37,6 +45,13 @@ export function proxy(request: NextRequest) {
     isAuthorized(authorization, expectedUser, expectedToken) ||
     (tokenCookie !== undefined && constantTimeEqual(tokenCookie, expectedToken))
   ) {
+    // NOTE: the cookie stores the bearer token verbatim (httpOnly, 24h sliding
+    // re-issue). Theft equals dashboard access until the token is rotated
+    // server-side. Accepted tradeoff for a single-user app with no session
+    // store; rotate DEVRANK_DASHBOARD_TOKEN if a device is lost. Browser
+    // Server Actions (actions.ts) accept cookie-only; API clients use
+    // Basic/Bearer headers — both gates enforce the same token + placeholder
+    // rules above.
     const response = NextResponse.next();
     response.cookies.set("dashboard-token", expectedToken, {
       httpOnly: true,
