@@ -17,7 +17,8 @@ import {
   readJsonObject,
   requireApiAuth,
 } from "../../_lib/route-utils";
-import { computeSdeReadinessSnapshot } from "@repo/scoring";
+import { computeSdeReadinessSnapshot, explainWeakestLanes } from "@repo/scoring";
+import { runHermesScoreExplain } from "@repo/hermes";
 import { evidenceSources } from "@repo/shared";
 
 export const runtime = "nodejs";
@@ -73,10 +74,12 @@ export async function POST(request: Request) {
 
     const generatedAt = getOptionalString(body.value, "generatedAt");
     const snapshot = computeSdeReadinessSnapshot(evidence.value, generatedAt);
+    const explanation = await explainScoreSnapshot(request, snapshot, evidence.value);
 
     return jsonOk({
       snapshot,
       evidenceCount: evidence.value.length,
+      ...(explanation ? { explanation } : {}),
     });
   }
 
@@ -132,18 +135,56 @@ export async function POST(request: Request) {
         await insertScoreSnapshot(sql, snapshot);
       }
 
+      const explanation = await explainScoreSnapshot(request, snapshot, evidence);
+
       return jsonOk({
         snapshot,
         evidenceCount: evidence.length,
         scope,
         targetId,
         stored: scope === "all" || scope === "user",
+        ...(explanation ? { explanation } : {}),
       });
     } finally {
       await closeSqlClient(sql);
     }
   } catch {
     return jsonError(503, "score_recompute_failed", "Score recomputation failed.");
+  }
+}
+
+/**
+ * Optional Hermes narration for `POST /api/scores/recompute?explain=true`.
+ * Fail-soft by design: AI failure (or no provider key) never fails the score
+ * call — the deterministic snapshot always ships, explanation is best-effort.
+ */
+async function explainScoreSnapshot(
+  request: Request,
+  snapshot: ReturnType<typeof computeSdeReadinessSnapshot>,
+  evidence: EvidenceItems,
+) {
+  if (new URL(request.url).searchParams.get("explain") !== "true") {
+    return undefined;
+  }
+
+  try {
+    const laneBreakdown = snapshot.breakdown
+      .map((lane) => `${lane.label}: ${lane.score}% (weight ${Math.round(lane.weight * 100)}%, ${lane.evidenceCount} evidence) — ${lane.explanation}`)
+      .join("\n");
+    const result = await runHermesScoreExplain({
+      laneBreakdown,
+      evidenceIds: evidence.map((item) => item.id),
+      weakestLanes: explainWeakestLanes(snapshot),
+    });
+
+    return {
+      status: "ok" as const,
+      model: result.model,
+      provider: result.provider,
+      explanation: result.explanation,
+    };
+  } catch {
+    return { status: "unavailable" as const };
   }
 }
 
