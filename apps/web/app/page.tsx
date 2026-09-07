@@ -106,6 +106,13 @@ function Dashboard({
   const trendByLabel = new Map(
     scoreTrend?.lanes.map((lane) => [lane.label, lane]),
   );
+  // Linear is an opt-in integration: hide its dashboard until backfill has
+  // imported at least one project or issue, so new users never land on an
+  // empty enterprise view.
+  const hasLinearData = summary.counts.linearProjects > 0 || summary.counts.linearIssues > 0;
+  const visibleDashboardLinks = dashboardLinks.filter(
+    (link) => link.href !== "/dashboards/linear-projects" || hasLinearData,
+  );
 
   return (
     <main className={styles.main}>
@@ -212,7 +219,7 @@ function Dashboard({
           <h2 id="dashboards-heading">Live views</h2>
         </div>
         <div className={styles.sourceList}>
-          {dashboardLinks.map((link) => (
+          {visibleDashboardLinks.map((link) => (
             <a className={styles.sourceRow} href={link.href} key={link.href}>
               <div>
                 <strong>{link.title}</strong>
@@ -222,6 +229,11 @@ function Dashboard({
             </a>
           ))}
         </div>
+        {!hasLinearData ? (
+          <p className={styles.emptyState}>
+            Linear Projects is hidden until Linear backfill imports data. Connect Linear to enable project tracking (optional).
+          </p>
+        ) : null}
       </section>
 
       <section className={styles.panel} aria-labelledby="runs-heading">
