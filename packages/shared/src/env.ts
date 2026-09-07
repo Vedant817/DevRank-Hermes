@@ -3,6 +3,12 @@ import { ConfigurationError } from "./errors.js";
 
 const nonEmptyString = z.string().trim().min(1);
 
+const PLACEHOLDER_SECRET_PATTERNS = [/change_me/i, /replace_me/i];
+
+export function isPlaceholderSecret(value: string): boolean {
+  return PLACEHOLDER_SECRET_PATTERNS.some((pattern) => pattern.test(value));
+}
+
 export const runtimeEnvSchema = z.object({
   DATABASE_URL: nonEmptyString.optional(),
   DEVRANK_DATABASE_URL: nonEmptyString.optional(),
@@ -91,6 +97,11 @@ export function requireEnv<const Keys extends Array<keyof RuntimeEnv>>(
   for (const key of keys) {
     const value = env[key];
     if (typeof value === "string" && value.trim().length > 0) {
+      if (isPlaceholderSecret(value)) {
+        throw new ConfigurationError(
+          `${feature} is not configured. ${key} still contains a placeholder value; replace every change_me/replace_me value.`,
+        );
+      }
       const typedKey = key as Keys[number];
       values[typedKey] = value;
     } else {
