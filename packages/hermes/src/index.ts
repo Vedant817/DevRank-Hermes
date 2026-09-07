@@ -4,7 +4,10 @@ import {
   type RuntimeEnv,
 } from "@repo/shared";
 export * from "./chat-summary.js";
+export * from "./daily-mentor.js";
+export * from "./pr-review.js";
 export * from "./reusable-skills.js";
+export * from "./score-explain.js";
 export * from "./skill-extraction.js";
 
 const DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
