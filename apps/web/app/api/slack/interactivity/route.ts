@@ -4,7 +4,7 @@ import {
   createSqlClient,
   updateDailyTaskStatus,
 } from "@repo/db";
-import { getRequiredEnv, jsonError, jsonOk, methodNotAllowed, readRawBody } from "../../_lib/route-utils";
+import { getRequiredEnv, jsonError, jsonOk, methodNotAllowed, rateLimit, readRawBody } from "../../_lib/route-utils";
 import type { NextRequest } from "next/server";
 
 export const runtime = "nodejs";
@@ -27,6 +27,16 @@ interface SlackPayload {
 }
 
 export async function POST(request: NextRequest) {
+  const limitError = await rateLimit(request, {
+    key: "slack_interactivity",
+    limit: 30,
+    windowMs: 60_000,
+  });
+
+  if (limitError !== null) {
+    return limitError;
+  }
+
   const bodyResult = await readRawBody(request, { maxBytes: 64 * 1024 });
 
   if (!bodyResult.ok) {
@@ -123,6 +133,7 @@ export async function POST(request: NextRequest) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ blocks: replacementBlocks, text: `${task.title} — ${label}` }),
+          signal: AbortSignal.timeout(8_000),
         }).catch(() => undefined);
       }
 
@@ -162,7 +173,8 @@ function verifySlackSignature(
   const nowMs = Date.now();
   const thenMs = timestamp * 1_000;
 
-  if (Math.abs(nowMs - thenMs) > REPLAY_WINDOW_MS) {
+  // Reject stale replays and future-dated requests (clock-skew tolerance 60s).
+  if (nowMs - thenMs > REPLAY_WINDOW_MS || thenMs - nowMs > 60_000) {
     return false;
   }
 
@@ -186,14 +198,20 @@ function verifySlackSignature(
 }
 
 function parseSlackPayload(rawBody: string): SlackPayload | undefined {
-  const match = rawBody.match(/^payload=(.+)$/);
+  // application/x-www-form-urlencoded: payload=<json> possibly alongside other
+  // fields, with "+" encoding spaces. Find the payload field explicitly.
+  const payloadField = rawBody
+    .split("&")
+    .map((part) => part.trim())
+    .find((part) => part === "payload" || part.startsWith("payload="));
 
-  if (!match) {
+  if (!payloadField || !payloadField.startsWith("payload=")) {
     return undefined;
   }
 
   try {
-    const decoded = JSON.parse(decodeURIComponent(match[1]!)) as SlackPayload;
+    const encoded = payloadField.slice("payload=".length).replaceAll("+", " ");
+    const decoded = JSON.parse(decodeURIComponent(encoded)) as SlackPayload;
 
     return decoded;
   } catch {
