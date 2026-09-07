@@ -23,9 +23,21 @@ export function proxy(request: NextRequest) {
   const expectedUser = process.env.DEVRANK_DASHBOARD_USER?.trim()
     || DEFAULT_DASHBOARD_USER;
   const authorization = request.headers.get("authorization");
+  const tokenCookie = request.cookies.get("dashboard-token")?.value;
 
-  if (isAuthorized(authorization, expectedUser, expectedToken)) {
-    return NextResponse.next();
+  if (
+    isAuthorized(authorization, expectedUser, expectedToken) ||
+    (tokenCookie !== undefined && constantTimeEqual(tokenCookie, expectedToken))
+  ) {
+    const response = NextResponse.next();
+    response.cookies.set("dashboard-token", expectedToken, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24,
+    });
+    return response;
   }
 
   return new NextResponse("Authentication required.", {
