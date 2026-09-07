@@ -1,13 +1,14 @@
 # Deployment
 
-Deploy DevRank OS on the **Vercel Hobby** (free) + **Neon** (free) stack.
+Deploy DevRank OS on the **Vercel Hobby** (free) + **Neon or Supabase** (free) stack.
+The app needs any Postgres with the `pgvector` extension — Neon and Supabase both provide it.
 
 ## What deploys where
 
 | Component | Platform | Cost |
 |-----------|----------|------|
 | Next.js web app + API routes | Vercel (Hobby) | Free |
-| PostgreSQL database | Neon (Free tier — 0.5 GB) | Free |
+| PostgreSQL database + pgvector | Neon (Free tier — 0.5 GB) or Supabase (free tier) | Free |
 | Cron: daily plan, weekly review | Vercel Cron (2 jobs included) | Free |
 | Slack bot + interactivity | Vercel API routes | Free |
 | GitHub webhook ingestion | Vercel API route | Free |
@@ -20,9 +21,10 @@ Services you configure separately (each has a free tier):
 
 ---
 
-## Step 1: Database — Neon
+## Step 1: Database — Neon or Supabase
 
-1. Go to [neon.tech](https://neon.tech) → Sign up (GitHub OAuth) → Create project
+1. **Neon:** go to [neon.tech](https://neon.tech) → Sign up (GitHub OAuth) → Create project. Enable the `pgvector` extension (Neon supports it; the migration runs `CREATE EXTENSION IF NOT EXISTS vector`).
+   **Or Supabase:** create a project at [supabase.com](https://supabase.com) → enable the `vector` extension → use the pooled connection string. See `infra/supabase.md`.
 2. Copy the **connection string** from the dashboard:
    ```
    postgresql://user:pass@ep-xxxx.us-east-2.aws.neon.tech/devrank?sslmode=require
@@ -69,16 +71,11 @@ vercel env pull .env.production
 pnpm exec tsx packages/db/src/migrate.ts
 ```
 
-**Option B — via Supabase/Neon SQL editor:**
-1. Open Neon Console → SQL Editor
+**Option B — via the database SQL editor:**
+1. Open Neon Console (or Supabase dashboard) → SQL Editor
 2. Paste and run `packages/db/src/schema.ts` (or each migration sequentially)
 
-**Option C — via a one-shot API call:**
-```bash
-curl -X POST https://your-project.vercel.app/api/migrate \
-  -H "Authorization: Bearer $DEVRANK_API_TOKEN"
-```
-(If the migrate route exists — check `apps/web/app/api/migrate/route.ts`.)
+There is no `/api/migrate` route — run migrations from your machine with the production `DATABASE_URL` (Option A) or the SQL editor (Option B).
 
 ---
 
@@ -100,7 +97,7 @@ The `vercel.json` includes:
 ]
 ```
 
-On Vercel Hobby, these run automatically. Each cron sends `CRON_SECRET` as a bearer token. Ensure `CRON_SECRET` matches between your Vercel env vars and what `DEVRANK_API_TOKEN` accepts (the cron route falls back to `DEVRANK_API_TOKEN`).
+On Vercel Hobby, these run automatically. Each cron sends `CRON_SECRET` as a bearer token, and the cron routes accept **only** `CRON_SECRET` (there is no fallback to `DEVRANK_API_TOKEN`). Ensure `CRON_SECRET` is set in Vercel env vars.
 
 ---
 
@@ -155,7 +152,7 @@ Redeploy after adding env vars. The next cron run will deliver interactive block
 | 401 pop-up on dashboard | `DEVRANK_DASHBOARD_TOKEN` mismatch or not set in Vercel env |
 | 503 "Single-user owner" | `DEVRANK_OWNER_ID` not set in Vercel env |
 | 503 "Dashboard auth not configured" | Neither `DEVRANK_DASHBOARD_TOKEN` nor `DEVRANK_API_TOKEN` set |
-| Cron runs return 503 | `CRON_SECRET` doesn't match `DEVRANK_API_TOKEN` — cron sends `CRON_SECRET` as bearer |
+| Cron runs return 503 | `CRON_SECRET` not set in Vercel env (cron routes accept only `CRON_SECRET`) |
 | Slack buttons don't work | `SLACK_SIGNING_SECRET` mismatched, or interactivity URL wrong |
 | Scoring fails | Missing evidence; run `devrank trial:score` locally or `POST /api/ingest/...` |
 | Build fails on Vercel | Check Build Logs; `pnpm build --filter web...` requires turbo at root |

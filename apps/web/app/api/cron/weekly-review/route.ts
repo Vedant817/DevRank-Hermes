@@ -53,6 +53,10 @@ export async function GET(request: Request) {
       const snapshot = computeSdeReadinessSnapshot(evidence);
       const weakestLanes = explainWeakestLanes(snapshot);
       const weeklyPlan = generateWeeklyPlan(snapshot);
+      // Idempotent: insertWeeklyPlan upserts on week_start, so cron retries
+      // never duplicate the plan row. The Hermes call below still bills per
+      // hit — GET is cron-only (rate-limited) by design; manual previews use
+      // the POST route with explicit evidence.
       await insertWeeklyPlan(sql, weeklyPlan);
       const evidenceSummary = evidence
         .slice(0, 25)
