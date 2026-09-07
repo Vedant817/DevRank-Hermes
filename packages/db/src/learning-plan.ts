@@ -230,7 +230,9 @@ function completionStatusLabel(completedTasks: number, totalTasks: number): stri
 }
 
 function currentStreak(completedDates: Set<string>, today: string): number {
-  let cursor = today;
+  // A pending today must not reset the streak: anchor on yesterday when today
+  // has no completion yet (48h grace). Older gaps still break the streak.
+  let cursor = completedDates.has(today) ? today : shiftDate(today, -1);
   let days = 0;
 
   while (completedDates.has(cursor)) {

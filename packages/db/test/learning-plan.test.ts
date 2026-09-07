@@ -119,3 +119,57 @@ test("falls back to daily plan JSON when task rows have not been materialized ye
   assert.equal(dashboard.completion.statusLabel, "0/5 completed");
   assert.equal(dashboard.streak.currentDays, 0);
 });
+
+test("streak survives a pending today when yesterday was completed", () => {
+  const dashboard = buildLearningPlanDashboard({
+    today: "2026-06-24",
+    recentTasks: [
+      {
+        planDate: "2026-06-23",
+        taskKey: "0123456789abcdef",
+        category: "backend",
+        title: "Yesterday backend task.",
+        minutes: 60,
+        status: "completed",
+        completedAt: "2026-06-23T12:00:00.000Z",
+        createdAt: "2026-06-23T00:00:00.000Z",
+        updatedAt: "2026-06-23T12:00:00.000Z",
+      },
+      {
+        planDate: "2026-06-22",
+        taskKey: "fedcba9876543210",
+        category: "dsa",
+        title: "Day-before task.",
+        minutes: 45,
+        status: "completed",
+        completedAt: "2026-06-22T12:00:00.000Z",
+        createdAt: "2026-06-22T00:00:00.000Z",
+        updatedAt: "2026-06-22T12:00:00.000Z",
+      },
+    ],
+  });
+
+  assert.equal(dashboard.streak.currentDays, 2);
+  assert.equal(dashboard.streak.lastCompletedDate, "2026-06-23");
+});
+
+test("streak resets after two missed days", () => {
+  const dashboard = buildLearningPlanDashboard({
+    today: "2026-06-25",
+    recentTasks: [
+      {
+        planDate: "2026-06-23",
+        taskKey: "0123456789abcdef",
+        category: "backend",
+        title: "Old backend task.",
+        minutes: 60,
+        status: "completed",
+        completedAt: "2026-06-23T12:00:00.000Z",
+        createdAt: "2026-06-23T00:00:00.000Z",
+        updatedAt: "2026-06-23T12:00:00.000Z",
+      },
+    ],
+  });
+
+  assert.equal(dashboard.streak.currentDays, 0);
+});
