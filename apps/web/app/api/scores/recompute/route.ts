@@ -183,7 +183,13 @@ async function explainScoreSnapshot(
       provider: result.provider,
       explanation: result.explanation,
     };
-  } catch {
+  } catch (error) {
+    // Provider error text is already redacted inside the Hermes caller, so
+    // logging the message here is safe. NOTE: platform function timeouts
+    // (e.g. Vercel Hobby) can kill this request before fail-soft returns —
+    // keep ?explain=true off the cron path and treat it as interactive-only.
+    console.error(`Score explanation unavailable: ${error instanceof Error ? error.message : String(error)}`);
+
     return { status: "unavailable" as const };
   }
 }
