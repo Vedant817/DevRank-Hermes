@@ -47,6 +47,36 @@ test("rejects when no changed file is provided", async () => {
   );
 });
 
+test("rejects non-string diffSummary without calling AI provider", async () => {
+  await assert.rejects(
+    runHermesPrReview(
+      { diffSummary: undefined as unknown as string, filesChanged: ["src/auth.ts"] },
+      { OPENROUTER_API_KEY: "test-key" },
+      {
+        fetch: async () => {
+          throw new Error("fetch should not be called");
+        },
+      },
+    ),
+    /requires diffSummary/,
+  );
+});
+
+test("rejects non-array filesChanged without calling AI provider", async () => {
+  await assert.rejects(
+    runHermesPrReview(
+      { diffSummary: "Changed auth flow.", filesChanged: "src/auth.ts" as unknown as string[] },
+      { OPENROUTER_API_KEY: "test-key" },
+      {
+        fetch: async () => {
+          throw new Error("fetch should not be called");
+        },
+      },
+    ),
+    /changed file/,
+  );
+});
+
 test("sends PR review request with configured model and endpoint", async () => {
   const requests: Array<{ body: unknown; headers: Headers; url: string }> = [];
   const fetchMock: typeof fetch = async (url, init) => {

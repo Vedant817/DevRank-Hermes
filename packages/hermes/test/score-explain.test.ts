@@ -109,6 +109,21 @@ test("rejects when no weakest lanes are provided", async () => {
   );
 });
 
+test("rejects non-array evidence IDs without calling AI provider", async () => {
+  await assert.rejects(
+    runHermesScoreExplain(
+      { ...baseInput, evidenceIds: "ev-1" as unknown as string[] },
+      { OPENROUTER_API_KEY: "test-key" },
+      {
+        fetch: async () => {
+          throw new Error("fetch should not be called");
+        },
+      },
+    ),
+    /requires at least one evidenceId/,
+  );
+});
+
 test("redacts secret-like content before calling AI provider", async () => {
   const requests: Array<{ body: { messages?: Array<{ content?: string }> } }> = [];
   const fetchMock: typeof fetch = async (_url, init) => {

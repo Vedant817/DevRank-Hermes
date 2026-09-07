@@ -139,6 +139,21 @@ test("redacts provider keys, private-key bodies, and JWTs", () => {
   );
 });
 
+test("rejects non-string evidence before calling AI provider", async () => {
+  await assert.rejects(
+    runHermesMentorSummary(
+      { evidenceSummary: undefined as unknown as string, weakestLanes: ["DSA"] },
+      { OPENROUTER_API_KEY: "test-key" },
+      {
+        fetch: async () => {
+          throw new Error("fetch should not be called");
+        },
+      },
+    ),
+    /requires evidenceSummary/,
+  );
+});
+
 test("rejects empty evidence before calling AI provider", async () => {
   await assert.rejects(
     runHermesMentorSummary(

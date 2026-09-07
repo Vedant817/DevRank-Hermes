@@ -47,6 +47,72 @@ test("rejects when no weakest lane is provided", async () => {
   );
 });
 
+test("rejects non-string scoreSummary without calling AI provider", async () => {
+  await assert.rejects(
+    runHermesDailyMentor(
+      { scoreSummary: undefined as unknown as string, weakestLanes: ["DSA"] },
+      { OPENROUTER_API_KEY: "test-key" },
+      {
+        fetch: async () => {
+          throw new Error("fetch should not be called");
+        },
+      },
+    ),
+    /requires scoreSummary/,
+  );
+});
+
+test("caps weakest lanes so huge arrays cannot blow up the prompt", async () => {
+  const requests: Array<{ body: { messages?: Array<{ content?: string }> } }> = [];
+  const fetchMock: typeof fetch = async (_url, init) => {
+    requests.push({ body: JSON.parse(String(init?.body)) });
+
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: "Capped plan." } }],
+    }));
+  };
+
+  await runHermesDailyMentor(
+    { scoreSummary: "Score held steady.", weakestLanes: Array(100).fill("lane") },
+    { OPENROUTER_API_KEY: "test-key" },
+    { fetch: fetchMock },
+  );
+
+  const prompt = requests[0]?.body.messages?.map((message) => message.content).join("\n") ?? "";
+  const lanesLine = prompt.split("Weakest lanes:\n")[1]?.split("\n")[0] ?? "";
+  const laneCount = lanesLine.split(", ").filter(Boolean).length;
+
+  assert.ok(laneCount <= 25, `expected at most 25 lanes, saw ${laneCount}`);
+});
+
+test("rejects whitespace-only model output", async () => {
+  const fetchMock: typeof fetch = async () => new Response(JSON.stringify({
+    choices: [{ message: { content: "   " } }],
+  }));
+
+  await assert.rejects(
+    runHermesDailyMentor(
+      { scoreSummary: "Score held steady.", weakestLanes: ["DSA"] },
+      { OPENROUTER_API_KEY: "test-key" },
+      { fetch: fetchMock },
+    ),
+    /did not include/,
+  );
+});
+
+test("rejects malformed provider JSON", async () => {
+  const fetchMock: typeof fetch = async () => new Response("not-json{{");
+
+  await assert.rejects(
+    runHermesDailyMentor(
+      { scoreSummary: "Score held steady.", weakestLanes: ["DSA"] },
+      { OPENROUTER_API_KEY: "test-key" },
+      { fetch: fetchMock },
+    ),
+    /invalid response/,
+  );
+});
+
 test("sends daily mentor request with configured model and endpoint", async () => {
   const requests: Array<{ body: unknown; headers: Headers; url: string }> = [];
   const fetchMock: typeof fetch = async (url, init) => {
@@ -93,6 +159,8 @@ test("sends daily mentor request with configured model and endpoint", async () =
   const userPrompt = body.messages?.[1]?.content ?? "";
 
   assert.match(systemPrompt, /PR\/SHA\/Linear IDs/);
+  assert.match(systemPrompt, /untrusted/);
+  assert.match(userPrompt, /<untrusted-score-summary>/);
   assert.match(userPrompt, /Backend lane slipped/);
   assert.match(userPrompt, /webhook retry for onboarding/);
 });
