@@ -1045,3 +1045,12 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Apply Linear dashboard filters and counts before pagination limits.
 - [x] Align the supported Node runtime with Next.js requirements.
 - [x] Honor CLI workspace options and provider-aware context readiness.
+
+## 28. Product Activation Iteration
+
+- [x] Make the public homepage a zero-account GitHub readiness trial.
+- [x] Keep the existing private command center available at `/dashboards`.
+- [x] Bound public trial scans and avoid persisting profile or evidence data.
+- [ ] Close the daily DSA loop in the web dashboard.
+- [ ] Surface Hermes daily mentoring with a deterministic fallback.
+- [ ] Add read-only GitLab repository, commit, and merge-request backfill.

@@ -72,7 +72,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/dashboards/:path*"],
+  matcher: ["/dashboards/:path*"],
 };
 
 function isAuthorized(

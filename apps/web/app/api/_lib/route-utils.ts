@@ -686,7 +686,7 @@ function requireBearerSecret(
   return null;
 }
 
-function getEnvValue(name: string) {
+export function getEnvValue(name: string) {
   const runtimeEnv: Record<string, string | undefined> = process.env;
   const value = runtimeEnv[name]?.trim();
 
