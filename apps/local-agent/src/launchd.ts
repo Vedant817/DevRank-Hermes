@@ -38,6 +38,11 @@ export function defaultLaunchdLogDirectory() {
 
 export function renderLaunchdPlist(options: LaunchdAgentOptions = {}) {
   const resolved = resolveLaunchdOptions(options);
+  // Launchd consumes this plist on macOS, so OS-consumed paths are normalized
+  // to POSIX separators (also fixes plists generated on Windows CI).
+  // Caller-supplied environmentVariables stay verbatim: they are opaque values
+  // consumed by the daemon process, not by launchd, and normalizing them
+  // could corrupt secrets containing backslashes.
   const programArguments = [
     toPosixPath(resolved.nodePath),
     toPosixPath(join(resolved.repoRoot, "apps", "local-agent", "dist", "index.js")),

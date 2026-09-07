@@ -30,6 +30,29 @@ test("renders launchd plist for the local daemon", () => {
   assert.match(plist, /<key>StandardErrorPath<\/key>\n  <string>\/dev\/null<\/string>/);
 });
 
+test("renders launchd plist with POSIX paths from Windows-style input", () => {
+  const plist = renderLaunchdPlist({
+    configPath: "C:\\devrank\\config.json",
+    label: "com.devrank.local-agent.test",
+    logDirectory: "C:\\devrank\\logs",
+    nodePath: "C:\\nodejs\\node.exe",
+    repoRoot: "C:\\devrank-os",
+  });
+
+  assert.match(plist, /<string>C:\/devrank-os\/apps\/local-agent\/dist\/index\.js<\/string>/);
+  assert.match(plist, /<string>C:\/devrank\/logs\/local-agent\.log<\/string>/);
+  assert.doesNotMatch(plist, /\\/);
+});
+
+test("passes custom environment variables through verbatim", () => {
+  const plist = renderLaunchdPlist({
+    environmentVariables: { CUSTOM_SECRET: "C:\\evil\\path" },
+    label: "com.devrank.local-agent.test",
+  });
+
+  assert.match(plist, /<string>C:\\evil\\path<\/string>/);
+});
+
 test("writes launchd plist to disk", async () => {
   const root = await mkdtemp(join(tmpdir(), "devrank-launchd-"));
   const plistPath = join(root, "LaunchAgents", "com.devrank.local-agent.test.plist");

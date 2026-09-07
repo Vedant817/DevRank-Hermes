@@ -44,7 +44,10 @@ export async function writeLocalAgentLog(
     await handle.close();
   }
 
-  await chmod(logPath, 0o600);
+  // Best-effort POSIX lockdown. No-op on Windows, where log privacy relies on
+  // the user's profile directory ACLs — see the platform guard in
+  // test/logging.test.ts.
+  await chmod(logPath, 0o600).catch(() => undefined);
 }
 
 export function summarizeLocalAgentResult(result: {
