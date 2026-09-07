@@ -38,6 +38,8 @@ export async function markTaskStatus(
 
     return { ok: true };
   } catch {
+    console.error("markTaskStatus failed to update daily task status.");
+
     return {
       ok: false,
       error: "Failed to update task status.",
@@ -49,9 +51,14 @@ export async function markTaskStatus(
   }
 }
 
+const PLACEHOLDER_TOKEN_PATTERN = /change_me|replace_me/i;
+
 async function checkDashboardAuth(): Promise<MarkTaskStatusResult | null> {
-  const expectedToken = process.env.DEVRANK_DASHBOARD_TOKEN?.trim()
+  const rawToken = process.env.DEVRANK_DASHBOARD_TOKEN?.trim()
     || process.env.DEVRANK_API_TOKEN?.trim();
+  const expectedToken = rawToken !== undefined && !PLACEHOLDER_TOKEN_PATTERN.test(rawToken)
+    ? rawToken
+    : undefined;
 
   if (!expectedToken) {
     return { ok: false, error: "Dashboard requires authentication." };

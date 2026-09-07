@@ -7,6 +7,7 @@ import {
 import {
   resolveSingleUserOwner,
   scopeContainerTagsForOwner,
+  isPlaceholderSecret,
 } from "@repo/shared";
 import { NextResponse } from "next/server";
 
@@ -689,7 +690,17 @@ function getEnvValue(name: string) {
   const runtimeEnv: Record<string, string | undefined> = process.env;
   const value = runtimeEnv[name]?.trim();
 
-  return value === "" ? undefined : value;
+  if (value === "" || value === undefined) {
+    return undefined;
+  }
+
+  // Treat shipped placeholder values as unconfigured so a copied .env.example
+  // can never authenticate. Fail closed with missing_env instead.
+  if (isPlaceholderSecret(value)) {
+    return undefined;
+  }
+
+  return value;
 }
 
 function getBearerToken(request: Request) {

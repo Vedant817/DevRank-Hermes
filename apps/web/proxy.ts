@@ -1,6 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const DEFAULT_DASHBOARD_USER = "devrank";
+// Shipped .env.example placeholders must never authenticate (see getEnvValue
+// in app/api/_lib/route-utils.ts, which applies the same rule to API routes).
+const PLACEHOLDER_TOKEN_PATTERN = /change_me|replace_me/i;
+
+function isUsableToken(value: string | undefined): value is string {
+  return value !== undefined && !PLACEHOLDER_TOKEN_PATTERN.test(value);
+}
 
 export function proxy(request: NextRequest) {
   const ownerId = process.env.DEVRANK_OWNER_ID?.trim();
@@ -11,8 +18,9 @@ export function proxy(request: NextRequest) {
     });
   }
 
-  const expectedToken = process.env.DEVRANK_DASHBOARD_TOKEN?.trim()
+  const rawToken = process.env.DEVRANK_DASHBOARD_TOKEN?.trim()
     || process.env.DEVRANK_API_TOKEN?.trim();
+  const expectedToken = isUsableToken(rawToken) ? rawToken : undefined;
 
   if (!expectedToken) {
     return new NextResponse("Dashboard auth is not configured.", {
