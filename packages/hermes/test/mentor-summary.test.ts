@@ -102,6 +102,41 @@ test("redacts secret-like evidence before calling AI provider", async () => {
 test("redacts Hermes prompt text without changing safe text", () => {
   assert.equal(redactHermesPromptText("Built webhook retry tests."), "Built webhook retry tests.");
   assert.equal(redactHermesPromptText("password=hunter2value"), "password=[REDACTED_SECRET]");
+  // Linear/JIRA-style issue IDs are evidence references, not secrets.
+  assert.equal(redactHermesPromptText("Ship DEV-123 next."), "Ship DEV-123 next.");
+});
+
+test("redacts provider keys, private-key bodies, and JWTs", () => {
+  assert.match(
+    redactHermesPromptText("key sk-or-v1-abcdefghijklmnop ok"),
+    /\[REDACTED_OPENROUTER_KEY\]/,
+  );
+  assert.doesNotMatch(
+    redactHermesPromptText("key sk-or-v1-abcdefghijklmnop ok"),
+    /\[REDACTED_OPENAI_KEY\]/,
+  );
+  assert.match(
+    redactHermesPromptText("groq gsk_abcdefghijklmnopqr done"),
+    /\[REDACTED_GROQ_KEY\]/,
+  );
+  assert.match(
+    redactHermesPromptText("aws AKIAIOSFODNN7EXAMPLE ok"),
+    /\[REDACTED_AWS_KEY\]/,
+  );
+  assert.match(
+    redactHermesPromptText("aws ASIAIOSFODNN7EXAMPLE ok"),
+    /\[REDACTED_AWS_KEY\]/,
+  );
+  const pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKC\n-----END RSA PRIVATE KEY-----";
+  assert.equal(redactHermesPromptText(pem), "[REDACTED_PRIVATE_KEY]");
+  assert.match(
+    redactHermesPromptText("jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJVadQssw5c here"),
+    /\[REDACTED_JWT\]/,
+  );
+  assert.match(
+    redactHermesPromptText("upper GHP_abcdefghijklmnopqrstuvwx done"),
+    /\[REDACTED_GITHUB_TOKEN\]/,
+  );
 });
 
 test("rejects empty evidence before calling AI provider", async () => {
