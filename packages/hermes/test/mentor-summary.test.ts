@@ -268,10 +268,8 @@ test("falls back to OpenRouter when Groq keeps returning a 429 rate-limit respon
 
   assert.equal(result.provider, "openrouter");
   assert.equal(result.summary, "OpenRouter fallback summary.");
-  // fetchWithPolicy retries a 429 against the same provider once before the
-  // provider chain moves on, so Groq is hit twice before OpenRouter is tried.
+  // Billed AI POSTs are not replayed; provider failover remains available.
   assert.deepEqual(calledUrls, [
-    "https://api.groq.com/openai/v1/chat/completions",
     "https://api.groq.com/openai/v1/chat/completions",
     "https://openrouter.ai/api/v1/chat/completions",
   ]);
@@ -293,9 +291,7 @@ test("does not fall back to OpenRouter on non-rate-limit Groq failures", async (
     ),
     /AI provider \(groq\) request failed with 500/,
   );
-  // fetchWithPolicy retries a 500 once against the same provider; still no
-  // fallback to OpenRouter because the failure was not a 429.
-  assert.equal(calls, 2);
+  assert.equal(calls, 1);
 });
 
 test("surfaces the rate-limit error when Groq is the only configured provider", async () => {

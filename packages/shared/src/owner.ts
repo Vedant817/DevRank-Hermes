@@ -1,5 +1,5 @@
 import { ConfigurationError } from "./errors.js";
-import { readRuntimeEnv, type RuntimeEnv } from "./env.js";
+import { isPlaceholderSecret, readRuntimeEnv, type RuntimeEnv } from "./env.js";
 
 const OWNER_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
@@ -16,6 +16,12 @@ export function resolveSingleUserOwner(
   if (!ownerId) {
     throw new ConfigurationError(
       "Single-user ownership is not configured. Set DEVRANK_OWNER_ID.",
+    );
+  }
+
+  if (isPlaceholderSecret(ownerId)) {
+    throw new ConfigurationError(
+      "DEVRANK_OWNER_ID must not contain a placeholder value.",
     );
   }
 

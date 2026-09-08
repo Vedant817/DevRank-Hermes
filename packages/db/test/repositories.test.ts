@@ -13,6 +13,7 @@ import {
   dailyTaskKey,
   deleteLinearEntities,
   getRecentScoreSnapshots,
+  getLatestScoreSnapshotForOwner,
   insertDailyPlan,
   insertEvidenceItemIfAbsent,
   reclaimLinearWebhookDelivery,
@@ -22,6 +23,15 @@ type SqlCall = {
   text: string;
   values: unknown[];
 };
+
+test("loads the latest score snapshot through an explicit owner boundary", async () => {
+  const { calls, sql } = recordingSql([]);
+
+  assert.equal(await getLatestScoreSnapshotForOwner(sql, "owner-one"), undefined);
+  const query = requiredCall(calls, "from score_snapshots");
+  assert.match(normalizedSql(query), /where owner_id =/);
+  assert.deepEqual(query.values, ["owner-one"]);
+});
 
 test("insertEvidenceItemIfAbsent reports whether the idempotency key was claimed", async () => {
   const item = {

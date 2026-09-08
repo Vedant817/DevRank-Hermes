@@ -1019,6 +1019,22 @@ export async function upsertEvidenceItems(
   return written;
 }
 
+export async function getLatestScoreSnapshotForOwner(
+  sql: SqlClient,
+  ownerId: string,
+): Promise<ScoreSnapshot | undefined> {
+  const rows = await sql<ScoreSnapshotRow[]>`
+    select overall, breakdown, rubric_version, created_at
+    from score_snapshots
+    where owner_id = ${ownerId}
+    order by created_at desc
+    limit 1
+  `;
+  const row = rows[0];
+
+  return row ? scoreSnapshotFromRow(row) : undefined;
+}
+
 export async function insertEvidenceItemIfAbsent(
   sql: SqlClient,
   item: EvidenceItem,

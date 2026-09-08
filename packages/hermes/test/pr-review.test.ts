@@ -188,10 +188,8 @@ test("falls back to OpenRouter when Groq keeps returning a 429 rate-limit respon
 
   assert.equal(result.provider, "openrouter");
   assert.equal(result.review, "OpenRouter fallback review.");
-  // fetchWithPolicy retries a 429 against the same provider once before the
-  // provider chain moves on, so Groq is hit twice before OpenRouter is tried.
+  // Billed AI POSTs are not replayed; provider failover remains available.
   assert.deepEqual(calledUrls, [
-    "https://api.groq.com/openai/v1/chat/completions",
     "https://api.groq.com/openai/v1/chat/completions",
     "https://openrouter.ai/api/v1/chat/completions",
   ]);

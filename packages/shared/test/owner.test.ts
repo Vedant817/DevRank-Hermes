@@ -25,6 +25,10 @@ test("rejects missing, invalid, or mismatched owner scopes", () => {
     /letters, numbers/,
   );
   assert.throws(
+    () => resolveSingleUserOwner({ DEVRANK_OWNER_ID: "change_me" }),
+    /placeholder/,
+  );
+  assert.throws(
     () => scopeContainerTagsForOwner(
       ["user:other"],
       { DEVRANK_OWNER_ID: "vedant" },

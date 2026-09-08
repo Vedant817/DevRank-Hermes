@@ -1,12 +1,15 @@
 import {
   closeSqlClient,
   createSqlClient,
+  getLatestScoreSnapshotForOwner,
   getLearningPlanDashboard,
   type DailyTaskRecord,
   type LearningPlanDashboard,
 } from "@repo/db";
-import type { WeeklyPlanDay, WeeklyPlanTask } from "@repo/shared";
+import { resolveSingleUserOwner, type WeeklyPlanDay, type WeeklyPlanTask } from "@repo/shared";
 import styles from "../../page.module.css";
+import { buildDailyMentorBrief, type DailyMentorBrief } from "./mentor-brief";
+import { MentorPanel } from "./mentor-panel";
 import { TaskActionButtons } from "./task-actions";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +25,7 @@ const weekDays: WeeklyPlanDay[] = [
 ];
 
 type DashboardState =
-  | { dashboard: LearningPlanDashboard; status: "ready" }
+  | { dashboard: LearningPlanDashboard; mentorBrief: DailyMentorBrief; status: "ready" }
   | { message: string; status: "unavailable" };
 
 export default async function LearningPlanDashboardPage() {
@@ -52,7 +55,7 @@ export default async function LearningPlanDashboardPage() {
           </section>
         </main>
       ) : (
-        <Dashboard dashboard={state.dashboard} />
+        <Dashboard dashboard={state.dashboard} mentorBrief={state.mentorBrief} />
       )}
     </div>
   );
@@ -63,8 +66,20 @@ async function loadDashboardState(): Promise<DashboardState> {
 
   try {
     sql = createSqlClient();
+    const ownerId = resolveSingleUserOwner().id;
+    const [dashboard, snapshot] = await Promise.all([
+      getLearningPlanDashboard(sql),
+      getLatestScoreSnapshotForOwner(sql, ownerId),
+    ]);
+
     return {
-      dashboard: await getLearningPlanDashboard(sql),
+      dashboard,
+      mentorBrief: buildDailyMentorBrief({
+        ...(snapshot ? { snapshot } : {}),
+        planStatus: dashboard.dailyPlan?.freshness ?? "missing",
+        streakDays: dashboard.streak.currentDays,
+        tasks: dashboard.tasks,
+      }),
       status: "ready",
     };
   } catch {
@@ -79,7 +94,13 @@ async function loadDashboardState(): Promise<DashboardState> {
   }
 }
 
-function Dashboard({ dashboard }: { dashboard: LearningPlanDashboard }) {
+function Dashboard({
+  dashboard,
+  mentorBrief,
+}: {
+  dashboard: LearningPlanDashboard;
+  mentorBrief: DailyMentorBrief;
+}) {
   return (
     <main className={styles.main}>
       <section className={styles.panel} aria-labelledby="today-heading">
@@ -166,6 +187,7 @@ function Dashboard({ dashboard }: { dashboard: LearningPlanDashboard }) {
           <p className={styles.emptyState}>No weekly plan has been generated yet.</p>
         )}
       </section>
+      <MentorPanel key={mentorBrief.revision} brief={mentorBrief} />
     </main>
   );
 }

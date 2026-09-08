@@ -153,7 +153,8 @@ export function sanitizeStringList(
  * strictly better than bare interpolation.
  */
 export function wrapUntrusted(field: string, value: string): string {
-  return `<untrusted-${field}>\n${value}\n</untrusted-${field}>`;
+  const escaped = value.replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return `<untrusted-${field}>\n${escaped}\n</untrusted-${field}>`;
 }
 
 export async function callHermesChatProvider(
@@ -171,10 +172,7 @@ export async function callHermesChatProvider(
       "X-Title": provider.title,
     },
     body: JSON.stringify({ messages, model: provider.model, max_tokens: options.maxTokens }),
-  }, {
-    fetch: fetchImpl,
-    retry: true,
-  });
+  }, { fetch: fetchImpl });
 
   if (!response.ok) {
     // Redact the provider body: providers can echo back prompt fragments and
@@ -208,7 +206,10 @@ export async function callHermesChatProvider(
   // Defense in depth: redact model output before it flows into dashboards,
   // Slack, or stored drafts. The model can echo a secret the input regex
   // missed or invent credential-looking text.
-  const redacted = redactHermesPromptText(content).trim();
+  const redacted = redactHermesPromptText(content)
+    .trim()
+    .slice(0, Math.max(1_000, options.maxTokens * 8))
+    .trim();
 
   if (redacted.length === 0) {
     throw new Error(`AI provider (${provider.name}) response did not include ${options.resultLabel} text.`);
