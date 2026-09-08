@@ -152,6 +152,31 @@ test("POST with invalid date format returns 400", async () => {
   }
 });
 
+test("POST rejects impossible calendar dates", async () => {
+  const restore = setupEnv();
+  const restoreRateLimit = setRateLimitStore(alwaysAllowStore);
+
+  try {
+    const response = await POST(mockRequest(
+      { title: "x", summary: "y", date: "2026-02-31" },
+      { authorization: `Bearer ${TEST_TOKEN}` },
+    ));
+    const body = await response.json() as { error?: { code?: string } };
+
+    assert.equal(response.status, 400);
+    assert.equal(body.error?.code, "invalid_date");
+
+    const yearZeroResponse = await POST(mockRequest(
+      { title: "x", summary: "y", date: "0000-01-01" },
+      { authorization: `Bearer ${TEST_TOKEN}` },
+    ));
+    assert.equal(yearZeroResponse.status, 400);
+  } finally {
+    restoreRateLimit();
+    restore();
+  }
+});
+
 test("POST with invalid taskKey returns 400", async () => {
   const restore = setupEnv();
   const restoreRateLimit = setRateLimitStore(alwaysAllowStore);

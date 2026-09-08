@@ -294,6 +294,12 @@ const dashboardLinks = [
     description: "Today focus tasks, weekly goal, completion status, and streak.",
   },
   {
+    href: "/dashboards/dsa",
+    label: "Daily practice",
+    title: "DSA Loop",
+    description: "Next unsolved question, solve evidence, streak, and immediate score delta.",
+  },
+  {
     href: "/dashboards/career-content",
     label: "Dashboard F",
     title: "Career/Content",

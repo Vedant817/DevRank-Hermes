@@ -41,7 +41,7 @@ import {
   isCurrentSdeReadinessSnapshot,
 } from "@repo/scoring";
 import { runMarketBenchmark } from "@repo/search";
-import { evidenceSources, fetchWithPolicy, readRuntimeEnv, type DailyPlanTaskCategory } from "@repo/shared";
+import { evidenceSources, fetchWithPolicy, isValidDateOnly, readRuntimeEnv, type DailyPlanTaskCategory } from "@repo/shared";
 import { sendDailyPlanToSlack, sendSlackMessage, type TaskActionItem } from "@repo/slack";
 import { CliError } from "./errors.js";
 import {
@@ -887,6 +887,12 @@ async function handleLogDsa(context: CommandContext) {
     throw new CliError("Usage: devrank log:dsa <slug> [--minutes n] [--notes text] [--date d] [--task-key k]", 2);
   }
 
+  const requestedDate = configString(context, "date");
+
+  if (requestedDate !== undefined && !isValidDateOnly(requestedDate)) {
+    throw new CliError("--date must be a real calendar date in YYYY-MM-DD format.", 2);
+  }
+
   const apiBaseUrl = configString(context, "apiBaseUrl");
 
   if (apiBaseUrl) {
@@ -910,9 +916,19 @@ async function logDsaViaApi(apiBaseUrl: string, context: CommandContext) {
   if (date) body.date = date;
   if (taskKey) body.taskKey = taskKey;
 
+  const token = envValue(context.env, "DEVRANK_PLANNER_TOKEN")
+    ?? envValue(context.env, "DEVRANK_API_TOKEN");
+
+  if (!token) {
+    throw new CliError("Set DEVRANK_PLANNER_TOKEN or DEVRANK_API_TOKEN to log DSA evidence through the API.", 2);
+  }
+
   const response = await fetchWithPolicy(`${apiBaseUrl}/api/tasks/log-evidence`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify(body),
   });
 
@@ -958,11 +974,15 @@ async function logDsaViaDb(context: CommandContext, slug: string) {
       const taskKey = configString(context, "taskKey");
 
       if (taskKey) {
-        await updateDailyTaskStatus(transaction, {
+        const task = await updateDailyTaskStatus(transaction, {
           date: occurredAt,
           taskKey,
           status: "completed",
         });
+
+        if (!task) {
+          throw new CliError("The requested daily task was not found.", 2);
+        }
       }
 
       return { evidenceCount: evidence, taskKeyUpdated: taskKey !== undefined };

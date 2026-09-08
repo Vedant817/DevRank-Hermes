@@ -1019,6 +1019,42 @@ export async function upsertEvidenceItems(
   return written;
 }
 
+export async function insertEvidenceItemIfAbsent(
+  sql: SqlClient,
+  item: EvidenceItem,
+): Promise<boolean> {
+  let ownerId: string | undefined;
+
+  try {
+    ownerId = resolveSingleUserOwner().id;
+  } catch {
+    // single-user owner not configured
+  }
+
+  const metadataJson = JSON.stringify({
+    ...item.metadata,
+    occurredAt: item.occurredAt,
+    url: item.url,
+  });
+  const rows = await sql<Array<{ id: string }>>`
+    insert into memory_items (source, source_id, title, summary, metadata, owner_id)
+    values (
+      ${item.source},
+      ${item.id},
+      ${item.title},
+      ${item.summary},
+      ${metadataJson}::jsonb,
+      ${ownerId ?? null}
+    )
+    on conflict (source, source_id)
+      where source_id is not null
+    do nothing
+    returning id::text
+  `;
+
+  return rows.length === 1;
+}
+
 export async function getDsaQuestionBySlug(
   sql: SqlClient,
   slug: string,

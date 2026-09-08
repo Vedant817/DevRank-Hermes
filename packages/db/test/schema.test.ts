@@ -135,3 +135,21 @@ test("registers the owner id prep migration", () => {
   assert.match(migration.sql, /alter table memory_items add column if not exists owner_id text/);
   assert.match(migration.sql, /alter table github_repos add column if not exists owner_id text/);
 });
+
+test("registers canonical DSA evidence idempotency migration", () => {
+  const migration = migrations.find(
+    (candidate) => candidate.id === "024_dsa_evidence_idempotency",
+  );
+
+  assert.ok(migration);
+  assert.match(migration.sql, /lock table memory_items in share row exclusive mode/);
+  assert.match(migration.sql, /row_number\(\) over/);
+  assert.match(migration.sql, /desc nulls last/);
+  assert.match(migration.sql, /delete from memory_items/);
+  assert.match(migration.sql, /'dsa:' \|\| dsa_candidates.slug \|\| ':' \|\| dsa_candidates.solve_date/);
+  assert.match(migration.sql, /left\(raw_solve_date, 4\) <> '0000'/);
+  assert.match(migration.sql, /left\(raw_solve_date, 4\)::integer % 400 = 0/);
+  assert.doesNotMatch(migration.sql, /to_date\(/);
+  assert.match(migration.sql, /jsonb_set\(memory_items.metadata, '\{date\}'/);
+  assert.match(migration.sql, /join dsa_questions/);
+});

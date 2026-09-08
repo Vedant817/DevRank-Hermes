@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toDsaQuestion } from "../src/dsa.js";
+import { listDsaCompletions, toDsaQuestion } from "../src/dsa.js";
 import { getDsaQuestionBySlug } from "../src/repositories.js";
 
 test("maps a persisted DSA row into a typed question", () => {
@@ -67,4 +67,25 @@ test("getDsaQuestionBySlug returns undefined for a non-existent slug", async () 
   const question = await getDsaQuestionBySlug(sql, "non-existent-slug");
 
   assert.equal(question, undefined);
+});
+
+test("listDsaCompletions maps evidence dates and rejects malformed dates", async () => {
+  const sql = mockSqlClient([
+    { slug: "two-sum", metadata_date: "2026-09-08", occurred_at: null, created_at: "2026-09-08T12:00:00.000Z" },
+    { slug: "number-of-islands", metadata_date: null, occurred_at: "2026-09-07T12:00:00.000Z", created_at: "2026-09-07T12:00:00.000Z" },
+    { slug: "fallback", metadata_date: null, occurred_at: null, created_at: new Date("2026-09-06T23:30:00.000Z") },
+    { slug: "duplicate", metadata_date: "2026-09-05", occurred_at: null, created_at: "2026-09-05T12:00:00.000Z" },
+    { slug: "duplicate", metadata_date: "2026-09-05", occurred_at: null, created_at: "2026-09-05T13:00:00.000Z" },
+    { slug: "impossible", metadata_date: "2026-02-31", occurred_at: null, created_at: "2026-09-04T12:00:00.000Z" },
+    { slug: "suffixed", metadata_date: "2026-09-03junk", occurred_at: null, created_at: "2026-09-03T12:00:00.000Z" },
+    { slug: "bad-occurred", metadata_date: null, occurred_at: "2026-09-02junk", created_at: "2026-09-02T12:00:00.000Z" },
+    { slug: "year-zero", metadata_date: "0000-01-01", occurred_at: null, created_at: "2026-09-01T12:00:00.000Z" },
+  ]);
+
+  assert.deepEqual(await listDsaCompletions(sql), [
+    { slug: "two-sum", date: "2026-09-08" },
+    { slug: "number-of-islands", date: "2026-09-07" },
+    { slug: "fallback", date: "2026-09-06" },
+    { slug: "duplicate", date: "2026-09-05" },
+  ]);
 });

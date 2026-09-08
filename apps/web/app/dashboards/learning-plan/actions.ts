@@ -7,7 +7,7 @@ import {
   type DailyTaskStatus,
 } from "@repo/db";
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
+import { isDashboardActionAuthorized } from "../../_lib/dashboard-auth";
 
 export type MarkTaskStatusResult = { ok: boolean; error?: string };
 
@@ -16,8 +16,9 @@ export async function markTaskStatus(
   taskKey: string,
   status: DailyTaskStatus,
 ): Promise<MarkTaskStatusResult> {
-  const authError = await checkDashboardAuth();
-  if (authError) return authError;
+  if (!await isDashboardActionAuthorized()) {
+    return { ok: false, error: "Dashboard requires authentication." };
+  }
 
   if (
     typeof planDate !== "string" ||
@@ -33,7 +34,11 @@ export async function markTaskStatus(
 
   try {
     sql = createSqlClient();
-    await updateDailyTaskStatus(sql, { date: planDate, taskKey, status });
+    const task = await updateDailyTaskStatus(sql, { date: planDate, taskKey, status });
+
+    if (!task) {
+      return { ok: false, error: "Daily task was not found." };
+    }
     revalidatePath("/dashboards/learning-plan");
 
     return { ok: true };
@@ -49,38 +54,4 @@ export async function markTaskStatus(
       await closeSqlClient(sql);
     }
   }
-}
-
-const PLACEHOLDER_TOKEN_PATTERN = /change[-_]?me|replace[-_\s]?me/i;
-
-async function checkDashboardAuth(): Promise<MarkTaskStatusResult | null> {
-  const rawToken = process.env.DEVRANK_DASHBOARD_TOKEN?.trim()
-    || process.env.DEVRANK_API_TOKEN?.trim();
-  const expectedToken = rawToken !== undefined && !PLACEHOLDER_TOKEN_PATTERN.test(rawToken)
-    ? rawToken
-    : undefined;
-
-  if (!expectedToken) {
-    return { ok: false, error: "Dashboard requires authentication." };
-  }
-
-  const cookieStore = await cookies();
-  const token = cookieStore.get("dashboard-token")?.value;
-
-  if (token === undefined || !constantTimeEqual(token, expectedToken)) {
-    return { ok: false, error: "Dashboard requires authentication." };
-  }
-
-  return null;
-}
-
-function constantTimeEqual(received: string, expected: string) {
-  const length = Math.max(received.length, expected.length);
-  let mismatch = received.length ^ expected.length;
-
-  for (let index = 0; index < length; index += 1) {
-    mismatch |= received.charCodeAt(index) ^ expected.charCodeAt(index);
-  }
-
-  return mismatch === 0;
 }

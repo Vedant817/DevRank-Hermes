@@ -14,6 +14,7 @@ import {
   deleteLinearEntities,
   getRecentScoreSnapshots,
   insertDailyPlan,
+  insertEvidenceItemIfAbsent,
   reclaimLinearWebhookDelivery,
 } from "../src/repositories.js";
 
@@ -21,6 +22,22 @@ type SqlCall = {
   text: string;
   values: unknown[];
 };
+
+test("insertEvidenceItemIfAbsent reports whether the idempotency key was claimed", async () => {
+  const item = {
+    id: "dsa:two-sum:2026-09-08",
+    source: "manual" as const,
+    title: "Solved DSA: Two Sum",
+    summary: "Solved an algorithm problem.",
+    occurredAt: "2026-09-08T12:00:00.000Z",
+  };
+  const inserted = recordingSql([{ id: "memory-id" }]);
+  const duplicate = recordingSql([]);
+
+  assert.equal(await insertEvidenceItemIfAbsent(inserted.sql, item), true);
+  assert.equal(await insertEvidenceItemIfAbsent(duplicate.sql, item), false);
+  assert.match(normalizedSql(requiredCall(inserted.calls, "insert into memory_items")), /do nothing returning id::text/);
+});
 
 test("insertDailyPlan deletes task rows missing from regenerated plans", async () => {
   const { calls, sql } = recordingSql();

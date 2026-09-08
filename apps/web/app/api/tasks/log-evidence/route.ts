@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   closeSqlClient,
   createSqlClient,
@@ -9,7 +8,7 @@ import {
   type DailyTaskStatus,
   type SqlClient,
 } from "@repo/db";
-import type { EvidenceItem } from "@repo/shared";
+import { isValidDateOnly, type EvidenceItem } from "@repo/shared";
 import {
   containsLikelySecretInJson,
   getOptionalInteger,
@@ -22,6 +21,7 @@ import {
   readJsonObject,
   requireApiAuth,
 } from "../../_lib/route-utils";
+import { evidenceId } from "./evidence-id";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
 
   const date = getOptionalString(body.value, "date") ?? new Date().toISOString().slice(0, 10);
 
-  if (!DATE_PATTERN.test(date)) {
+  if (!DATE_PATTERN.test(date) || !isValidDateOnly(date)) {
     return jsonError(400, "invalid_date", "date must use YYYY-MM-DD format.", { field: "date" });
   }
 
@@ -122,11 +122,9 @@ export async function POST(request: Request) {
       }
     }
 
-    const evidenceId = createHash("sha256")
-      .update(`${date}|${title.value}|${dsaSlug ?? ""}`)
-      .digest("hex");
+    const sourceId = evidenceId(date, title.value, dsaSlug);
     const evidence: EvidenceItem = {
-      id: evidenceId,
+      id: sourceId,
       source: "manual",
       title: title.value,
       summary: summary.value,
@@ -144,13 +142,17 @@ export async function POST(request: Request) {
 
       if (taskKey !== undefined) {
         const status: DailyTaskStatus = "completed";
-        await updateDailyTaskStatus(transaction, {
+        const task = await updateDailyTaskStatus(transaction, {
           date,
           taskKey,
           status,
           notes: `Auto-completed from manual evidence: ${title.value}`,
           evidenceUrl: url,
         });
+
+        if (!task) {
+          throw new Error("Daily task was not found.");
+        }
       }
     });
 

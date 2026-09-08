@@ -29,7 +29,9 @@ test("parseArgs defaults minutes when not provided", () => {
 
 test("main makes API request to log-evidence endpoint", async () => {
   const prevApiBaseUrl = process.env.DEVRANK_API_BASE_URL;
+  const prevPlannerToken = process.env.DEVRANK_PLANNER_TOKEN;
   process.env.DEVRANK_API_BASE_URL = "http://localhost:9999";
+  process.env.DEVRANK_PLANNER_TOKEN = "planner-test-token";
 
   const { main } = await import("../src/index.js");
   const fetchedUrls: string[] = [];
@@ -51,12 +53,15 @@ test("main makes API request to log-evidence endpoint", async () => {
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv("DEVRANK_API_BASE_URL", prevApiBaseUrl);
+    restoreEnv("DEVRANK_PLANNER_TOKEN", prevPlannerToken);
   }
 });
 
 test("main throws CliError when API returns error status", async () => {
   const prevApiBaseUrl = process.env.DEVRANK_API_BASE_URL;
+  const prevPlannerToken = process.env.DEVRANK_PLANNER_TOKEN;
   process.env.DEVRANK_API_BASE_URL = "http://localhost:9999";
+  process.env.DEVRANK_PLANNER_TOKEN = "planner-test-token";
 
   const { main } = await import("../src/index.js");
   const originalFetch = globalThis.fetch;
@@ -80,19 +85,24 @@ test("main throws CliError when API returns error status", async () => {
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv("DEVRANK_API_BASE_URL", prevApiBaseUrl);
+    restoreEnv("DEVRANK_PLANNER_TOKEN", prevPlannerToken);
   }
 });
 
 test("main sends correct request body to the API", async () => {
   const prevApiBaseUrl = process.env.DEVRANK_API_BASE_URL;
+  const prevPlannerToken = process.env.DEVRANK_PLANNER_TOKEN;
   process.env.DEVRANK_API_BASE_URL = "http://localhost:9999";
+  process.env.DEVRANK_PLANNER_TOKEN = "planner-test-token";
 
   const { main } = await import("../src/index.js");
   const originalFetch = globalThis.fetch;
   let requestBody: string | undefined;
+  let authorization: string | undefined;
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     requestBody = init?.body as string | undefined;
+    authorization = new Headers(init?.headers).get("authorization") ?? undefined;
     return new Response(JSON.stringify({ ok: true, evidence: { id: "test-id" } }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -108,10 +118,20 @@ test("main sends correct request body to the API", async () => {
     assert.equal(parsed.summary, "Great solution");
     assert.equal(parsed.dsaSlug, "two-sum");
     assert.equal(parsed.minutes, 45);
+    assert.equal(authorization, "Bearer planner-test-token");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv("DEVRANK_API_BASE_URL", prevApiBaseUrl);
+    restoreEnv("DEVRANK_PLANNER_TOKEN", prevPlannerToken);
   }
+});
+
+test("main rejects impossible or timestamp-shaped DSA dates", async () => {
+  const { main } = await import("../src/index.js");
+
+  await assert.rejects(() => main(["log:dsa", "two-sum", "--date", "2026-02-31"]), /real calendar date/);
+  await assert.rejects(() => main(["log:dsa", "two-sum", "--date", "0000-01-01"]), /real calendar date/);
+  await assert.rejects(() => main(["log:dsa", "two-sum", "--date", "2026-09-08T12:00:00Z"]), /YYYY-MM-DD/);
 });
 
 function restoreEnv(name: string, value: string | undefined) {
