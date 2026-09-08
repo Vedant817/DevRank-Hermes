@@ -1053,4 +1053,4 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Bound public trial scans and avoid persisting profile or evidence data.
 - [x] Close the daily DSA loop in the web dashboard.
 - [x] Surface Hermes daily mentoring with a deterministic fallback.
-- [ ] Add read-only GitLab repository, commit, and merge-request backfill.
+- [x] Add read-only GitLab repository, commit, and merge-request backfill.

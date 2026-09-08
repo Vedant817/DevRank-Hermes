@@ -4,6 +4,7 @@ export const evidenceSources = [
   "manual_export",
   "workspace_export",
   "github",
+  "gitlab",
   "linear",
   "market",
   "skill",

@@ -153,3 +153,23 @@ test("registers canonical DSA evidence idempotency migration", () => {
   assert.match(migration.sql, /jsonb_set\(memory_items.metadata, '\{date\}'/);
   assert.match(migration.sql, /join dsa_questions/);
 });
+
+test("registers idempotent GitLab project, commit, and merge-request storage", () => {
+  const migration = migrations.find(
+    (candidate) => candidate.id === "025_gitlab_backfill",
+  );
+
+  assert.ok(migration);
+  assert.match(migration.sql, /create table if not exists gitlab_projects/);
+  assert.match(migration.sql, /owner_id text not null/);
+  assert.match(migration.sql, /path_with_namespace text not null unique/);
+  assert.match(migration.sql, /create table if not exists gitlab_commits/);
+  assert.match(migration.sql, /references gitlab_projects\(id\) on delete cascade/);
+  assert.match(migration.sql, /primary key \(project_id, sha\)/);
+  assert.match(migration.sql, /create table if not exists gitlab_merge_requests/);
+  assert.match(migration.sql, /unique \(project_id, iid\)/);
+  assert.match(migration.sql, /gitlab_projects_owner_activity_idx/);
+  assert.match(migration.sql, /gitlab_commits_project_committed_at_idx/);
+  assert.match(migration.sql, /gitlab_merge_requests_project_updated_at_idx/);
+  assert.doesNotMatch(migration.sql, /author_email/);
+});

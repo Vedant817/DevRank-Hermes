@@ -19,6 +19,11 @@ import {
   listGithubRepoEvidence,
   type GithubPullRequestTarget,
 } from "./github.js";
+import {
+  listGitlabCommitEvidence,
+  listGitlabMergeRequestEvidence,
+  listGitlabProjectEvidence,
+} from "./gitlab.js";
 
 export interface PersistableLinearProject {
   id: string;
@@ -133,6 +138,9 @@ type DashboardCountsRow = {
   github_commits: string | number;
   github_repos: string | number;
   github_pull_requests: string | number;
+  gitlab_commits: string | number;
+  gitlab_merge_requests: string | number;
+  gitlab_projects: string | number;
   linear_projects: string | number;
   linear_issues: string | number;
   slack_notifications: string | number;
@@ -267,6 +275,9 @@ export interface DashboardSummary {
     githubPullRequests: number;
     githubCommits: number;
     githubRepos: number;
+    gitlabCommits: number;
+    gitlabMergeRequests: number;
+    gitlabProjects: number;
     linearIssues: number;
     linearProjects: number;
     slackNotifications: number;
@@ -359,6 +370,9 @@ export async function getDashboardSummary(sql: SqlClient): Promise<DashboardSumm
         (select count(*) from github_repos) as github_repos,
         (select count(*) from github_pull_requests) as github_pull_requests,
         (select count(*) from github_commits) as github_commits,
+        (select count(*) from gitlab_projects) as gitlab_projects,
+        (select count(*) from gitlab_commits) as gitlab_commits,
+        (select count(*) from gitlab_merge_requests) as gitlab_merge_requests,
         (select count(*) from linear_projects) as linear_projects,
         (select count(*) from linear_issues) as linear_issues,
         (select count(*) from slack_notifications) as slack_notifications
@@ -385,6 +399,9 @@ export async function getDashboardSummary(sql: SqlClient): Promise<DashboardSumm
       githubCommits: numberCount(counts?.github_commits),
       githubPullRequests: numberCount(counts?.github_pull_requests),
       githubRepos: numberCount(counts?.github_repos),
+      gitlabCommits: numberCount(counts?.gitlab_commits),
+      gitlabMergeRequests: numberCount(counts?.gitlab_merge_requests),
+      gitlabProjects: numberCount(counts?.gitlab_projects),
       linearIssues: numberCount(counts?.linear_issues),
       linearProjects: numberCount(counts?.linear_projects),
       slackNotifications: numberCount(counts?.slack_notifications),
@@ -1839,6 +1856,9 @@ export async function listScoringEvidence(
       ...await listGithubRepoEvidence(sql, options.targetId, limit),
       ...await listGithubPullRequestEvidence(sql, { repoFullName: options.targetId }, limit),
       ...await listGithubCommitEvidence(sql, options.targetId, limit),
+      ...await listGitlabProjectEvidence(sql, options.targetId, limit),
+      ...await listGitlabMergeRequestEvidence(sql, options.targetId, limit),
+      ...await listGitlabCommitEvidence(sql, options.targetId, limit),
     ];
   }
 
@@ -1860,6 +1880,9 @@ export async function listScoringEvidence(
     ...await listGithubRepoEvidence(sql, undefined, limit),
     ...await listGithubPullRequestEvidence(sql, {}, limit),
     ...await listGithubCommitEvidence(sql, undefined, limit),
+    ...await listGitlabProjectEvidence(sql, undefined, limit),
+    ...await listGitlabMergeRequestEvidence(sql, undefined, limit),
+    ...await listGitlabCommitEvidence(sql, undefined, limit),
     ...await listLinearProjectEvidence(sql, limit),
     ...await listLinearIssueEvidence(sql, limit),
   ];

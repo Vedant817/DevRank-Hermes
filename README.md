@@ -2,7 +2,7 @@
 
 DevRank OS is a personal engineering intelligence system for tracking and
 accelerating growth as a Software Engineer. It ingests local AI-agent sessions,
-GitHub/Linear signals, and market search results, then produces evidence-backed
+GitHub/GitLab/Linear signals, and market search results, then produces evidence-backed
 scores, learning plans, Slack targets, and mentor summaries.
 
 ## Workspace
@@ -16,7 +16,7 @@ scores, learning plans, Slack targets, and mentor summaries.
 - `packages/scoring`: deterministic SDE-readiness scoring.
 - `packages/planner`: daily plan generation and Slack formatting.
 - `packages/embeddings`: OpenRouter-compatible embedding generation.
-- `packages/github`, `packages/linear`, `packages/slack`, `packages/search`,
+- `packages/github`, `packages/gitlab`, `packages/linear`, `packages/slack`, `packages/search`,
   `packages/context`, `packages/hermes`: external integrations.
 
 ## Quickstart
@@ -61,7 +61,7 @@ pnpm run build
 └─────────────────┘    └──────────────────────┘    │  + pgvector  │
                            │                       └──────────────┘
                            ▼
-                     Slack / GitHub / Linear / Search
+                  Slack / GitHub / GitLab / Linear / Search
 ```
 
 See [docs/architecture.md](docs/architecture.md) and

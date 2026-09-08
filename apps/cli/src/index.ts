@@ -21,6 +21,7 @@ import {
   runDbMigrations,
   upsertAiChatSessions,
   upsertGithubBackfill,
+  upsertGitlabBackfill,
   upsertEvidenceEmbeddings,
   upsertEvidenceItems,
   updateDailyTaskStatus,
@@ -169,7 +170,7 @@ const commands: CommandSpec[] = [
   {
     name: "env:check",
     description: "Show the exact environment variables needed for one feature or all features.",
-    usage: "devrank env:check [--feature <database|github|linear|slack|market|context|hermes|embeddings|api|all>]",
+    usage: "devrank env:check [--feature <database|github|gitlab|linear|slack|market|context|hermes|embeddings|api|all>]",
     moduleCandidates: [],
     exportCandidates: [],
     envRequirements: [],
@@ -230,6 +231,17 @@ const commands: CommandSpec[] = [
     optionRequirements: [{ name: "user", label: "GitHub username or organization to backfill" }],
     buildConfig: buildGithubBackfillConfig,
     invoke: invokeGithubBackfill,
+  },
+  {
+    name: "gitlab:backfill",
+    description: "Backfill personal projects, commits, and merge requests through the GitLab package.",
+    usage: "devrank gitlab:backfill --user <gitlab-user> [--dry-run]",
+    moduleCandidates: ["@repo/gitlab"],
+    exportCandidates: ["backfillGitlabUser", "backfillGitLab", "backfillGitlab", "gitlabBackfill", "run"],
+    envRequirements: [],
+    optionRequirements: [{ name: "user", label: "GitLab username to backfill" }],
+    buildConfig: buildGitlabBackfillConfig,
+    invoke: invokeGitlabBackfill,
   },
   {
     name: "scores:recompute",
@@ -465,6 +477,14 @@ export function buildGithubBackfillConfig(parsed: ParsedArgs, env: NodeJS.Proces
   };
 }
 
+export function buildGitlabBackfillConfig(parsed: ParsedArgs, env: NodeJS.ProcessEnv) {
+  return {
+    databaseEnv: firstPresentEnv(env, databaseRequirement),
+    dryRun: booleanOption(parsed, "dry-run"),
+    user: stringOption(parsed, "user"),
+  };
+}
+
 export async function main(argv: string[]) {
   const parsed = parseArgs(argv);
 
@@ -557,6 +577,7 @@ async function handleEnvCheck(context: CommandContext) {
     database: [databaseRequirement],
     embeddings: [embeddingsRequirement],
     github: [databaseRequirement, githubBackfillAuthRequirement],
+    gitlab: [ownerRequirement, databaseRequirement],
     hermes: [hermesRequirement],
     linear: [databaseRequirement, linearAuthRequirement],
     market: [marketSearchRequirement],
@@ -1215,6 +1236,86 @@ export async function invokeGithubBackfill(moduleExports: ModuleExports, context
   );
 }
 
+export async function invokeGitlabBackfill(moduleExports: ModuleExports, context: CommandContext, moduleName: string) {
+  if (!configBoolean(context, "dryRun")) {
+    const missing = [ownerRequirement, databaseRequirement]
+      .filter((requirement) => !requirementMet(requirement, context.env));
+
+    if (missing.length > 0) {
+      throw new CliError(
+        `Cannot persist GitLab backfill; set ${missing.map(describeRequirement).join(" and ")}.`,
+        2,
+      );
+    }
+  }
+
+  const directHandler = optionalFunction(
+    moduleExports,
+    ["backfillGitLab", "backfillGitlab", "gitlabBackfill", "run"],
+  );
+
+  if (directHandler) {
+    return persistGitlabBackfillResult(context, await directHandler(context));
+  }
+
+  const createGitlabClient = requiredFunction(
+    moduleExports,
+    ["createGitlabClient"],
+    moduleName,
+    context.command,
+  );
+  const backfillGitlabUser = requiredFunction(
+    moduleExports,
+    ["backfillGitlabUser"],
+    moduleName,
+    context.command,
+  );
+  const user = configString(context, "user");
+
+  if (!user) {
+    throw new CliError("Usage: devrank gitlab:backfill --user <gitlab-user> [--dry-run]", 2);
+  }
+
+  const client = createGitlabClient(context.env);
+  return persistGitlabBackfillResult(context, await backfillGitlabUser(client, user));
+}
+
+async function persistGitlabBackfillResult(context: CommandContext, result: unknown) {
+  if (!isGitlabBackfillLike(result)) {
+    throw new CliError("GitLab backfill returned an invalid result shape.");
+  }
+
+  if (configBoolean(context, "dryRun")) {
+    return result;
+  }
+
+  const sql = createSqlClient();
+
+  try {
+    const written = await runInTransaction(sql, async (transaction) => {
+      const persisted = await upsertGitlabBackfill(transaction, result);
+      await insertIngestionRun(transaction, {
+        source: "gitlab_backfill",
+        status: "success",
+        summary: `Imported ${persisted.projects} GitLab project(s), ${persisted.mergeRequests} merge request(s), and ${persisted.commits} commit(s).`,
+      });
+
+      return persisted;
+    });
+
+    return { ...result, written };
+  } catch (error) {
+    await insertIngestionRun(sql, {
+      source: "gitlab_backfill",
+      status: "failed",
+      error: error instanceof Error ? error.message : "GitLab persistence failed.",
+    });
+    throw error;
+  } finally {
+    await closeSqlClient(sql);
+  }
+}
+
 async function persistGithubBackfillResult(context: CommandContext, result: unknown) {
   if (configBoolean(context, "dryRun") || !isGithubBackfillLike(result)) {
     return result;
@@ -1482,6 +1583,88 @@ function isGithubBackfillLike(value: unknown): value is Parameters<typeof upsert
     (record.pullRequestFiles === undefined || Array.isArray(record.pullRequestFiles)) &&
     (record.pullRequestReviews === undefined || Array.isArray(record.pullRequestReviews)) &&
     (record.repoProfiles === undefined || Array.isArray(record.repoProfiles));
+}
+
+function isGitlabBackfillLike(value: unknown): value is Parameters<typeof upsertGitlabBackfill>[1] {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+
+  if (!Array.isArray(record.projects) || record.projects.length > 20 ||
+      !Array.isArray(record.commits) || record.commits.length > 2_000 ||
+      !Array.isArray(record.mergeRequests) || record.mergeRequests.length > 2_000) {
+    return false;
+  }
+
+  return record.projects.every(isGitlabProjectLike) &&
+    record.commits.every(isGitlabCommitLike) &&
+    record.mergeRequests.every(isGitlabMergeRequestLike);
+}
+
+function isGitlabProjectLike(value: unknown) {
+  const record = unknownRecord(value);
+  return record !== undefined &&
+    positiveSafeInteger(record.id) &&
+    nonEmptyText(record.name) &&
+    nonEmptyText(record.pathWithNamespace) &&
+    nonEmptyText(record.visibility) &&
+    nullableText(record.defaultBranch) &&
+    nullableText(record.webUrl) &&
+    nullableText(record.lastActivityAt) &&
+    typeof record.archived === "boolean" &&
+    typeof record.emptyRepo === "boolean";
+}
+
+function isGitlabCommitLike(value: unknown) {
+  const record = unknownRecord(value);
+  return record !== undefined &&
+    positiveSafeInteger(record.projectId) &&
+    nonEmptyText(record.projectPath) &&
+    nonEmptyText(record.sha) &&
+    nonEmptyText(record.title) &&
+    nonEmptyText(record.message) &&
+    nullableText(record.authorName) &&
+    nullableText(record.authoredAt) &&
+    nullableText(record.committedAt) &&
+    nullableText(record.webUrl);
+}
+
+function isGitlabMergeRequestLike(value: unknown) {
+  const record = unknownRecord(value);
+  return record !== undefined &&
+    positiveSafeInteger(record.id) &&
+    positiveSafeInteger(record.projectId) &&
+    positiveSafeInteger(record.iid) &&
+    nonEmptyText(record.projectPath) &&
+    nonEmptyText(record.title) &&
+    nonEmptyText(record.state) &&
+    nonEmptyText(record.sourceBranch) &&
+    nonEmptyText(record.targetBranch) &&
+    nullableText(record.authorUsername) &&
+    nullableText(record.webUrl) &&
+    nullableText(record.createdAt) &&
+    nullableText(record.updatedAt) &&
+    nullableText(record.mergedAt);
+}
+
+function unknownRecord(value: unknown) {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function positiveSafeInteger(value: unknown) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function nonEmptyText(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function nullableText(value: unknown) {
+  return value === null || typeof value === "string";
 }
 
 function isLinearBackfillLike(value: unknown): value is Parameters<typeof upsertLinearBackfill>[1] {

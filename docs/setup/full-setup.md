@@ -56,6 +56,26 @@ GITHUB_PRIVATE_KEY_PATH=/absolute/path/to/github-app-private-key.pem
 GITHUB_WEBHOOK_SECRET=replace_me
 ```
 
+## GitLab
+
+GitLab backfill is read-only and imports at most 20 owned, non-fork projects
+plus 100 user-authored commits and merge requests per project. Public projects
+can be read anonymously; set a read-only token for private projects or higher
+API limits:
+
+```text
+GITLAB_TOKEN=glpat-replace_me
+GITLAB_BASE_URL=https://gitlab.com/api/v4
+```
+
+`GITLAB_BASE_URL` is optional and supports HTTPS self-managed GitLab instances.
+After running database migrations, preview or persist a backfill with:
+
+```bash
+pnpm devrank gitlab:backfill --user <gitlab-user> --dry-run
+pnpm devrank gitlab:backfill --user <gitlab-user>
+```
+
 ## Linear
 
 ```text

@@ -66,6 +66,9 @@ importers:
       '@repo/github':
         specifier: workspace:*
         version: link:../../packages/github
+      '@repo/gitlab':
+        specifier: workspace:*
+        version: link:../../packages/gitlab
       '@repo/hermes':
         specifier: workspace:*
         version: link:../../packages/hermes
@@ -459,6 +462,31 @@ importers:
       '@octokit/webhooks':
         specifier: ^14.2.0
         version: 14.2.0
+      '@repo/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.15.3
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
+  packages/gitlab:
+    dependencies:
       '@repo/shared':
         specifier: workspace:*
         version: link:../shared

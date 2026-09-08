@@ -7,6 +7,7 @@ export * from "./dsa.js";
 export * from "./github.js";
 export * from "./github-portfolio.js";
 export * from "./github-pr-review.js";
+export * from "./gitlab.js";
 export * from "./learning-plan.js";
 export * from "./linear-dashboard.js";
 export * from "./migrate.js";

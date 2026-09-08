@@ -114,6 +114,41 @@ test("scores frontend evidence without requiring backend evidence", () => {
   assert.equal(backendLane?.evidenceCount, 0);
 });
 
+test("keeps neutral GitLab evidence in the repository portfolio lane", () => {
+  const evidence: EvidenceItem[] = [
+    {
+      id: "gitlab:project:101",
+      source: "gitlab",
+      title: "Repository: alice/sample",
+      summary: "Repository alice/sample is tracked with public visibility.",
+      occurredAt: "2026-09-08T00:00:00.000Z",
+    },
+    {
+      id: "gitlab:commit:101:abc",
+      source: "gitlab",
+      title: "Repository change alice/sample@abcdef1",
+      summary: "Update implementation details.",
+      occurredAt: "2026-09-08T00:00:00.000Z",
+    },
+    {
+      id: "gitlab:merge-request:101:7",
+      source: "gitlab",
+      title: "Repository change request alice/sample!7",
+      summary: "Update implementation details is opened.",
+      occurredAt: "2026-09-08T00:00:00.000Z",
+    },
+  ];
+  const snapshot = computeSdeReadinessSnapshot(evidence);
+  const evidenceCount = (label: string) =>
+    snapshot.breakdown.find((lane) => lane.label === label)?.evidenceCount;
+
+  assert.equal(evidenceCount("GitHub Portfolio Quality"), 3);
+  assert.equal(evidenceCount("Backend/API"), 0);
+  assert.equal(evidenceCount("Code Quality + Testing"), 0);
+  assert.equal(evidenceCount("DevOps/Cloud"), 0);
+  assert.equal(evidenceCount("Communication + Public Proof"), 0);
+});
+
 test("computes overall and lane score changes from the latest comparable snapshot", () => {
   const current = computeSdeReadinessSnapshot(
     [

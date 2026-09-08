@@ -17,7 +17,7 @@ type DashboardState =
 
 const setupPlanItems = [
   "Run database migrations against Supabase/Postgres.",
-  "Ingest local AI-agent sessions or run GitHub and Linear backfills.",
+  "Ingest local AI-agent sessions or run GitHub, GitLab, and Linear backfills.",
   "Run score recomputation after evidence exists.",
   "Generate the daily plan after a score snapshot is stored.",
 ];
@@ -389,6 +389,16 @@ function sourceRows(summary: DashboardSummary) {
         summary.counts.githubRepos > 0 ||
           summary.counts.githubPullRequests > 0 ||
           summary.counts.githubCommits > 0
+          ? "synced"
+          : "empty",
+    },
+    {
+      name: "GitLab",
+      status: `${summary.counts.gitlabProjects} project(s), ${summary.counts.gitlabMergeRequests} merge request(s), ${summary.counts.gitlabCommits} commit(s)`,
+      state:
+        summary.counts.gitlabProjects > 0 ||
+          summary.counts.gitlabMergeRequests > 0 ||
+          summary.counts.gitlabCommits > 0
           ? "synced"
           : "empty",
     },

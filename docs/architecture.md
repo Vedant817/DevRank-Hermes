@@ -27,6 +27,8 @@ chat history local by default.
   `dsa_questions` bank (weekday topic ladder + evidence-based difficulty), and
   Slack message formatting.
 - `packages/github`: GitHub REST client, backfill helpers, and webhook summaries.
+- `packages/gitlab`: dependency-free GitLab REST client and bounded, read-only
+  project, commit, and merge-request backfill.
 - `packages/linear`: Linear GraphQL backfill and webhook verification helpers.
 - `packages/context`: Supabase/Supermemory context provider abstraction.
 - `packages/hermes`: mentor summary workflow. Groq is the default reasoning
@@ -40,3 +42,8 @@ chat history local by default.
 Supabase Postgres is the canonical store for evidence, scores, plans, sync state,
 and audit records. pgvector is enabled for semantic memory tables. Supermemory is
 optional external context only and does not replace Supabase.
+
+GitLab backfill persists normalized rows in `gitlab_projects`, `gitlab_commits`,
+and `gitlab_merge_requests`. Those rows are mapped to neutral repository evidence
+for all/repository scoring; commit messages are not treated as proof of testing,
+deployment, backend, or communication quality without stronger evidence.

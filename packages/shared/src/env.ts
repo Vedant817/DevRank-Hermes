@@ -41,6 +41,8 @@ export const runtimeEnvSchema = z.object({
   GITHUB_WEBHOOK_SECRET: nonEmptyString.optional(),
   GITHUB_PERSONAL_ACCESS_TOKEN: nonEmptyString.optional(),
   GITHUB_TOKEN: nonEmptyString.optional(),
+  GITLAB_TOKEN: nonEmptyString.optional(),
+  GITLAB_BASE_URL: nonEmptyString.optional(),
   LINEAR_API_KEY: nonEmptyString.optional(),
   LINEAR_WEBHOOK_SECRET: nonEmptyString.optional(),
   SLACK_WEBHOOK_URL: nonEmptyString.optional(),
