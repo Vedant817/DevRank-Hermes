@@ -1054,3 +1054,19 @@ Use this file as the step-by-step checkpoint list from project start to project 
 - [x] Close the daily DSA loop in the web dashboard.
 - [x] Surface Hermes daily mentoring with a deterministic fallback.
 - [x] Add read-only GitLab repository, commit, and merge-request backfill.
+
+## 29. Centralized Personal Hub
+
+- [x] Produce and cross-review the verified product plan in `docs/centralized-personal-hub-plan.md`.
+- [ ] Release 0: reframe readiness as Evidence Coverage and make personal attribution safe.
+- [ ] Release 0: add evidence proof classification, correction, exclusion, restore, and delete controls.
+- [ ] Release 1: add the learning-run lifecycle, active focus, time budget, and deterministic one-action ranking.
+- [ ] Release 1: require proof and one lesson, then schedule a deterministic delayed review.
+- [ ] Release 2: reorganize the private product into Today, Progress, Evidence, Library, and Settings.
+- [ ] Release 2: verify the complete loop on desktop and mobile.
+- [ ] Release 3: install and harden a dedicated native Hermes profile with memory and skill approvals.
+- [ ] Release 3: expose bounded read-only DevRank MCP tools to native Hermes.
+- [ ] Release 3: pilot the cited `devrank-proof-reviewer` skill with an auditable run ledger.
+- [ ] Release 4: add weekly review, approved memory/skill proposals, and one allowlisted mobile gateway.
+- [ ] Release 5: build the evidence-backed Agent Portfolio and proposal-only curator.
+- [ ] Release 6: evaluate pgvector, one external Hermes memory provider, delegation, and write proposals only at their documented gates.
